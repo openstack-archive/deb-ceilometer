@@ -45,7 +45,7 @@ Depends: ${python:Depends}, ${misc:Depends},
  python-lockfile,
  python-netaddr, 
  python-sqlalchemy,
- python-stevedore, 
+ python-stevedore,
  python-webob
 Description: openstack efficient metering counters system (Python libraries)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
@@ -97,7 +97,7 @@ Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: openstack efficient metering counters system (api service)
+Description: openstack efficient metering counters system (API service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
@@ -105,7 +105,7 @@ Description: openstack efficient metering counters system (api service)
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- This package contains the api service
+ This package contains the API service
 
 Package: ceilometer-agent-compute
 Architecture: all
