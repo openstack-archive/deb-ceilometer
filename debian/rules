@@ -10,6 +10,9 @@ VERSION := $(shell echo '$(DEBVERS)' | sed -e 's/^[[:digit:]]*://' -e 's/[~-].*/
 DEBFLAVOR :=$(shell dpkg-parsechangelog | grep -E ^Distribution: | cut -d" " -f2)
 DEBPKGNAME :=$(shell dpkg-parsechangelog | grep -E ^Source: | cut -d" " -f2)
 
+override_dh_installchangelogs:
+	dh_installchangelogs debian/CHANGELOG
+
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -rf debian/*.upstart

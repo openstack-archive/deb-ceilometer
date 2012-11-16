@@ -1,0 +1,2813 @@
+commit 424c544770cb52fb0bfe3e0c24015418e50bdcc4
+Merge: 4cc7bfb 3557ac3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Oct 12 12:17:07 2012 +0000
+
+    Merge "Update metadata for PyPI registration"
+
+commit 4cc7bfb6c761e4faac494c9dcac5f5c86c46c922
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Fri Oct 12 12:28:52 2012 +0200
+
+    Nova libvirt release note
+    
+    Add note to specify that Nova meters are mostly working with libvirt
+    
+    Change-Id: I9ecc6953d7909f39e9bb84a4709db9414c40629d
+
+commit 3557ac32d5c65dd9ef6704becf768bc12d9f01ed
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Oct 12 06:49:16 2012 -0400
+
+    Update metadata for PyPI registration
+    
+    Add trove classifiers and a download URL to setup.py
+    to complete the data needed to register the project
+    on PyPI.
+    
+    Change-Id: I3cbe50dfd2002e5946022507a18d6e36e34b46e0
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit fa52074c32c8d43a71f30d3af182437140b9f3bb
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Oct 12 11:20:53 2012 +0200
+
+    tox: add missing venv
+    
+    At least used for tarballs creation
+    
+    Change-Id: I4a50781ba930454480f4c35dd66494f892ac5985
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 0ada5607be59b1e6e5bac5dd1f083c6b9b11c674
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Fri Oct 12 11:07:28 2012 +0200
+
+    Fixes a couple typos
+    
+    Change-Id: Ic7363f336b544bea6d0dc93a6aec5df5320cdaca
+
+commit f8620ebe5ec24fe67ab1f8db3c54a20970567335
+Merge: ac23afa 7b95818
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 11 19:02:16 2012 +0000
+
+    Merge "Set correct timestamp on floatingip counter"
+
+commit ac23afa9393ad6b60ceb3f01d9192c9335d0d089
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Thu Oct 11 18:38:44 2012 +0200
+
+    Counter renaming
+    
+    Add naming rules to doc
+    
+    Rename root_disk_size -> disk.root.size
+    
+    Rename ephemeral_disk_size -> disk.ephemeral.size
+    
+    Rename floating_ip -> ip.floating
+    
+    Rename volume_size -> volume.size
+    
+    Change-Id: I4f99dd12efeea3acffbb79b551246b9e506d82a4
+
+commit 7b95818699217ed3f6de28c3bc485e31fcbeb716
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 11 18:52:16 2012 +0200
+
+    Set correct timestamp on floatingip counter
+    
+    Change-Id: Ifda6a9c4a62cce19cdf9f924a8fa8ee7f74a27ba
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 898016cbde52392d6e85156f8e7f7084698475f1
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 11 17:44:51 2012 +0200
+
+    Fix API change in make_test_data.py
+    
+    Change-Id: I8fa874b4ae5fe189b52f87bb55acbc8463bf8872
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit f2aee4b75d07a5f4d8ecf381934452e2a8dc9a3d
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 11 14:41:05 2012 +0200
+
+    Fix Nova URL in doc
+    
+    Change-Id: I7837e80940e7ee9622bdcd3b1f253d582f383d1a
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit ae1d3d5821e7a537d6fd09d09e7f35164ddb262c
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Tue Oct 9 17:17:13 2012 +0200
+
+    Some more doc fixes
+    
+    There was a spurious = at the end of a line in install.rst that made
+    the TOC go bad.
+    
+    Updated the link to the new dev mailing list
+    
+    areas.rst - testing was mentioning a pre-release, changed to first
+    version.
+    
+    Reformated (again) the release notes, hoping it will render better.
+    
+    Updated the ReleaseNotes file to now point to the rst
+    
+    Change-Id: Iabf03772498094b0b7e1014abb7fa56547feb636
+
+commit fe3be9bacde27f29269d78826f59fc4ea40532ef
+Merge: 47c27cd a58a9ee
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 20:35:44 2012 +0000
+
+    Merge "image: handle glance delete notifications"
+
+commit 47c27cd5860b5fdd1ecb9fda7857b8c71104615f
+Merge: c77b60e fb870c3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 20:33:26 2012 +0000
+
+    Merge "image: handle glance upload notifications"
+
+commit c77b60ed1bd1d3a589d3c7ae19ffcb8f96254c90
+Merge: 0ba7773 7873fd8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 20:32:59 2012 +0000
+
+    Merge "image: add update event, fix ImageServe owner"
+
+commit 0ba777301999506dbfc27601515ddf9e3baa877f
+Merge: fc1b5cd e4ad2ce
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 18:30:26 2012 +0000
+
+    Merge "Ignore instances in the ERROR state."
+
+commit e4ad2ce4ad9dfe139d9f9b2cd3fd9f8d37e74517
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Tue Oct 9 16:12:28 2012 +0100
+
+    Ignore instances in the ERROR state.
+    
+    Fixes bug 1064472.
+    
+    The compute pollster should not query libvirt for instances
+    that are ERROR'd out.
+    
+    Change-Id: I8748694453ba6d9d58dc0555ed996fcd9400ad05
+
+commit fc1b5cdd973ceb6b9b284267b15595b792b1012b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Oct 9 11:53:33 2012 -0400
+
+    Use the right version number in documentation
+    
+    Get the version number from the setup.py file.
+    
+    Change-Id: I50efc125c8857d9a531d7a00dba53b67baf7496b
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 57f353541f07039ee7ebadd4de2fd26514c6a36d
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Oct 9 16:54:05 2012 +0200
+
+    doc: fix network.*.* resource id
+    
+    Change-Id: I4402c5027c9ad10a7ac464fbda54e5596f0ea0e7
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit a58a9eefaf66eb1f0cec198b33b5816fd92d3800
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Oct 9 11:04:40 2012 +0200
+
+    image: handle glance delete notifications
+    
+    This fixes bug #1056982
+    
+    Change-Id: Ica181bf8ee6f2952cf5e8c761768a58325ce802d
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit fb870c3a7b8c841fb477759fb37e5fdbda95a0b1
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Oct 9 11:03:19 2012 +0200
+
+    image: handle glance upload notifications
+    
+    This fixes bug #1056983
+    
+    Change-Id: I7af63a92c1181a371788d73bc0d3d79c1c9cadeb
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 7873fd8bfda91170f15293e0cab6e59073d0574b
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 8 16:26:09 2012 +0200
+
+    image: add update event, fix ImageServe owner
+    
+    This adds handling of image.update events and create 2 counters for it:
+    Image, counting images, and ImageSize, counting images size.
+    This fixes bug #1056981.
+    
+    This also fixes ImageServe owner which was set wrongly to user rather than
+    project, and fixes counter type for ImageServe and ImageDownload to delta.
+    
+    Change-Id: I2512cdfc37f17c425f49a5e5d6d2e25ccb59a3ca
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit a725f64f3c7af81b96d1b5f2bcab6e6b8c70cf44
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 8 16:55:00 2012 +0200
+
+    network: fix create/update counter type & doc
+    
+    Change-Id: I96e662663c8d14a6d841746033be0b57d23ee9ee
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 919b907bda1016bc708232730e236443ad142d70
+Merge: f08f28a d0776d1
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 11:49:40 2012 +0000
+
+    Merge "compute.libvirt: split read/write counters"
+
+commit f08f28a26615add3f2ab819ab4bc1e592e87ce41
+Merge: bdbfea3 7f9264b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 08:07:58 2012 +0000
+
+    Merge "Assorted doc fixes"
+
+commit 7f9264b1948aa60796d675db998c7abc301c4215
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Tue Oct 9 02:28:12 2012 +0200
+
+    Assorted doc fixes
+    
+    Remove FIXME:... and move to LP as 1064126
+    
+    Reorganize Install section TOC
+    
+    Fix little gnats in configuration.rst
+    
+    Change-Id: I005574054ccdcfc293e7b2cbb29fbffae8e7ef51
+
+commit bdbfea33278f385e029d797ddd682259caceb19f
+Author: Steven Berler <steven.berler@dreamhost.com>
+Date:   Fri Oct 5 15:13:26 2012 -0700
+
+    add max/sum project volume and fix tests
+    
+    Adds api calls to get the max or sum volume for a specific
+    project.
+    
+    Moves the logic for deciding when to skip a test that needs the
+    Mongo map-reduce feature into a new test db module.
+    
+    Adds TestConnection class to avoid recreating the underlying
+    Database object when using mim.  This is necessary because
+    spidermonkey can only create a limited number of instances per
+    process.
+    
+    Change-Id: Idefc01978e41ec823533b7dbb164319a916b155c
+    Signed-off-by: Steven Berler <steven.berler@dreamhost.com>
+
+commit ef6ba4b6a0f07820f74f709e5e162857986e32c5
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Mon Oct 8 15:29:09 2012 +0200
+
+    Add general options
+    
+    Add general openstack-common options to the documentation.
+    
+    Fixes Bug #1063709
+    
+    Add missing references and fix formatting in folsom.rst.
+    
+    Change-Id: Idccc32db021e85c70e9d377c8988e94d8a84b5d0
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit d0776d148b31eecc3be12a75796e7129b853a14a
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 8 15:09:22 2012 +0200
+
+    compute.libvirt: split read/write counters
+    
+    This fixes bug #1062219
+    
+    Change-Id: I87486b99a8c4d132a1fe8660d669d3f884ed7883
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 55e13884edd38d85f1c290f4394077e3c8601d42
+Merge: 6a44602 56a3112
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 8 12:08:19 2012 +0000
+
+    Merge "Add documentation for configuration options"
+
+commit 6a446022d79d23cfd411e9553396f2f2eb53bc72
+Merge: f3e7d2a 51550f2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 8 11:59:37 2012 +0000
+
+    Merge "Move net function in class method and fix instance id"
+
+commit 56a31124829154d1fcb2e0c37afb7219687e8152
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Mon Oct 8 13:35:30 2012 +0200
+
+    Add documentation for configuration options
+    
+    Solves bug Bug #1021439
+    
+    Change-Id: Icf9cea5bf5285923a0442386f788660bca918409
+
+commit f3e7d2a611f54749d4cd6dc4250e566a38b40321
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 8 12:04:33 2012 +0200
+
+    network: do not emit counter on exists event, fix resource id
+    
+    We only emit resource counters like "network.create" when the event is not
+    something like "network.exists", and we now emit it on the resource itself,
+    not on 'network'.
+    
+    This fixes bug #1062949
+    
+    Change-Id: Id36bc3818107bf7b806096b7aee670d7b18215a4
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 4a82b98ca7451e9abce443132bd6e2240933c39b
+Merge: ef10895 678f5bf
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 8 11:30:17 2012 +0000
+
+    Merge "Prime counter table"
+
+commit 51550f2fdfe24f255c49be0d9e8a2d7091efc142
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 8 12:31:15 2012 +0200
+
+    Move net function in class method and fix instance id
+    
+    The instance id copied is not the UUID, so it's useless because it does not
+    help to associate network with instances.
+    
+    Also, move make_vnic_counter function into a class method since it's not
+    used anywhere else.
+    
+    This fixes bug #1063693
+    
+    Change-Id: I31366d0edaf1f2768a9b7fe349faae2cc5c99e3e
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit ef10895ffaf3754e58b04c54814e3a0f3dc5978f
+Merge: 6e634ab 1b5eb0b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 8 09:39:45 2012 +0000
+
+    Merge "Fix the configuration for the nova notifier"
+
+commit 6e634ab55e29598f03f7d5661c804d897d31a536
+Merge: cfe484d 3bce0da
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 8 09:36:12 2012 +0000
+
+    Merge "Initialize the control_exchange setting"
+
+commit 678f5bfa957cf18991ad7833212ac2343f097b39
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Sat Oct 6 16:56:56 2012 +0200
+
+    Prime counter table
+    
+    Document the list of counters which are currently implemented.
+    Specify meter type, volume and resource in the table
+    
+    Addresses bug #1030120
+    
+    Change-Id: Id2e454144194a1a33534e6e74f60b4f8a5fd3e6f
+
+commit cfe484dc4895d2d491cd9cf999aa78e5b567c7a0
+Merge: e8c4cc2 1a387d2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 8 09:14:22 2012 +0000
+
+    Merge "Make the instance counters use the same type"
+
+commit 1b5eb0bad44430d27815814ac483c319a3aabc90
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Sun Oct 7 18:30:20 2012 -0400
+
+    Fix the configuration for the nova notifier
+    
+    The global config object inside the ceilometer copy
+    of openstack.common.cfg was not being configured,
+    which meant the RPC code in openstack.common.rpc
+    was not set up. That lead to an infinite loop
+    when the notifier was invoked, since it tried
+    to connect to the message bus over and over and over.
+    This change forces the configuration object to be
+    loaded from the ceilometer agent configuration file,
+    assumed to be in /etc/ceilometer/ceilometer-agent.conf.
+    
+    It also changes the notifier to do that initialization
+    the first time it is used, rather than when the module
+    is imported. This prevents the tests from loading the
+    module and initializing the config object, causing
+    exceptions in any subsequent code that tries to add
+    new configuration options.
+    
+    Also folded into this changeset is a fix to use
+    the right db method to load the instance. Notification
+    messages contain the UUID of the object, not the
+    numerical key from the id column of the table. Therefore,
+    we need to use db.instance_get_by_uuid() instead of
+    db.instance_get().
+    
+    Change-Id: I45719ab879ae6163329b6a886dee3e82ed4bc260
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 3bce0da4cdd8b153d4df386e9a13dbb4f75f8295
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Sun Oct 7 18:26:00 2012 -0400
+
+    Initialize the control_exchange setting
+    
+    The definition of the control_exchange option
+    was commented out in openstack.common.rpc because
+    each application needs to set its own default.
+    Adding the value here puts ceilometer on the
+    "ceilometer" exchange, just as the other OpenStack
+    projects are on their own project-specific exchange.
+    
+    Change-Id: If420422f0c65f6c579827c59504c936bc7c926a8
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit e8c4cc271209621034e214bd22199d08e3e411fe
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Sun Oct 7 16:55:45 2012 -0400
+
+    Set version 0.1
+    
+    Update the version number in setup.py to the first release number
+    in preparation for the release.
+    
+    Change-Id: Ic16da1041ed92fb2a7ed5b30f5f5f80adc28bd78
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 1a387d26a3d5d29fb3292634a6c34a10d9f23538
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Sun Oct 7 16:27:46 2012 -0400
+
+    Make the instance counters use the same type
+    
+    The version of the counter emitted by the pollster in the
+    compute agent and the version produced by the notification
+    handler use a different "type" value. Make them both
+    gauge.
+    
+    Change-Id: I40c21b458c2e3bf945b08bbed1ae962c20b15795
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 262ef977c4fbbf43c4f01ecd6e0c37db856527e0
+Merge: d3867e1 9884c39
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Oct 6 17:59:50 2012 +0000
+
+    Merge "add quantum release note"
+
+commit d3867e167115969fc47e0a526a1e0fd4da755c80
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Fri Oct 5 22:41:12 2012 +0200
+
+    Restore manual install documentation
+    
+    The manual install documentation was accidentally removed when the
+    devstack instructions were added.  This commit restore these
+    instructions alongside devstack.
+    Update the devstack instruction to start the api server.
+    Create an manual installation section for the API server.
+    
+    Change-Id: Ib037cfe61b9da5ea72851214d6e905246050f38d
+
+commit 9884c39d9d3487192e77309b2ed0bc26e9489a12
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Sat Oct 6 17:12:31 2012 +0200
+
+    add quantum release note
+    
+    Found this note in the quantum notification code, think it is worth
+    being in the release notes.
+    
+    Change-Id: I6e30d47e1f50fb0f7fda6e0923d5836a2b133110
+
+commit 3259347490ab95b86fb8bd5c28a9cf7b4340b1cd
+Merge: 9c5020c 2586f28
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Oct 6 12:51:09 2012 +0000
+
+    Merge "Add release notes to docs"
+
+commit 2586f28b95fbac623619c44a871e1631912cd609
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Fri Oct 5 22:31:32 2012 +0200
+
+    Add release notes to docs
+    
+    The release notes should also appear in the documentation, one file
+    per release.
+    
+    Change-Id: Iec34a15c9646f21dad0cf176f9607f0e5eee0c94
+
+commit 9c5020cd4354201b525a7f3b6f3d2cccdfce7adf
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Fri Oct 5 20:16:43 2012 +0200
+
+    Update readme and create release notes
+    
+    This is a first stab at the release notes which will need to be
+    completed before release.
+    
+    Change-Id: Iecc5ebf5c7b23165b861d678ee97a7392099a7a2
+
+commit 1a81c607181ed2312ee7fe9cc91a0d2b481a0ab4
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 16:41:24 2012 +0200
+
+    Remove duration field in Counter
+    
+    This fixes bug #1039069
+    
+    Change-Id: I17b5188d1cab08369599b1c936ab8d00b96dcf67
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit f1ecbcc829bcb8793d1d38a9ed746358a9795e57
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 16:33:16 2012 +0200
+
+    Add counter for number of packets per vif
+    
+    Change-Id: Ie1ef833998f4e706a2292614fbac33ec409bfe70
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 8ae8584f99df900c23c1f12b820881de74dcfc9c
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 16:28:56 2012 +0200
+
+    Move instance counter into its own pollster
+    
+    There's no need to emit a counter in a specific pollster doing something
+    else like CPU polling.
+    
+    Change-Id: If2adc861be4fec3b414d9688cf36219f6a7b04e8
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 07a90a2290d31b70906eeb887b68ddfb7d73fb6d
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 16:27:27 2012 +0200
+
+    Add a request counter for instance I/O
+    
+    Change-Id: Ic34a38e9576278aada5270a6cfd3f9890c8e901d
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit ed8d845b492d0b069caeb69df89b166aa131a782
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 16:21:18 2012 +0200
+
+    Rename instance disk I/O counter
+    
+    This fixes bug #1060939
+    
+    Change-Id: I0dc233a9143d64897ef1ad8e3d215f9c0974a432
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 23d587945a014f705f3dc16237e897ee6b6c5c8a
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 16:19:18 2012 +0200
+
+    Rename instances network counters
+    
+    This fixes bug #1060918
+    
+    Change-Id: I614c69b7a714f9256781f1f3afb1e90065abd84d
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 972cbe74d0ee4547660a5c627a800e20feea63c9
+Merge: 94ce128 8389e82
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 4 18:15:59 2012 +0000
+
+    Merge "network: listen for Quantum exists event"
+
+commit 94ce1286b4507af980dd5d7a4ed1b3a9e110b7e3
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 4 15:43:10 2012 +0200
+
+    Use constant rather than string from counter type
+    
+    Also fixes the type for floatingip counter.
+    
+    This fixes bug#1059765
+    
+    Change-Id: I367303e3d6b4cdf53d3f60222a922d3ccc8190b5
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 7b8d9dfd91c294bdf9e077e44a39d4cbcf879b38
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Wed Oct 3 22:06:04 2012 +0200
+
+    Update the architecture diagram
+    
+    * adds consistency on daemon reprensentation (rectangle)
+    * remove misleading link between colector and keystone
+    * refine how central agent and event listener post back event to
+      the ceilometer bus
+    * glance is sending strandard events we collect
+    * we do not poll quantum
+    * clarify that swift is not implemented yet
+    
+    Change-Id: I434db9f7f08150e39c723bc084d28a377ac2b1ce
+
+commit bcbf3635f25306b8935123b306b4a6ca75aa04e6
+Merge: 1ff7a0a 3e5a36c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 3 16:48:50 2012 +0000
+
+    Merge "Increase default polling interval"
+
+commit 3e5a36c5f96d8f6c513484fe6a855787f765fff7
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Oct 3 11:44:56 2012 -0400
+
+    Increase default polling interval
+    
+    The polling interval was set to 60 seconds for testing
+    and development. This changeset increases it to 600
+    seconds, which should be more reasonable for production
+    deployment.
+    
+    Change-Id: I45d834098194e39bab06fe6e18a2eb72e1e077a9
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 1ff7a0a4f842450b9b9f5f50ce5aa8ee7dc35804
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Oct 2 22:31:25 2012 -0400
+
+    Fix compute agent publishing call
+    
+    The compute agent was not updated to use the right arguments
+    when the publish module API was changed.
+    
+    Change-Id: I82df05b2a9897a536c09b55600f2b8c3ac05ae9e
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 8389e826032bc91cbc96f768bc9a82903a10951b
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Oct 2 17:30:23 2012 +0200
+
+    network: listen for Quantum exists event
+    
+    This fixes bug #1057589
+    
+    Change-Id: Ia1a88e3b053e7c36b443d248e48034f24d639b03
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 16d8b439ecabc4f567d15796a507816f5a6b8286
+Merge: 17e824e 63ad96f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 2 11:10:04 2012 +0000
+
+    Merge "Fix notification subscription logic"
+
+commit 17e824e035d20330c0e4f01651be98611b5cb79f
+Merge: 658ea8e a84edc2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 2 11:07:01 2012 +0000
+
+    Merge "Correct requirements filename"
+
+commit a84edc22beac1352e320b052dbe97bb3594c6530
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Oct 2 06:37:45 2012 -0400
+
+    Correct requirements filename
+    
+    The pip requirements file does not have an extension.
+    
+    Change-Id: Id4efcbd24eb057c2811dd4c2390dd65f1bd8a1c9
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 63ad96f19e458c374a13918a29f38eebe4df60aa
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Oct 1 15:40:28 2012 -0400
+
+    Fix notification subscription logic
+    
+    We need to funnel all messages from all exchanges through
+    the same function to dispatch them to the handlers. If
+    we don't do that, we have multiple subscribers,
+    each configured to be interested in different events
+    but that do not all receive all events. The result is
+    events being discarded.
+    
+    Change-Id: I31daa204c5ee13e8e5f767e0f5e61e2e7eafe624
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 658ea8ed33c183c7ccfffe33227f3151878a723e
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Oct 1 15:44:23 2012 -0400
+
+    Fix quantum notification subscriptions
+    
+    Correct a problem with the way the notification event_type
+    names were constructed in get_event_types() and ignore
+    delete events for now since they do not include the
+    relevant metadata.
+    
+    Change-Id: I313727203a215118d3b9faabdd3f7600efb7be32
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 3cdac9f3d09118483e54c1348be1ba933e25e451
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Sep 26 17:31:48 2012 -0400
+
+    Split meter publishing from the global config obj
+    
+    The meter signing and publishing code was tightly coupled
+    to the global configuration object, making it more difficult
+    to reuse in an outside project. This change adds arguments
+    for the configuration settings actually being used in
+    those libraries and moves use of the global configuration
+    object higher up the stack to the manager. It also organizes
+    the definition of the options related to signing and
+    publishing metering messages so they can more easily by
+    registered on other configuration objects.
+    
+    Change-Id: I8b1df0f228d0c2658841c4b7f7f4527414efc9a6
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 0d4d97047cb0c6f3628fc1647b628cce978b2e7c
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 1 15:36:09 2012 +0200
+
+    network: add counter for actions
+    
+    We also count creation, update and deletion of things.
+    
+    Change-Id: Iccc161a36b6332a077ef6f146e2c84d38f47c316
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit fad2201a3072b338634c0a2ad4b901af11a76980
+Merge: 7c72293 2004b59
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 1 14:11:14 2012 +0000
+
+    Merge "Rename absolute to gauge"
+
+commit 7c722937c1fad7161c0d9c3dfb0e3438bc0096a4
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Sep 27 17:22:14 2012 +0200
+
+    network: listen for Quantum notifications
+    
+    This fixes #1021775
+    
+    Change-Id: I62d6ea6522afe15ffde731b0e8d8a37e4596fd70
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 2004b5964e40a96fff98d5a5fddb2eda4a32b78b
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 1 15:46:21 2012 +0200
+
+    Rename absolute to gauge
+    
+    After discussion with people outside of Ceilometer, it seems that absolute
+    is a confusing name. For example, what we call currently 'delta' is called
+    'absolute' in RRD.
+    
+    Using gauge seems to be clearer.
+    
+    Change-Id: I1b686e34a1294cbdd35cdb84e3ab9c6c78df04dd
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 162206793d3694f2f0dffe05e5fa276eb2da1abd
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 1 15:31:17 2012 +0200
+
+    Fix typo in control exchanges help texts
+    
+    Change-Id: I5389dcb1fb1bdc533572bc9da0a7fd8f43b33689
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 6ddde20759eebc3d261b19ca03605832517d46a5
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Sep 28 10:47:06 2012 +0200
+
+    Rework RPC notification mechanism
+    
+    We allow plugin to specify clearly which exchange and topic there are
+    interested in, and we call directly the handler process notification without
+    looking in a dict to be faster.
+    
+    Change-Id: I867f0b2568d140bfc0dae63163fd02c8c080d8d1
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit cafeb43f28bd167a4dc4fcb913fe758ed4305e7e
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Sep 28 15:44:29 2012 -0400
+
+    Update packaging files
+    
+    - Update the openstack.common.setup  module
+    - Update our openstack-common.conf to include setup.py
+      in future updates
+    - Use the common setup command class so the sdist command
+      generates an AUTHORS file and ChangeLog
+    
+    Change-Id: I4469f0feaea5bb67022c6077bbea43110384f31b
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 150436ac2106b0cc55cbc013cc858face7a71051
+Merge: d63eca3 d2e29db
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 28 16:55:02 2012 +0000
+
+    Merge "Fix dependency on anyjson"
+
+commit d63eca399b8bd8dae251572b937f27179cc4966b
+Merge: ba0b9be c346258
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 28 11:05:12 2012 +0000
+
+    Merge "Update openstack.common"
+
+commit ba0b9bec041c0452defaab46e8f05c347bad122c
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Sep 28 06:14:22 2012 -0400
+
+    Update URL list
+    
+    Update the progress list showing which endpoints
+    have been implemented to include the /volume/sum
+    endpoint for meters on a resource.
+    
+    Change-Id: I0e7663c985d7d188adcf5bbcdd8b7bc2da216783
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit c3462589f7082bac7c6cc9d264d6479a151b0c85
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Sep 28 10:07:45 2012 +0200
+
+    Update openstack.common
+    
+    Change-Id: Ia231577cd6d0763db127337c6f3138d34be312d9
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 0796d18f1efa5c03a3cc81b83b61b8886ecd2bc2
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Sep 27 15:17:35 2012 -0400
+
+    Add volume/sum API endpoint for resource meters
+    
+    Provide an API for querying the total volume from
+    a meter for a given resource.
+    
+    Change-Id: I5ee28fc2db7fd05f8259a4727c32a3c45507c855
+
+commit dc466535d45cf5e0fbe468aa963e6fdffb8fc3b7
+Merge: 6d00e73 d8d2fe6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 27 18:14:46 2012 +0000
+
+    Merge "implement sqlalchemy dbengine backend"
+
+commit 6d00e7353c440b69eaf1f9a14ad61c8a0189c7e9
+Merge: fa44e31 9855ffc
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 27 18:11:39 2012 +0000
+
+    Merge "Add resource volume/max api call"
+
+commit 9855ffc36cc85c9384902661d4f8c78360ca1391
+Author: Steven Berler <steven.berler@dreamhost.com>
+Date:   Wed Sep 26 16:42:50 2012 -0700
+
+    Add resource volume/max api call
+    
+    Adds the ability to get the max volume for a given resource and
+    meter using the api.
+    
+    Change-Id: I0afed2904864522f0d428b678e9d56d7fee0a72b
+    Signed-off-by: Steven Berler <steven.berler@dreamhost.com>
+
+commit d2e29db5d94e0a41e118d4d9567a6027976feb6b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Sep 27 13:26:01 2012 -0400
+
+    Fix dependency on anyjson
+    
+    The main requirements.txt and the one for documentation
+    had different specification for anyjson.
+    
+    This change also makes explicit the fact that we
+    do not require anything other than what is listed
+    in pip-requires to install. The library function
+    looks at requirements.txt, too, which we don't have
+    and should not use.
+    
+    Change-Id: I8e79ad0803e3a9ebeb2a1dae30b2e5abdbbe8276
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit fa44e3167c562b2e771bae214396d58d63b6e2cd
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Thu Sep 27 12:01:00 2012 +0100
+
+    Listen for volume.delete.start instead of end
+    
+    Fixes bug 1057462
+    
+    Register interest in volume.delete.start events instead of
+    volume.delete.end so that the owner isn't charged for time
+    taken to tear down the volume.
+    
+    Change-Id: Idf27876aff8a3ccb2a6f76679744c8513783d523
+
+commit edaf8cf28e6b5322db3274c31fa96eece00212bb
+Merge: 40376ef c5ae3f1
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Sep 26 22:16:46 2012 +0000
+
+    Merge "Add a notification handler for image downloads."
+
+commit d8d2fe6990e69de938da580d43401fee970796fd
+Author: John H. Tran <jhtran@att.com>
+Date:   Fri Aug 31 11:17:43 2012 -0700
+
+    implement sqlalchemy dbengine backend
+    
+    implements bug #1021767
+    
+    To sync db migration, for now use temporary
+    script tools/dbsync.  Modify it to point
+    to your db url (example 'sqlite:///ceilometer.db'
+    or 'mysql://user:mypass@localhost/ceilometer').
+    Also ensure the database_connection= in conf
+    files point to same db url.
+    
+    Change-Id: I1c72b0a6b860738e94cf19666cb47db88ac9b251
+
+commit c5ae3f1c16371568e1166f91207ba9a0a40306a6
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Wed Sep 26 10:23:07 2012 +0100
+
+    Add a notification handler for image downloads.
+    
+    Addresses bug 1004462
+    
+    This patch requires https://review.openstack.org/13666 to
+    have landed in glance, so that queue durability matches up
+    in order to avoid precondition failures from rabbitmq.
+    
+    Change-Id: I18ba7d58625ef89e75d4e6b8896505ed11a1afb4
+
+commit 40376ef9199034e9078333565863cff9f8228667
+Merge: 625ba68 c4648ff
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Sep 26 13:04:20 2012 +0000
+
+    Merge "Create tox env definition for using a live db"
+
+commit 625ba68218785f9de5ef4c6ae6aa082f7a265574
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Wed Sep 26 10:20:02 2012 +0100
+
+    Allow glance pollster tests to run.
+    
+    Without the module __init__, we do not see these glance tests
+    running under tox.
+    
+    Change-Id: Iaf974aaa0c1fbffb1e1c4d1685fd062c78890a5d
+
+commit c4648ff057c9525bf99f9a16262bfac331addc39
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Sep 25 18:04:29 2012 -0400
+
+    Create tox env definition for using a live db
+    
+    Set the environment variable to make the tests use a live
+    database instead of the mock in memory version.
+    
+    Change-Id: I3d6be4f5d72aa59d5a4c19271f015d06b3e9c7ae
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 49209f45f6e70939bdb016e4195d6f75671d0816
+Author: Surya Prabhakar <surya_prabhakar@dell.com>
+Date:   Fri Sep 21 14:24:04 2012 +0530
+
+    Picking up dependencies from pip-requires file.
+    
+    Also, removing pip-requires_essex and test-requires_essex
+    
+    https://bugs.launchpad.net/ceilometer/+bug/1055319
+    
+    Change-Id: Ifec6b8fe5b53b45d8c94fbc87110f20541e9f3d0
+
+commit 913c33c341609925d2dc93825142d50bc5f6f8c6
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Sep 25 15:57:30 2012 +0200
+
+    Specify a new queue in manager
+    
+    We don't want to pull messages from the default existing queues and treat
+    messages that other might expect, or miss some messages because they have
+    been treated by others listening to the default queue.
+    
+    So we rather use our own queue where we expect messages to be routed from
+    the subscribed topic.
+    
+    Change-Id: Ibeda4ca1deb4db6eaecf49998b96e6ceb1087e77
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 69d3b91a0c2471d5b24ff438123f5081d7876594
+Merge: 40ef8d4 93ef06d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 13:50:37 2012 +0000
+
+    Merge "Add configuration script to turn on notifications"
+
+commit 40ef8d455efa2d4b9d8da7fa9b25fdbd1d1e0e73
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Sep 24 19:04:34 2012 +0200
+
+    Rework RPC connection
+    
+    We are now able to listen to multiple topics, we don't use Nova RPC anymore
+    and we have a single namespace for all collector plugins.
+    
+    Change-Id: I23603601cb285e9bd71beabfd9558fe903c24308
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 6ae7e3203eee34937f40cda07c634d7c36972159
+Merge: 463d3e6 5f0bc1a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 11:07:03 2012 +0000
+
+    Merge "Pep8 fixes, implement pep8 check on tests subdir"
+
+commit 463d3e67abd4fbde08b893b7f178ecc1556f98fe
+Merge: b6f9b35 b1baf00
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 10:42:55 2012 +0000
+
+    Merge "compute: remove get_metadata_from_event()"
+
+commit b6f9b359fa05210dea94b74481f6c6556f698649
+Merge: d481510 70c73db
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 10:27:25 2012 +0000
+
+    Merge "Use standard CLI options & env vars for creds."
+
+commit d481510c1f59a113ac662a4be35b48732365d754
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Sep 24 19:50:45 2012 -0400
+
+    Stop using nova's rpc module
+    
+    Switch the import for the rpc code from nova
+    to our copy of openstack.common.rpc.
+    
+    Change-Id: Id3bca93948ae079ff9ba11b5eeaf21ccb040aec2
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 93ef06d2cb86a0583f3992576a25fcc6432d866b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Sep 24 19:24:52 2012 -0400
+
+    Add configuration script to turn on notifications
+    
+    Ceilometer depends on having notification messages enabled
+    in the services being monitored. This script demonstrates
+    one way to configure those notifications.
+    
+    Change-Id: I0310b6bafd999b7818e347d25bc4be168fdcfe7e
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 5f0bc1a6f13e13c7dd214c7169d90847f7857f93
+Author: John Tran <jhtran@att.com>
+Date:   Thu Sep 20 17:38:01 2012 +0000
+
+    Pep8 fixes, implement pep8 check on tests subdir
+    
+    Fixes bug #1053515
+    
+    Change-Id: I2b886528c86e0ad5bdae5abf73890366f084e225
+
+commit 70c73dbf9a0961e336c3546933aa30ef350ae85e
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Mon Sep 24 10:52:41 2012 +0000
+
+    Use standard CLI options & env vars for creds.
+    
+    For consistency with the standard openstack CLIs, we use the same
+    set of config/command line/env var options to provide credentials
+    for the glance pollster's interaction with the glance-registry.
+    
+    (The exception here is the ability to pass in a previously acquired
+    authentication token via --os-auth-token/OS_AUTH_TOKEN, as this
+    would not make sense for a long-lived service given the limited
+    lifetime of keystone tokens.)
+    
+    As well as having the advantage of familiarity, this approach
+    allows users to avoid encoding sensitive credentials in config
+    files (instead environment variables or command line options
+    may be used).
+    
+    Also, if future non-glance pollsters need authenticated access
+    to other openstack services, more generic naming of the config
+    options would be preferable.
+    
+    Change-Id: I7505c3f668262951c034f36ccd15ce706f06bf0f
+
+commit b1baf00d1c530c24cb0df5ef085241a0c895d131
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Sep 21 15:51:16 2012 +0200
+
+    compute: remove get_metadata_from_event()
+    
+    Use the notification_to_metadata() method from plugin.NotificationBase
+    instead of our own copy, but enhance it with instance_type handling.
+    
+    Change-Id: I9c860435915a64d347c06956409db1c9e9a587ec
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit b0eb0b091e8f1ad9b2a566e0c802ba4dd398d8c8
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Sep 21 12:01:23 2012 +0200
+
+    Listen for volume notifications
+    
+    This implements bug #1021772
+    
+    Change-Id: Ic0292e8bdc20668abd331f4f03b06b9d1496217a
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 50da744ed52dc909e203f21bcabf101256de46d2
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Sep 18 20:27:05 2012 +0200
+
+    Add pollster for Glance
+    
+    This adds a pollster for Glance, polling for all images present via the
+    Glance registry. Using the registry is obligatory because the Glance API
+    would not let a user see all images.
+    
+    This fixes #1051335
+    
+    Change-Id: I0c5afba8e3f1caf314b8dd95875fbe60b4c07f82
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 90a20dc7ba7df4ff778538c870a574fb8413165d
+Merge: 1b46ecb 0e9518e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 20 19:53:19 2012 +0000
+
+    Merge "Fix nova flag parsing"
+
+commit 1b46ecbd026f08a54cb71b2283bfc3b4ec63c23a
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Sep 20 15:41:32 2012 +0200
+
+    Fix Nova notifier test case
+    
+    Nova internal changed, and we don't need to stub this anymore for test to
+    work.
+    
+    Change-Id: Id2946f37e790f333497a781fe2f7fbc358f351eb
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 0e9518e9a9ce46602a3aeae228f1df3ce94c4d65
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Sep 18 21:24:14 2012 +0200
+
+    Fix nova flag parsing
+    
+    We need to use parse_args() so the default config file is used.
+    
+    Change-Id: I7af19d77477e98b8181b1bce3d9cea1e86fca160
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 8229941dcf8dcd92ebc27171d76d626707ec1902
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Sep 17 16:46:54 2012 +0200
+
+    Add nova_notifier notification driver for nova
+    
+    This adds a new notification driver to be used by nova in order to intercept
+    instance deletion message before the instance is deleted. With this, we are
+    able to poll an instance about to be deleted before it disappers and
+    therefore not miss any meter.
+    
+    This fixes bug #1005944
+    
+    Change-Id: Ie039681e8e440cb9be2f30e3d72d9a2bc4ddf5ba
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 16b9f9006a0250ce61a81c053536335af181a8bc
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Sep 17 12:08:19 2012 +0200
+
+    Split instance polling code
+    
+    This just split the polling code for one instance out of the periodic task
+    function to be able to use this code for only one instance.
+    
+    Change-Id: I4ec0ab3870410f0b6c7e44857a9dede60fb6d50b
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 06b2207ef7fb8946ee377576ff0bbefb786ab373
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Sat Sep 15 16:28:26 2012 -0400
+
+    Use stevedore to load storage engine drivers
+    
+    Use the stevedore library to load the storage engine plugins.
+    
+    Change-Id: I491317e64e4fa50340e16b0f67783bfeca09c979
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 0a431b2e7c7e156a38d94272f6060db7bd0a5a8f
+Merge: a24e404 2d0da07
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 11 02:55:52 2012 +0000
+
+    Merge "Update openstack-common code to latest."
+
+commit a24e404aef3bab489e9c6f7034e7c6710e3c94f7
+Merge: cb7eb6e d25a314
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 03:56:54 2012 +0000
+
+    Merge "Implement duration calculation API"
+
+commit cb7eb6e75fedec2eb00e15533b3bbbb5bf066ef3
+Merge: 1af59e1 fbe59cf
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 03:56:19 2012 +0000
+
+    Merge "Create tool for generating test meter data"
+
+commit d25a3147c14520ec48b41d87ddd7df945135bbb9
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Aug 31 10:15:52 2012 -0400
+
+    Implement duration calculation API
+    
+    Add the API for calculating the duration for a series of
+    events from a given meter for a given resource.
+    
+    Replace the old duration calculation in the storage engine API with
+    get_event_interval().
+    
+    Change-Id: I54952e760fc5e108fa25d71b601b7ef2a4937e9e
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 1af59e12ad2babc36e6e407bdde8e3263fd526c9
+Merge: d21f082 c237210
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Sep 5 11:51:58 2012 +0000
+
+    Merge "Add timestamp parameters to the API docs"
+
+commit d21f0820200af1e16f02c929be2d2640b670842f
+Merge: 731d3fc b3c187a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Sep 5 11:51:31 2012 +0000
+
+    Merge "Check for doc build dependency before building"
+
+commit fbe59cfa342ab44973e8de4d81abc607cd8f8eed
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 28 14:52:28 2012 -0400
+
+    Create tool for generating test meter data
+    
+    This new command line tool creates meter events and writes
+    them directly to the database to make functional testing of
+    the API easier.
+    
+    Change-Id: I23145da75dd6d671a36fa6cf8e5e613edabbb01e
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 2d0da07be277ac2a9b411ecec3c88633ee5d5c5d
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Mon Sep 3 13:55:35 2012 +1000
+
+    Update openstack-common code to latest.
+    
+    Change-Id: I63d32f70176af7ea6accf4c48c4fc8b646a7e31e
+    Signed-off-by: Angus Salkeld <asalkeld@redhat.com>
+
+commit 731d3fce5eff0bb377ec1f2d8ffb108b87889d2a
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Mon Sep 3 13:51:12 2012 +1000
+
+    Add bin/ceilometer-api for convenience
+    
+    This is a bit more obvious than running the module.
+    I have basically just moved api/__main__.py into bin/ceilometer-api.
+    
+    Change-Id: I50d614ea98b278563b576e0b3b9df03b391e2152
+    Signed-off-by: Angus Salkeld <asalkeld@redhat.com>
+
+commit 4b8a56f89accabb4512a76ba597a8c9f84376cdb
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Fri Aug 31 09:21:25 2012 -0700
+
+    Add local copy of architecture diagram
+    
+    Replace the link to the google png export by a local png file as discussed during the last irc meeting.
+    Place link to google doc as a comment.
+    
+    Change-Id: I03234cc9ed29ba385b2bda934ac3396cf1b76c15
+
+commit c23721080476809736e12f4064c636c1ed9482e1
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Aug 31 12:05:55 2012 -0400
+
+    Add timestamp parameters to the API docs
+    
+    List the optional timestamp parameters to the
+    API endpoints so they show up in the documentation.
+    
+    Change-Id: I6717dc91d1257ef6c738d8a407b88e31f5b78a2a
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit b3c187aea9c4ed3f06873072f9e888d5a6496966
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Aug 31 12:04:26 2012 -0400
+
+    Check for doc build dependency before building
+    
+    The import error produced when the sphinxcontrib-httpdomain
+    package is missing is for sphinxcontrib.autohttp.flask,
+    but the package to install is sphinxcontrib-httpdomain.
+    This check produces a more useful error message than
+    allowing Sphinx to report the import error by itself.
+    
+    Change-Id: I2f53761da47b593e74d12c7dd213e69e4d71db21
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit e9852781398d023662f6e17c2928e5b5a0829f45
+Merge: 113439d 27ba0bb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 31 15:42:07 2012 +0000
+
+    Merge "Fix PEP8 issues ."
+
+commit 113439da10628a210e3109ac672162aeba92ace6
+Author: John H. Tran <jhtran@att.com>
+Date:   Tue Aug 21 00:57:02 2012 -0700
+
+    Pollster for network internal traffic (n1,n2)
+    
+    Implements bug 1004449
+    
+    Change-Id: I9ca8a19ec6b5635868cff1628a169faf2ff87331
+
+commit fdcd37f6a37d74325411bf1e2e1c8d974f955088
+Merge: 10c74a2 480052f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 30 14:22:50 2012 +0000
+
+    Merge "added mongodb auth"
+
+commit 27ba0bb324a0fe136f5fee4c205ad18aab8c638d
+Author: lrqrun <lrqrun@gmail.com>
+Date:   Thu Aug 30 11:17:56 2012 +0800
+
+    Fix PEP8 issues .
+    
+    Fix some pep8 issues in
+           modified:   doc/source/conf.py
+           modified:   tests/api/v1/test_list_resources.py
+           modified:   tests/collector/test_dispatcher.py
+           modified:   tests/compute/test_notifications.py
+    make the code looks pretty.
+    
+    Change-Id: I50c167b457b18f3789a3f8d470faa2754a77b604
+
+commit 10c74a2d79a0104e21a883f4f4ef26cd841a07f8
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Wed Aug 29 20:13:21 2012 -0700
+
+    Add archicture diagram to documentation
+    
+    Add the ceilometer architecture diagram to the documentation and fixes a few mistakes in the components description.
+    
+    Change-Id: I37efea3d313a250fbac3e0fe74a5b8ea2a0a96d9
+
+commit 480052fc16d87b51dc7777401327c8a6cd30d19c
+Author: John H. Tran <jhtran@att.com>
+Date:   Tue Aug 28 09:37:13 2012 -0700
+
+    added mongodb auth
+    
+    Implements bug 1022679.  mongodb needs auth=true to be turned on, and user
+    accounts in the appropriate dbs would need to be created.  Add to ceilometer
+    conf:
+    
+    'database_connection=mongodb://username:password@<hostname>:<port#>/<dbname>'
+    
+    Change-Id: I6fbe563cb5660e2374edfe39b325a68c56ccd39a
+
+commit 029ee373378d8f4acf9351b7acda99932d340718
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 28 16:32:51 2012 -0400
+
+    Change timestamp management for resources
+    
+    When saving an event, update the timestamp on a resource to the
+    event timestamp instead of the current timestamp on the
+    collector host.
+    
+    Change-Id: Ice378cb5be0820d8b817b7c4f635b8a5a8eef3b5
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 5b153d5a8caec87a09e6ba01a0806d339c43254b
+Merge: 31453b1 f48b6ee
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 28 13:21:35 2012 +0000
+
+    Merge "Log the instance causing the error when a pollster fails"
+
+commit 31453b1541a52ebd4efae53784304de9db538ec0
+Merge: 2163a16 04bc720
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 28 13:21:27 2012 +0000
+
+    Merge "Document how to install with devstack"
+
+commit f48b6ee9340dc3212c6312827ecd3afa50071dec
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Aug 23 13:17:13 2012 -0700
+
+    Log the instance causing the error when a pollster fails
+    
+    If a pollster fails, such as when libvirt cannot find an
+    instance that nova thinks still exists, report the instance
+    that caused the error.
+    
+    Change-Id: I7a42ed12954265c29b476f99d9f18db50d3b553d
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 04bc72023ff4dc223a896e0da7ac47aa2813ae69
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 20 15:36:54 2012 -0400
+
+    Document how to install with devstack
+    
+    Update our developer installation instructions to
+    reflect the fact that ceilometer can be installed via
+    devstack.
+    
+    Change-Id: Id0b01bab7e688306832dd425e30119424c47c7f3
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 2163a1689e959e37d4b35eb1220478dc5ce2a3d9
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Aug 16 11:29:15 2012 -0400
+
+    Remove test skipping logic.
+    
+    We have a patch going into MIM to support the type of
+    query that made us need a real MongoDB so we can remove
+    these skips.
+    
+    Change-Id: Ieb481492d654031edddfc7506e404fa0e0f2c2f0
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 7eaf0247c745345926763bf2e0a016ebae5ce13b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 20 17:30:20 2012 -0400
+
+    Remove dependency on nova test modules
+    
+    Replace all nova test module calls with stubs or mocks to avoid
+    issues caused by changes in the nova test framework or nova itself.
+    
+    Change-Id: I07248b64cc5c30c90c5e68df09ae8dfc2875c279
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 74239d9a83a6002e6112f5dd2b29eaf0ac62509c
+Merge: 7b18eef a08368e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Aug 18 10:47:09 2012 +0000
+
+    Merge "Add setuptools-git support"
+
+commit 7b18eef52169196c6ec33355e0b4c6b9d8a1ef95
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Aug 15 20:18:44 2012 -0400
+
+    Add date range parameters to resource API
+    
+    Allow the caller to query for resources updated within a certain
+    time range. Changes the storage engine API as well as the web
+    API.
+    
+    Also includes a fix for the event date range query, which was
+    broken when both start and end values were used.
+    
+    Change-Id: Ic482ea647ad07553a6621ba84ed76cf10d534652
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit a08368e574f37c0e91d8feb9a85e7729db7bcf82
+Author: Chuck Short <chuck.short@canonical.com>
+Date:   Tue Aug 14 14:26:08 2012 -0500
+
+    Add setuptools-git support
+    
+    Standard way of generating tarballs across
+    the openstack project.
+    
+    Change-Id: I9aede3008df212ff6b0191c2152137d131e96e4b
+    Signed-off-by: Chuck Short <chuck.short@canonical.com>
+
+commit 039f3d893dae74f1d3b3b0bca6f60904ae4a9b15
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 13 12:28:31 2012 -0400
+
+    Add separate notification handler for instance flavor
+    
+    This notification handler records a meter event with the
+    instance flavor included, making it easier to query
+    for the amount of time an instance existed as a specific
+    flavor.
+    
+    Change-Id: Ic162ac021f864c2a98c47127288867e940469ceb
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 867f168f615b995143e5a748ac833d2e9ed5f35b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 13 12:27:23 2012 -0400
+
+    Change instance meter type
+    
+    The instance meter type was set to "cumulative" but it
+    should be "absolute" so the aggregation code in the
+    API knows how to reduce the values.
+    
+    Change-Id: I5bd44958c86d0431d2b0e427c75be92cfecdb28b
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit a8ff8fe0c3cea6244a5f6003e39e9215f005812b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 13 12:25:58 2012 -0400
+
+    Split the existing notification handlers up
+    
+    We want to be able to enable and disable the handlers
+    for notification events individually. This change
+    splits them up so they are registered with separate
+    names to allow that.
+    
+    This change also adds python-glanceclient as a test
+    dependency so we can import the test code from nova.
+    
+    Change-Id: Icc07baba3f00294d8ee505a2cc82f65c0c7f4fc9
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 25d9bdb6ab12fc9fc31deee04be929eb00f4609e
+Merge: d8fafb2 384e6ca
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 9 12:57:12 2012 +0000
+
+    Merge "Remove redundancy in the API"
+
+commit d8fafb2ef1f7c3fe8e7cf096098dc6c2d3de9917
+Merge: 25bd337 43bdc45
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 9 12:56:55 2012 +0000
+
+    Merge "Separate the tox coverage test setup from py27"
+
+commit 25bd3376533b884aed6fbd8c7481359431331826
+Merge: 57fbc98 06f9bc8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 9 12:54:31 2012 +0000
+
+    Merge "Do not require user or project argument for event query"
+
+commit 384e6cafd3319dc19e3175e200423e54b7f8801c
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 7 12:42:12 2012 -0400
+
+    Remove redundancy in the API
+    
+    Clean up the API a bit based on the discussion we
+    had on the mailing list about removing redundant
+    URLs and queries.
+    
+    This changeset also ensures that each URL matches one function
+    so that the automatically generated documentation will be
+    accurate.
+    
+    Change-Id: I0a9ddd3c096919366492dfdfb78a462f34b0f85d
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 43bdc452dfd844bb704eae4a65c74cdb3740940e
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 7 12:22:09 2012 -0400
+
+    Separate the tox coverage test setup from py27
+    
+    Change-Id: I0d60b182afe2e0b7cf4964bd4e8f3229373868ea
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 06f9bc8b740011ff22f1ead4816e1c074e449449
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 7 12:21:05 2012 -0400
+
+    Do not require user or project argument for event query
+    
+    When we query for events by resource we do not need to
+    provide a user or project because the resource is only
+    owned by one entity.
+    
+    Change-Id: I32b3d8a6ed9f1d9de58565b13c9de12f3658326d
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 57fbc9838fb791822df99766ba196164506ca753
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 7 11:32:32 2012 -0400
+
+    Add pymongo dependency for readthedocs.org build
+    
+    Change-Id: I85ee7a01f69273f1720eae39b80509578cb2d45b
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 536488ae6baaa02aacede1153bd964cd7913f982
+Merge: 093c39b 01f4f47
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 7 15:24:00 2012 +0000
+
+    Merge "Update openstack.common"
+
+commit 01f4f4717ddd66cf7870695924819a5fa1b41161
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Aug 1 12:42:34 2012 +0200
+
+    Update openstack.common
+    
+    This fixes #1031508
+    
+    Change-Id: I2134b97615f87aa982dbbcc877e2d87c8c497244
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 093c39b9524acab9bbbde5dce7efa9752822c5d9
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Aug 7 10:17:47 2012 -0400
+
+    Add API documentation
+    
+    Use sphinxcontrib-httpdomain to produce documentation for
+    the web API. Add docstrings to the exposed functions.
+    
+    See http://packages.python.org/sphinxcontrib-httpdomain/
+    for details about the format of the auto-generated
+    output.
+    
+    Change-Id: I62edd1d00c048c4bce34711a23686f0089bbf4e7
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 779dcde0db7fc8b672e76c375d951aeae17e47fb
+Author: Monty Taylor <mordred@inaugust.com>
+Date:   Tue Aug 7 08:33:36 2012 -0500
+
+    Be explicit about test dir.
+    
+    Change-Id: I3516b5d58f58bfeac32a06317b0b3d0704d449f8
+
+commit 3909b9d3882ae568edff9014286ad08628f9db92
+Merge: bbb5a83 c966205
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 7 10:34:49 2012 +0000
+
+    Merge "Add list projects API"
+
+commit bbb5a8365ce616f97b972e107e11bfa0e97b4c75
+Merge: c0bf81f fc2cb21
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 7 10:29:16 2012 +0000
+
+    Merge "Sort list of users and projects returned from queries"
+
+commit c0bf81fe1b55995af36b371a4b2ed7be4ce0d5ac
+Merge: a38b5cb fd6348d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 7 10:23:48 2012 +0000
+
+    Merge "Add project arg to event and resource queries"
+
+commit a38b5cb6e03a40ce23d46f29c85981129d6097a4
+Merge: 275bb1b 1c92548
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 7 10:18:14 2012 +0000
+
+    Merge "Fix "meter" literal in event list API"
+
+commit c96620525ca4d9d7d458ea2fbbde9028f8b2e4f2
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 6 16:44:47 2012 -0400
+
+    Add list projects API
+    
+    Change-Id: I7d7c62c540f0a57dbd192c08d4d1fe8aa2ea3312
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit fc2cb2177175895367ba65f620f8fa91bb94d3d4
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 6 16:44:17 2012 -0400
+
+    Sort list of users and projects returned from queries
+    
+    Change-Id: Ic41d303d332ccb47907450027f5a09a825cc522f
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit fd6348d363f20f4f9e276acad8979f209e9504fd
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 6 16:14:47 2012 -0400
+
+    Add project arg to event and resource queries
+    
+    Change-Id: Idfb39d02e8af2b00f6f14520b5219f48dcf8fe8a
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 1c92548c5a5dfb649e2cc48db1ed95e79aabade8
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Aug 6 15:49:18 2012 -0400
+
+    Fix "meter" literal in event list API
+    
+    Change-Id: I55dd108bab9a5aed9730d2c81ecab3a4ed909189
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 275bb1be6d999c5a6137bc5a5b9a0ab559d84bb7
+Author: John H. Tran <jhtran@att.com>
+Date:   Sun Aug 5 23:53:28 2012 -0700
+
+    collector exception on record_metering_data
+    
+    Fixes bug 1033413
+    
+    Change-Id: I7f5ba8fb32ac21e0e7cb3c83c27e9b41beac4a29
+
+commit e24300b7995e5bb428494de63d621247dd1c9fe1
+Merge: faf8139 74e381f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Aug 1 10:40:21 2012 +0000
+
+    Merge "Add API endpoint for listing raw event data"
+
+commit faf81392095611789ebf6c15abe53e45ce2d4bc5
+Merge: ffa4f93 8034b27
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Aug 1 10:39:20 2012 +0000
+
+    Merge "Add {root,ephemeral}_disk_size counters"
+
+commit ffa4f93c9ce97899ffb55b64d811fa07063caf20
+Merge: dbccbb5 3228eac
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Aug 1 10:38:22 2012 +0000
+
+    Merge "Implements vcpus counter"
+
+commit 74e381fc9d0adb17034f9eb8467b8ca4934020c3
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jul 30 17:49:33 2012 -0400
+
+    Add API endpoint for listing raw event data
+    
+    This change adds some of the endpoints for listing raw
+    event data from the database. It does not yet support
+    listing events by project id.
+    
+    It also fixes a problem with the MongoDB driver returning
+    Mongo's ObjectId instances in the results of the event
+    query, which makes them impossible to serialize via JSON.
+    
+    Change-Id: I08d122ecd2f726fb1b2880bc22e28113f6a3aeb1
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit dbccbb5cb97c62ec6d87892cb0aa7b864bc27548
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jul 30 14:42:00 2012 -0400
+
+    Change compute pollster API to work on one instance at a time
+    
+    We will eventually need the compute agent to accept instructions to
+    poll the status of an instance before nova deletes it (for details
+    see bug 1005944). This change prepares for that fix by making
+    the compute agent pollsters take an instance as an argument
+    provided by the caller, instead of accessing the database directly
+    to look up the instances known to be running on the current
+    host.
+    
+    Change-Id: I6a16405fd65bfb3c190d02f3d70b2bde7fc0fc83
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 0e8f2359d9d1b5fc02fbc0fe92e788eb757feaa5
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jul 30 12:44:16 2012 -0400
+
+    Create "central" agent
+    
+    This changeset is phase one of changing the pollster API to support
+    polling individual instance resources. In this change, the single
+    compute agent is divided into two separate daemons.
+    
+    The compute agent, for polling instance data, is still meant to
+    run on the compute server. The new "central" agent, for polling
+    resources not tied to a compute node, is meant to run on a management
+    server (probably the same place the collector runs). The configuration
+    of the pollsters is updated so that they are loaded by the
+    appropriate agent.
+    
+    New base classes are introduced for each of the types of pollsters.
+    For now, the APIs remain the same.
+    
+    The code implementing the agent and plugins has been moved around
+    to reflect the new logical relationships, and the documentation
+    is updated (including new installation instructions).
+    
+    Change-Id: Ica6e947b2e457f7db6672147af1369a24066037d
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 2eebd4a8bd5c868df2e316b5bc72ebca45dddce4
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Jul 25 14:09:34 2012 -0400
+
+    Skeleton for API server
+    
+    This changeset introduces a framework for the API service,
+    including the dependency list, a couple of simple API methods,
+    a test suite, and documentation for starting the development
+    server.
+    
+    Change-Id: I4a496c600b7e6a0a8c70113b1d099614febd899d
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit ab1437fbbc9781bedf3dea53d39f0498990b267d
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Jul 26 15:39:57 2012 -0400
+
+    fix use of source value in mongdb driver
+    
+    Change-Id: I00b3c1c8af7b154516fea4ddb3f588ce2df5e46c
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 8034b27272bc8101f926319dbe3a4f7c57e1d070
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Jul 26 13:28:14 2012 +0200
+
+    Add {root,ephemeral}_disk_size counters
+    
+    Change-Id: Ia4b9a9048df5cfca7cb868ee518297de86c78b71
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 3228eac892473aa87b2f82f240a4336fa320ef24
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Jul 26 13:13:49 2012 +0200
+
+    Implements vcpus counter
+    
+    This is the same kind of counter of memory.
+    
+    Change-Id: If2e3a0e9c958f1c147ad1cbabcd25539d5b8b68f
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 2fe0a3c3ef15b163310abda879ddb18b022fbd1a
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Jul 25 15:07:01 2012 -0400
+
+    Fix nova configuration loading
+    
+    It seems some option handling within nova has changed, so we need
+    to update our use of the configuration object. These changes ensure
+    that the options we care about are registered before they are used.
+    
+    Change-Id: I0dd34f620eed5f43af6da5b02f9c41d35287c275
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 344ad3eef063243dc5241b8700595927174534f3
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Jul 19 17:13:29 2012 +0200
+
+    Implements memory counter
+    
+    This adds a memory counter, that is emitted at the same time than instance
+    counter. It is the first counter implementing the 'absolute' counter type.
+    
+    Change-Id: I3bfd57da61029d43ba4f731f98dc58f790f9f8cd
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit dcce2c7323c0e8c9426604bc15a7e8f6ee70b86d
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Jul 19 17:01:34 2012 +0200
+
+    Fix and document counter types
+    
+    Document each counter type available and fixes the various counter already
+    implemented.
+    
+    This fixes bug #1023969.
+    
+    Change-Id: Ibc8b726d59c3f9433109096958b1d40db043e70d
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 6b9bd89649f7d436a8fb9d4db03b7b6e80432aaa
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Jul 19 14:51:16 2012 +0200
+
+    Merge c1 function into process
+    
+    c1 does not mean anything, so it seems better to merge it in the method its
+    used.
+    
+    Change-Id: I51a953062d450ac4b392d0f86acc9a415b7b22af
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 5affdd159a08f81b33a595fa51ed0cb63aaa70f2
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Jul 11 17:11:34 2012 +0200
+
+    Check compute driver using new flag
+    
+    nova.common.deprecated: WARNING: Deprecated Config: Specifying virt driver
+    via connection_type is deprecated. Use compute_driver=classname instead.
+    
+    Change-Id: I9c4e8e6abbf49f7b351b0f501f3e7aafa8d98896
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 8aaa93484b81c8599f3603471210858cad7e9cfe
+Merge: ebc0d76 fd86091
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jul 11 11:16:59 2012 +0000
+
+    Merge "Update review server link"
+
+commit ebc0d76c6ab9f15f95d30bac025c2118f09eab6a
+Merge: a985eaf 4bf8558
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jul 11 11:13:50 2012 +0000
+
+    Merge "Add link to roadmap"
+
+commit a985eaf359e431bba174d55262b3c87956f65316
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Jul 11 12:32:03 2012 +0200
+
+    Add openstack.common.{context,notifier,log} and update .rpc
+    
+    Change-Id: I04e47ffc2eed86483e0c902532f20ef02d1d0641
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit fd86091c6914c5fc2ab99223022761ca360e2afc
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Tue Jul 10 19:10:28 2012 +0200
+
+    Update review server link
+    
+    Since we switched to another gerrit review server, the link needs.
+    to be updated in doc/source/contributing/source.rst. As suggested
+    by dhellmann, also updated the list ordering in the file.
+    
+    Bug #1023061
+    
+    Change-Id: I46d8483966670de78dd468624a3a3cce62ffd1ea
+
+commit 4bf8558e0cf8be440a6e6a6634dbce8d41a84933
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Tue Jul 10 18:57:32 2012 +0200
+
+    Add link to roadmap
+    
+    It seems to make sense to have a link to the roadmap in the areas
+    to contribute section.
+    
+    Bug #1023054
+    
+    Change-Id: I5f97c440f794bc58fc38a648a39122b923e3335a
+
+commit 7526cf6aff81242c8b30c7fd812aadb8814d30a8
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jul 9 10:49:52 2012 -0400
+
+    Add indexes to MongoDB driver
+    
+    Add some compound key indexes for the typical queries
+    run by the engine. Separate variations are used for
+    queries with user_id and project_id because they are
+    usually mutually exclusive and because of the way the
+    indexes are computed and stored the database won't take
+    advantage of an index using both.
+    
+    bug 1021324
+    
+    Change-Id: I9d6bbd1e7ac5a633fa3ead131a4ebc0a83226633
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 1f9bce260993d714dc17ec24fd484332b783c0ef
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Jul 5 11:08:01 2012 -0400
+
+    extend developer documentation
+    
+    - Add information about the system architecture (modified
+      from the wiki to reflect what was implemented).
+    - Add information about where we want contributions.
+    - Add information about how to sign up to participate in
+      the project and how to be a part of the community.
+    - Add more detailed instructions for installing the development
+      version from git.
+    - Add a placeholder for documenting the configuration options.
+    - Add instructions for running the tests after getting
+      the source code.
+    - Add a glossary and index.
+    
+    tags: DocImpact
+    bug 1006366
+    
+    Change-Id: I8927c55e77cdd31804249d101575f9e174e6232d
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit fec72610abfbd32480dae73a93f566cbec050b5b
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Jul 3 13:04:07 2012 +0200
+
+    Reset the correct nova dependency URL
+    
+    This fixes bug #1019423
+    
+    Change-Id: I8dd36926aa3457a9b985b5b98d7201383ec03518
+
+commit 50aa91f5a5cd9147ed88920c8c3000be63556aa2
+Author: Andrew Hutchings <andrew@linuxjedi.co.uk>
+Date:   Wed Jul 4 13:30:32 2012 +0100
+
+    Switch .gitreview to use OpenStack gerrit
+    
+    Change-Id: I868226291db9741c9e28c60ee0d3ddd21b042fd3
+
+commit 4ee4a6895f873ef9864db243f96e0be3d4d10006
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Jun 29 15:17:06 2012 -0400
+
+    Add MongoDB engine.
+    
+    This change implements the first storage backend for
+    ceilometer using MongoDB and makes it the default
+    (instead of 'log').
+    
+    - require pymongo and ming for tests
+    - clean up entry point registration using textwrap
+    - sketch in a simple data dump tool (tools/show_data.py)
+    
+    Change-Id: I0e3763749e88a71bc57b263ea79fff8d065c03ce
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 022ecffe56c1e607d76840200023998153ea4b42
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Jun 29 15:02:12 2012 -0400
+
+    Convert timestamps to datetime objects before storing
+    
+    Parse the incoming timestamp strings into datetime objects
+    before passing them off to the storage backend.
+    
+    Change-Id: I42d825c9633fa2c120409d79883756d23b045a60
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit b345efa0be2dc21aa8ba8114611f877955468950
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Jun 29 15:15:20 2012 -0400
+
+    Reduce complexity of storage engine API
+    
+    In the process of implementing the first storage
+    backend I realized that the proposed API was
+    much more complicated than necessary. This
+    changeset streamlines the API to make it easier
+    to implement the plugins.
+    
+    - add ceilometer.storage.get_connection() convenience function
+    - add get_volume_max() method
+    - clean up query arg handling by using EventFilter
+    - tighten up the DB query API by removing separate "by_user"
+      and "by_project" methods
+    
+    Change-Id: Id4dffcc59dbee44fd4670bbe55b5e3380ea240e5
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit b40ac5f32bb356f238bdeb7eb0a7224d62f13a8d
+Merge: 378b856 2f630d9
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Thu Jun 28 11:26:07 2012 +0000
+
+    Merge "Documentation edits:"
+
+commit 378b856a9b803783d26efec140d1e817819b2473
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Thu Jun 28 13:01:38 2012 +0200
+
+    Remove usage of nova.log
+    
+    Change-Id: Iea9ca7cfbf6bd46aa2918c7fe1c54a44bd3f38d2
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 2f630d95e568e807960aadc05d3fd2e19031bc2c
+Author: annegentle <anne@openstack.org>
+Date:   Wed Jun 27 12:29:52 2012 -0500
+
+    Documentation edits:
+    
+     * Fixes index.rst to include the writing_agent_plugin page
+     * Minor typo fixes
+     * Adds more links so devs can see what usage data already exists
+     * Addresses review comments
+    
+    Rebase against master.
+    
+    Change-Id: I62160e1f5583ad540d940e1c44dbd8c6cf460e67
+
+commit 158ed6b568e08d3de9463b82a301f3f7cf08ca3c
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Jun 26 16:36:58 2012 -0400
+
+    fix typo in instance properties list
+    
+    Change-Id: Ib09f4ab8db06d024ff863b54702a36f6ef77698b
+
+commit 77958016aa113209502323c97674ef5982443b40
+Merge: 8232832 4bcd1c4
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Wed Jun 27 16:07:00 2012 +0000
+
+    Merge "Add Sphinx wrapper around existing docs"
+
+commit 4bcd1c46a01b21b2c19b9e10f69ca5477ab49607
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Jun 27 11:39:37 2012 -0400
+
+    Add Sphinx wrapper around existing docs
+    
+    bug 1018443
+    
+    This patch sets up a basic Sphinx project to allow us to
+    build the documentation. It also moves the "dev" docs
+    into the new doc source directory.
+    
+    Change-Id: Ie2ad0f2e4ed237f1373c4357d5763fd5218d738a
+
+commit 8232832bbae07c485b5600542c09c5eb5adef7ff
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Jun 26 15:25:12 2012 -0400
+
+    Configure nova.flags as well as openstack.common.cfg
+    
+    Because we are using nova classes directly (Service, Manager, etc.)
+    we need to initialize the configuration modules that those
+    classes use.
+    
+    Change-Id: Idafd4a8346fc59332114ea7536893470bf9eaff8
+
+commit 1b7b651d860a8fe38d523f67cb229302159d0872
+Author: Nicolas Barcet (nijaba) <nick.barcet@canonical.com>
+Date:   Wed Jun 27 12:04:28 2012 +0200
+
+    First draft of plugin/agent documentation. Fixes bug 1018311.
+    
+    Change-Id: I5723ab7cdf3f552b23927380a764c53f7beb4f10
+
+commit d179cbf4ef5d6211f182c6a578895a1dd1897650
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed Jun 27 12:26:27 2012 +0200
+
+    Essex: update Nova to 2012.1.1, add python-novaclient
+    
+    Change-Id: I6881bdb8064df4e88a37ead3426d9666c0f77278
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit b3a11dbf7b20aebf3937bd81d5ce6f65178c4be2
+Merge: 3c01cce ffea2f5
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Tue Jun 26 18:01:03 2012 +0000
+
+    Merge "Fallback on nova.rpc for Essex"
+
+commit 3c01ccefd52a24bf112691d0273c0cbd465733ff
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Tue Jun 26 14:26:57 2012 +0200
+
+    Split service preparation, periodic interval configurable
+    
+    Change-Id: I71d1e81e2b2347fb7e3ba2edfa7f21eb9cffb401
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 5d90f057cb923a07214e4753d0d6296805197e88
+Merge: e162877 a4a15e7
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Tue Jun 26 06:06:08 2012 +0000
+
+    Merge "Use the same instance metadata everywhere"
+
+commit a4a15e732bc65e75eccaea91b7778deab9bba566
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 25 19:06:46 2012 -0400
+
+    Use the same instance metadata everywhere
+    
+    Update the code that generates the instance metadata used in the pollsters
+    so that it includes all of the values pulled from the notification
+    messages. This keeps the metadata for an instance consistent for all
+    metering messages.
+    
+    Change-Id: I74534e5236fd6580fad42ae4e1c7321dc880bc8f
+
+commit e16287766dbf9497b0a9ecae852ebcb26308f980
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 25 16:52:08 2012 -0400
+
+    Emit meter event for instance "exists"
+    
+    bug 1005941
+    
+    As we check the CPU utilization for an instance also
+    emit a meter message indicating that the instance
+    still exists.
+    
+    Change-Id: I7a592efc750c6e0a9a24394e05bd2d75da3377b6
+
+commit a78f2f447fadce834f02ead9a2a04511ac97d687
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 18 19:01:23 2012 -0400
+
+    Start defining DB engine API
+    
+    Sketch in API to support queries defined in
+    http://wiki.openstack.org/EfficientMetering/APIProposalv1
+    
+    Change-Id: I282f1d5893c55fca684a74395a82e603c799343f
+
+commit ffea2f5cd77bd7914fd1f9ffe2eaf4ae3836ca26
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Mon Jun 25 14:47:48 2012 +0200
+
+    Fallback on nova.rpc for Essex
+    
+    Change-Id: I2a1ca5a0c77900d2310b4534f92da885fa27f430
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit bf555549df9bb668d0a049d333a0e36994847a1b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 18 12:28:06 2012 -0400
+
+    Add instance metadata from notification events
+    
+    bug 1006120
+    
+    This change depends on a change to nova to include the extra data
+    in the outgoing notifications.
+    
+    Change-Id: Ieaee00f5f6c0a9f6d00843adbcc2cd995334bbd1
+
+commit d9faf1c20476e1dd2a12b389eda25d0c439074a5
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Fri Jun 15 15:04:09 2012 +0200
+
+    Combined fix to get past broken state of repo
+    
+    This patch includes several separate sets of changes which
+    have been reviewed individually but must be submitted
+    together to get past the newly updated version of pep8
+    and changes to the nova code base.
+    
+    1. Replace our CONF object with the one from openstack.common.cfg.
+       There's no need to use our own, especially since some option
+       are already registered on it for us.
+    
+       Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+    
+    2. Instead of importing the RPC code from nova, use
+       the openstack.common.rpc package. This change
+       copies that code in from openstack-common, changes
+       the imports throughout ceilometer, and fixes the
+       way the configuration settings are initialized.
+    
+    3. Resolve PEP-8 issues introduced by an even more
+       pedantic version of pep8 (1.3.1). Some of the
+       changes are fixed, and some warnings/errors are
+       suppressed.
+    
+    4. Ignore import errors in impl_qpid because the qpid
+       package is not installed on the stackforge test server.
+    
+    5. Fix missing imports from gettextutils in openstack.common.
+    
+    Change-Id: I0ee7d4b3278d8ff1951ca27592e3be8a87fe4854
+
+commit 3f68534579e1a99558cbdfff90fffeffc1226284
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Tue Jun 12 13:50:10 2012 +0200
+
+    Add more metadata to instance counter
+    
+    This fixes #1006120
+    
+    Change-Id: Iba774d6ffbcceb7c35da48c103c7907af175e64e
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 8d47e17f354a5afe592b94cce348782d353bb036
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Mon Jun 11 15:43:37 2012 +0200
+
+    Register storage options on import
+    
+    We already does this for other module, so continue.
+    
+    Change-Id: I1e38fd0eddd41b9e4e239c0b5fbbaf31ebf4d599
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit a5b73215791b39f7dd2a6cf96583799d87fa995a
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Mon Jun 4 16:46:26 2012 +0200
+
+    Add Essex tests
+    
+    Change-Id: I098888c9d011819a6bca4df532534a39da67e9eb
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 5705468da291df255619f2d7e13d2abb5c2624a2
+Merge: 6a7c935 9823714
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Mon Jun 11 16:35:52 2012 +0000
+
+    Merge "fix message signatures for nested dicts"
+
+commit 6a7c93574b3a75447188ed53f18ff9c77b32266b
+Merge: 68d0fac 8101f52
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Mon Jun 11 16:34:09 2012 +0000
+
+    Merge "log more than ceilometer"
+
+commit 68d0faccc8eb53cc38896ff5d1e89055ca4602cf
+Merge: c9aae11 3b075dc
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Mon Jun 11 16:31:59 2012 +0000
+
+    Merge "Remove event_type field from meter messages"
+
+commit 8101f52ed788ad41c41c644c9a20912cb99abd96
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 11 11:32:42 2012 -0400
+
+    log more than ceilometer
+    
+    The default logging configuration does not include output
+    from packages other than 'ceilometer'. Since we depend
+    on nova services, we want to have those messages logged,
+    too.
+    
+    Change-Id: I4f67b61d3990a0667ee91e32c77ab909f600d451
+
+commit 3b075dc7afda3be874af503e07d3a4ac1d296870
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 11 11:10:53 2012 -0400
+
+    Remove event_type field from meter messages
+    
+    The event_type field is made up of the meter exchange name
+    and the counter name. That information is available elsewhere,
+    so the field is redundant.
+    
+    bug 1006995
+    
+    Change-Id: I37ed14e469bc146017ecceedd6539d61eb7823e1
+
+commit 9823714e9e5cfdab55514a760149c6985052480e
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jun 11 11:12:11 2012 -0400
+
+    fix message signatures for nested dicts
+    
+    The order of iteration for dictionary keys is not
+    guaranteed, so we need to address nested dictionaries
+    directly.
+    
+    Change-Id: Iebfaa11d9edea3749ce7b86b5f723f955c535057
+
+commit c9aae1118f09a498ee000adec26a8045b63734da
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Mon Jun 11 15:43:15 2012 +0200
+
+    Remove nova.flags usage
+    
+    There's no need to use nova.flags here, we can use our cfg module.
+    
+    Change-Id: Ia6ecbf48a89a07b702d2955f89851b5c188a62fd
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit f413db8a2ae33ab3f58b22bc764b819855397941
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Thu Jun 7 14:44:21 2012 +0200
+
+    Copy openstack.common.cfg
+    
+    This fixes bug #1009586
+    
+    Change-Id: If188709510ac98413e8c568d5a9e8c5f758c8497
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit d01b964becfec5146f3e6a3873dea32bec58ab59
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Jun 7 18:00:49 2012 -0400
+
+    check message signatures in the collector
+    
+    bug 1006990
+    
+    add verify_signature function
+    check the signature before calling the storage engine to save the data
+    add coverage to py27 environment by default
+    fix use of mox in existing test
+    
+    Change-Id: I6666ea117fb66526ee187b168eca88e4b0092a23
+
+commit 1bd1fd6846a50d439242e1d7c6c5cbc63f5b5a88
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Jun 6 15:32:42 2012 -0400
+
+    Sketch out a plugin system for saving metering data.
+    
+    Change-Id: Ib91213ac78fd5e3baf7200849b4fa8554c652a99
+
+commit 0767165ebcefc217257c7914854050bff54c85f1
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Jun 6 16:25:49 2012 -0400
+
+    refactor meter event publishing code
+    
+    There were two places that had all of the logic for constructing
+    a metering message and sending it to the appropriate exchanges.
+    This changeset combines those into one function and invokes
+    the function from the old locations.
+    
+    Update tox.ini to work around an issue with providing access to
+    the global site-packages (https://bitbucket.org/hpk42/tox/issue/32).
+    
+    Change-Id: If2b01edbc0c372907a04baf69f1137575b6921bd
+
+commit 0c80375984504e0c12090d61cfd8cce74c7d32f7
+Merge: c491a93 966af69
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Thu Jun 7 17:06:22 2012 +0000
+
+    Merge "Use timestamp instead of datetime when creating Counter"
+
+commit c491a93a3983b3d6d7b2090033c6a441858a5dd4
+Merge: 8780157 f5b0842
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Thu Jun 7 17:06:01 2012 +0000
+
+    Merge "add counter type field"
+
+commit 8780157755de98914a0abd90d5d2475227ab91e6
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed Jun 6 11:02:20 2012 +0200
+
+    Add and use ceilometer own log module
+    
+    This fixes bug #1004130
+    
+    Change-Id: I143124ad411d5efefa604e831173dca87548bd7f
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit f5b08423b913043891a956ad1dd92a553c24d557
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Jun 6 16:11:07 2012 -0400
+
+    add counter type field
+    
+    bug 1006425
+    
+    Rename the existing counter "type" field to "name" and add
+    a new field with values of "cumulative" or "delta".
+    
+    Change-Id: I459049bab28c3e2146b7a1b2e134dddabe381a6a
+
+commit 966af691276cc7f3eaccae4518d0d8b09dde2a75
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue May 29 10:01:48 2012 -0400
+
+    Use timestamp instead of datetime when creating Counter
+    
+    Change-Id: I444b96196107383840c6c9ac070492ecf34079f2
+
+commit 14c068d2e83ca0ee4a1de6c9a83338bf93a157e6
+Merge: 6fa69bb 3fcb8da
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Wed Jun 6 17:48:53 2012 +0000
+
+    Merge "Make the stand-alone test script mimic tox"
+
+commit 6fa69bbdccb9273ef1e55f08dc3db926ab20529c
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Mon Jun 4 10:24:33 2012 +0200
+
+    Use new flag API
+    
+    This changed since 00786bc554a2dfacb3c6f02fbb7e9c98f35d4262 for blueprint
+    cfg-global-object in Nova.
+    
+    Change-Id: Iaae34a1e4953c964b99411247219f7b72358823f
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit f9d74149735adf924c0e3f687204dc62760180b6
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Mon Jun 4 10:32:08 2012 +0200
+
+    Fix a PEP8 error
+    
+    Change-Id: Ifeca665ad34e014fde5006b8ca83e7851f15622f
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 3fcb8da4a1068f7bb85ad410759f64eb2a7b1021
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed May 30 12:00:59 2012 -0400
+
+    Make the stand-alone test script mimic tox
+    
+    The tox setup does not work on Ubuntu Precise for some reason,
+    but running nose directly does. This update tweaks the stand-alone
+    script run_tests.sh to mimic the behavior of tox. It also
+    adds the "cover" directory created by the coverage plugin to nose
+    to the list of files being ignored by git.
+    
+    Change-Id: I65224cf4bf75e6b7fc0207b3545c466bdac5a35c
+
+commit 697c4c1051bb991cf7478d2b789ae3730f09b857
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed May 30 17:52:31 2012 +0200
+
+    Remove unneeded eventlet test requirement
+    
+    Change-Id: Icfc4dd69beae3a07a5005d4d519f8ce433313dee
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit d615fb872ddceaf1ddef7e3997bcf2523cab283e
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue May 29 17:16:27 2012 -0400
+
+    Add listeners for other instance-related events
+    
+    bug 1004560
+    
+    Convert events for instance "exists" check and deletion into counters.
+    
+    Change-Id: I882eeed2baf0445c53236c14f30969e95494a714
+
+commit 5e0a32f47505d342676099518ec3fad558c61511
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue May 29 17:57:58 2012 -0400
+
+    Add tox configuration
+    
+    Change-Id: Ic4051617b5757c649cd59dacf8e9dd9d7e9819a6
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit a49e59b1151ce87c8f4ed6e12368e01dbbb6243a
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Tue May 29 16:18:04 2012 +0200
+
+    Use openstack.common.cfg for ceilometer options
+    
+    Change-Id: Iba7df922a7d6b3eec7db427b4135e6fa2ad2d416
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit bbc706c4c02d2750df961474b00998b9766cd47a
+Merge: b76f67d d4635be
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Tue May 29 08:59:32 2012 +0000
+
+    Merge "Add floating IP pollster"
+
+commit b76f67d11f5bed61818b9dcaf77b20bfb087547b
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri May 25 14:22:09 2012 -0400
+
+    Publish and receive metering messages
+    
+    bug 1004198
+    bug 1004200
+    
+    - Set up the collector to receive the metering messages.
+    - Make the collector republish notifications as metering data.
+    - Add a "monitor" mode to tools/notificationclient.py to simply print
+      the events without writing them to a file.
+    - Add a --topic flag to tools/notificationclient.py so it can be made
+      to listen events other than notifications (for monitoring metering
+      events).
+    - Change "counter_datetime" within the metering message to "timestamp"
+      to be consistent with the notification message format.
+    - Add a configuration option to control the secret value for signing
+      metering messages.
+    - Make the collector and agent daemon control topics more specific.
+    - Use the config setting to set the metering topic subscription.
+    - Set a short interval for polling to get more data for development
+      testing.
+    - Log after successful load of pollsters instead of before attempt.
+    
+    Change-Id: Iedfe26f8a4fa80d88cd0a76e5738001ba5689bdc
+
+commit d4635bede100934d1535b334dfc5a694bffe7d97
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Thu May 24 15:06:22 2012 +0200
+
+    Add floating IP pollster
+    
+    Change-Id: Ia5e71117f0e1bec7dcbbd5a9332c07297fcd5c1f
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit dbccf0ce6974fc3665f0ffd63a9b08725339d6cf
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Thu May 24 13:48:07 2012 +0200
+
+    Fix tests based on DB by importing nova.tests
+    
+    This is the same trick used in nova test suite.
+    
+    Change-Id: I280dc6b3881d4a1d6503b9a0b313ec395b97e238
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit bc1f004f8f3e182e198702d286dcb56b31fa8ba8
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed May 23 13:07:29 2012 -0400
+
+    make the pollsters in the agent plugins
+    
+    Move user_id and project_id into the Counter
+    since the polling code has to pull those
+    values from the instance object.
+    Convert the libvirt polling code to plugins.
+    Have the agent manager load the plugins and run
+    them as part of its periodic task step.
+    
+    Change-Id: Id59a696beb33c7c9a232460ce52e272f5408e70d
+
+commit 5717e9c5c9a029d1b1daa72f2e7ac0ab1039bf0c
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Tue May 15 12:36:47 2012 +0200
+
+    Build ceilometer-agent and ceilometer-collector
+    
+    Change-Id: I0cc5b163ac638f33397e7e7a9c046dca3e2939e9
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 73c9150afe7fc07018b0435ae7b24b52bd6a0a15
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue May 22 15:10:09 2012 -0400
+
+    Add plugin support to the notification portion of the collector daemon.
+    
+    Implement a Counter class for use by notification plugins.
+    Define a base class for Notification plugins.
+    Define a dispatcher class for notification events to be passed to the plugins.
+    Add a notification plugin for instance creation and "instance" counters.
+    Add a reusable function for turning a Counter into a metering event dictionary.
+    
+    Change-Id: Iaa626b98e1a661ed31cc8b8e95263c111df20888
+
+commit cc5b02dc84e26af050a0983764a5977e25bd3726
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Fri May 11 16:09:47 2012 +0200
+
+    Add CPU time fetching
+    
+    Change-Id: Ie16c588af209c4410e1150038e9fb24dc111159d
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 3c3f77f84a68253b82ab2c7cb1abebdf626e1e78
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri May 18 11:13:08 2012 -0400
+
+    Add an example function for converting a nova notification to a counter.
+    
+    Change-Id: I05f2e42059cefb004d5afec7c28d557093eba227
+
+commit 68ae03c38749472ed81fc1cd3cb7d2a651c364d1
+Merge: 8f4ba16 1f0ae02
+Author: Jenkins <jenkins@review.stackforge.org>
+Date:   Mon May 21 15:24:05 2012 +0000
+
+    Merge "Add an exception handler to deal with errors that occur when the info in nova is out of sync with reality (as on my currently broken system). Also adds a nova prefix to the logger for now so messages from this module make it into the log file."
+
+commit 8f4ba1656c26ac7885c46f2fc8fcf9f519146f96
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue May 15 13:39:56 2012 -0400
+
+    add a tool for recording notifications and replaying them
+    
+    Change-Id: I852a6fbef7b9bf02309f699419da0a2537ce7a90
+
+commit 1f0ae02f1e42acc0304b34179d0527d8e2e6533a
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue May 15 15:27:13 2012 -0400
+
+    Add an exception handler to deal with errors that occur when the info in nova is out of sync with reality (as on my currently broken system).
+    Also adds a nova prefix to the logger for now so messages from this module make it into the log file.
+    
+    Change-Id: I57dc7e74a16955bcf42e9360e7de6e2f26ca09b0
+
+commit 11a84161906a69cc201b0c35c49d8d6c434916fb
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Fri May 11 12:13:11 2012 +0200
+
+    Periodically fetch for disk io stats
+    
+    Change-Id: Id48337a598e8941d9e1793ad552251369ef3954f
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 6393825cf615cf958ff39f7baa9fbe9839e2c1f3
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Thu May 10 16:41:41 2012 +0200
+
+    Use nova.service, add a manager class
+    
+    Change-Id: I76e2b7123c206082f1fca72f94433dac58b72391
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 886485c4684b5fc88491f578198a2423392dd066
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Thu May 10 15:53:20 2012 +0200
+
+    Change license to Apache 2.0
+    
+    Change-Id: I062d722fb570a6f00151eb620d8c169b2ee374ae
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 5bb0df8e5cc36a4a3e3a2483e36650d106cdd73d
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed May 9 13:55:41 2012 +0200
+
+    Add setup.py
+    
+    Change-Id: Iffdb887f308eb9ea85ffbf13e192efbb79821d65
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 85beac0fa82d5f54e926766d139790f2a90e1fb2
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed May 9 11:57:03 2012 +0200
+
+    Import ceilometer-nova-compute
+    
+    This script is used to grab notifications from existing hosts
+    
+    Change-Id: I45826fd6941d7bd93464bf945903b6b41223745c
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit bca0ead8d238f55d12cfc0548b14ba1b2675a953
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed May 9 11:56:12 2012 +0200
+
+    Ignore pyc files
+    
+    Change-Id: Id98d91e397fc5ee77c8d6b41882c264748c0ab76
+    Signed-off-by: Julien Danjou <julien.danjou@enovance.com>
+
+commit 0843dc10f126a08cce0f182b59d105ccfd327e1c
+Author: Julien Danjou <julien.danjou@enovance.com>
+Date:   Wed May 2 14:08:57 2012 +0200
+
+    Add link to blueprint
+    
+    Change-Id: I6608b9d01c9c23198d3e3e5d2f0e8551c2637f3a
+
+commit 241c7b319f120f8b51e5a70c0cea3e30ccceb734
+Author: Andrew Hutchings <andrew@linuxjedi.co.uk>
+Date:   Tue May 1 11:17:50 2012 +0100
+
+    Add .gitreview file
+
+commit ca8dc0f250726f450de26d7dcdbed1cd3aacaea1
+Author: LinuxJedi <andrew@linuxjedi.co.uk>
+Date:   Tue May 1 02:31:22 2012 -0700
+
+    initial commit
