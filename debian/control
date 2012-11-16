@@ -1,0 +1,141 @@
+Source: ceilometer
+Section: python
+Priority: optional
+Maintainer: PKG OpenStack <openstack-devel@lists.alioth.debian.org>
+Uploaders: Loic Dachary (OuoU) <loic@debian.org>,
+           Julien Danjou <acid@debian.org>,
+           Thomas Goirand <zigo@debian.org>,
+           Ghe Rivero <ghe.rivero@stackops.com>,
+           Mehdi Abaakouk <sileht@sileht.net>
+Build-Depends: debhelper (>= 9),
+ python-all (>= 2.6),
+ python-all-dev (>=  2.6.6-3~)
+Build-Depends-Indep: pep8,
+ python-anyjson, 
+ python-eventlet,  
+ python-flask,  
+ python-glance,
+ python-glanceclient,
+ python-iso8601,
+ python-kombu,  
+ python-lockfile,
+ python-ming,
+ python-mock,
+ python-mox,   
+ python-netaddr,  
+ python-nose,
+ python-nova,
+ python-setuptools-git,
+ python-sqlalchemy,
+ python-stevedore,
+ python-webob,
+Standards-Version: 3.9.3
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=openstack/ceilometer.git;a=summary
+Vcs-Git: git://anonscm.debian.org/openstack/ceilometer.git
+Homepage: http://wiki.openstack.org/Ceilometer
+
+Package: python-ceilometer
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ${python:Depends}, ${misc:Depends},
+ python-anyjson,   
+ python-eventlet,  
+ python-flask,     
+ python-iso8601,
+ python-kombu,
+ python-lockfile,
+ python-netaddr, 
+ python-sqlalchemy,
+ python-stevedore, 
+ python-webob
+Description: ceilometer python libraries
+ Ceilometer aims to deliver a unique point of contact for billing systems to 
+ aquire all counters they need to establish customer billing, accross all
+ current and future OpenStack components. The delivery of counters must be
+ tracable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
+ This package contains the python libraries that are needed for all parts of
+ ceilometer
+
+Package: ceilometer-common
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: python-ceilometer (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
+Provides: ${python:Provides}
+Description: ceilometer common files
+ Ceilometer aims to deliver a unique point of contact for billing systems to 
+ aquire all counters they need to establish customer billing, accross all
+ current and future OpenStack components. The delivery of counters must be
+ tracable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
+ This package contains files that are needed for all parts of ceilometer
+
+Package: ceilometer-collector
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: ceilometer collector service
+ Ceilometer aims to deliver a unique point of contact for billing systems to 
+ aquire all counters they need to establish customer billing, accross all
+ current and future OpenStack components. The delivery of counters must be
+ tracable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
+ This package contains the collector service
+
+Package: ceilometer-api
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: ceilometer api service
+ Ceilometer aims to deliver a unique point of contact for billing systems to 
+ aquire all counters they need to establish customer billing, accross all
+ current and future OpenStack components. The delivery of counters must be
+ tracable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the api service
+
+Package: ceilometer-agent-compute
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: ceilometer compute agent
+ Ceilometer aims to deliver a unique point of contact for billing systems to 
+ aquire all counters they need to establish customer billing, accross all
+ current and future OpenStack components. The delivery of counters must be
+ tracable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
+ This package contains the compute agent
+
+Package: ceilometer-agent-central
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: ceilometer central agent
+ Ceilometer aims to deliver a unique point of contact for billing systems to 
+ aquire all counters they need to establish customer billing, accross all
+ current and future OpenStack components. The delivery of counters must be
+ tracable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
+ This package contains the central agent.

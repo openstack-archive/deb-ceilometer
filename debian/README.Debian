@@ -1,0 +1,2 @@
+In order to configure both the agents and collector you have to put notification_topics 'notifications,glance_notifications'
+in your /etc/nova/nova.conf.

@@ -1,0 +1,54 @@
+#!/usr/bin/make -f
+
+#export DH_VERBOSE=1
+
+%:
+	dh $@  --with python2
+
+DEBVERS := $(shell dpkg-parsechangelog | sed -n -e 's/^Version: //p')
+VERSION := $(shell echo '$(DEBVERS)' | sed -e 's/^[[:digit:]]*://' -e 's/[~-].*//')
+DEBFLAVOR :=$(shell dpkg-parsechangelog | grep -E ^Distribution: | cut -d" " -f2)
+DEBPKGNAME :=$(shell dpkg-parsechangelog | grep -E ^Source: | cut -d" " -f2)
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf debian/*.upstart
+
+override_dh_installinit:
+	if dpkg-vendor --derives-from ubuntu ; then \
+		for i in *.upstart.in ; do \
+			MYPKG=`echo $i | cut -d. -f1` ; \
+			cp $MYPKG.upstart.in $MYPKG.upstart ; \
+		done ; \
+	fi
+	dh_installinit --error-handler=true
+
+override_dh_gencontrol:
+	if dpkg-vendor --derives-from ubuntu ; then \
+		dh_gencontrol -- -T$(CURDIR)/debian/ubuntu_control_vars ; \
+	else \
+		dh_gencontrol -- -T$(CURDIR)/debian/debian_control_vars ; \
+	fi
+
+override_dh_builddeb:
+	dh_builddeb -- -Zxz -z9
+
+regen-manifest-patch:
+	quilt pop -a || true
+	quilt push install-missing-files.patch
+	git checkout MANIFEST.in
+	git ls-files --no-empty-directory --exclude-standard nova | grep -v '.py$$' | sed -n 's/.*/include &/gp' >> MANIFEST.in
+	quilt refresh
+	quilt pop -a
+
+get-vcs-source:
+	git remote add upstream git://github.com/openstack/$(DEBPKGNAME).git || true
+	git fetch upstream
+	if [ ! -f ../$(DEBPKGNAME)_$(VERSION).orig.tar.xz ] ; then \
+		git archive --prefix=$(DEBPKGNAME)-$(VERSION)/ $(VERSION) | xz >../$(DEBPKGNAME)_$(VERSION).orig.tar.xz ; \
+	fi
+	if ! git checkout master ; then \
+		echo "No upstream branch: checking out" ; \
+		git checkout -b master upstream/master ; \
+	fi
+	git checkout debian/experimental
