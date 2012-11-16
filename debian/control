@@ -39,7 +39,7 @@ Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${python:Depends}, ${misc:Depends},
  python-anyjson,   
  python-eventlet,  
- python-flask,     
+ python-flask (>= 0.9),
  python-iso8601,
  python-kombu,
  python-lockfile,
