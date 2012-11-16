@@ -45,15 +45,3 @@ regen-manifest-patch:
 	git ls-files --no-empty-directory --exclude-standard nova | grep -v '.py$$' | sed -n 's/.*/include &/gp' >> MANIFEST.in
 	quilt refresh
 	quilt pop -a
-
-get-vcs-source:
-	git remote add upstream git://github.com/openstack/$(DEBPKGNAME).git || true
-	git fetch upstream
-	if [ ! -f ../$(DEBPKGNAME)_$(VERSION).orig.tar.xz ] ; then \
-		git archive --prefix=$(DEBPKGNAME)-$(VERSION)/ $(VERSION) | xz >../$(DEBPKGNAME)_$(VERSION).orig.tar.xz ; \
-	fi
-	if ! git checkout master ; then \
-		echo "No upstream branch: checking out" ; \
-		git checkout -b master upstream/master ; \
-	fi
-	git checkout debian/experimental
