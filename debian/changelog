@@ -1,5 +1,5 @@
 ceilometer (0.1-1) experimental; urgency=low
 
-  * Initial release.
+  * Initial release (Closes: #693406).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 14 Nov 2012 14:41:52 +0000
