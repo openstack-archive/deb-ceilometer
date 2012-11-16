@@ -14,8 +14,7 @@ if [ "$1" = "configure" ]; then
 			--quiet \
 			--disabled-password \
 			--shell /bin/false \
-			--group ceilometer \
-			ceilometer
+			--group ceilometer
 	fi
 
 	chown -R ceilometer:adm /var/log/ceilometer
