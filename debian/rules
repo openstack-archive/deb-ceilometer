@@ -7,10 +7,9 @@ include /usr/share/openstack-pkg-tools/pkgos.make
 %:
 	dh $@  --with python2
 
-DEBVERS := $(shell dpkg-parsechangelog | sed -n -e 's/^Version: //p')
-VERSION := $(shell echo '$(DEBVERS)' | sed -e 's/^[[:digit:]]*://' -e 's/[~-].*//')
-DEBFLAVOR :=$(shell dpkg-parsechangelog | grep -E ^Distribution: | cut -d" " -f2)
-DEBPKGNAME :=$(shell dpkg-parsechangelog | grep -E ^Source: | cut -d" " -f2)
+override_dh_auto_build:
+	dh_auto_build
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func ceilometer-common.postinst
 
 override_dh_installchangelogs:
 	dh_installchangelogs debian/CHANGELOG
@@ -18,6 +17,7 @@ override_dh_installchangelogs:
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -rf debian/*.upstart
+	rm -rf debian/ceilometer-common.postinst
 
 override_dh_installinit:
 	if dpkg-vendor --derives-from ubuntu ; then \

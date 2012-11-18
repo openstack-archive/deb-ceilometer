@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+#PKGOS-INCLUDE#
+
+if [ "$1" = "configure" ]; then
+	pkgos_var_user_group nova
+	pkgos_var_user_group ceilometer
+	adduser ceilometer nova || true
+fi
+
+#DEBHELPER#
