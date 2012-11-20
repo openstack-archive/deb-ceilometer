@@ -39,11 +39,12 @@ Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${python:Depends}, ${misc:Depends},
  python-anyjson,   
- python-eventlet,  
+ python-eventlet,
  python-flask (>= 0.9),
  python-iso8601,
  python-kombu,
  python-lockfile,
+ python-nova,
  python-netaddr, 
  python-sqlalchemy,
  python-stevedore,
@@ -127,7 +128,8 @@ Description: openstack efficient metering counters system (compute agent)
 Package: ceilometer-agent-central
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends},
+ ${misc:Depends}, python-keystoneclient
 Description: openstack efficient metering counters system (central agent)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
