@@ -8,6 +8,9 @@ if [ "$1" = "configure" ]; then
 	pkgos_var_user_group nova
 	pkgos_var_user_group ceilometer
 	adduser ceilometer nova || true
+	pkgos_write_new_conf ceilometer ceilometer.conf
+	pkgos_write_new_conf ceilometer policy.json
+	pkgos_write_new_conf ceilometer sources.json
 fi
 
 #DEBHELPER#
