@@ -1,0 +1,11 @@
+Description: Adds version info
+Author: Thomas Goirand <zigo@debian.org>
+
+--- /dev/null
++++ ceilometer-2013.1~g0+48d8f574e8/versioninfo
+@@ -0,0 +1 @@
++2013.1~g0+48d8f574e8
+--- /dev/null
++++ ceilometer-2013.1~g0+48d8f574e8/ceilometer/versioninfo
+@@ -0,0 +1 @@
++2013.1~g0+48d8f574e8
