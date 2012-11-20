@@ -18,16 +18,25 @@
 # under the License.
 
 import os
+import socket
 
-from nova import flags
-
-from ceilometer.openstack.common import log
 from ceilometer.openstack.common import cfg
+from ceilometer.openstack.common import context
+from ceilometer.openstack.common import log
+from ceilometer.openstack.common.rpc import service as rpc_service
+
 
 cfg.CONF.register_opts([
     cfg.IntOpt('periodic_interval',
                default=600,
-               help='seconds between running periodic tasks')
+               help='seconds between running periodic tasks'),
+    cfg.StrOpt('host',
+               default=socket.getfqdn(),
+               help='Name of this node.  This can be an opaque identifier.  '
+               'It is not necessarily a hostname, FQDN, or IP address. '
+               'However, the node name must be valid within '
+               'an AMQP key, and if using ZeroMQ, a valid '
+               'hostname, FQDN, or IP address'),
 ])
 
 CLI_OPTIONS = [
@@ -51,6 +60,16 @@ CLI_OPTIONS = [
 cfg.CONF.register_cli_opts(CLI_OPTIONS)
 
 
+class PeriodicService(rpc_service.Service):
+
+    def start(self):
+        super(PeriodicService, self).start()
+        admin_context = context.RequestContext('admin', 'admin', is_admin=True)
+        self.tg.add_timer(cfg.CONF.periodic_interval,
+                    self.manager.periodic_tasks,
+                    context=admin_context)
+
+
 def _sanitize_cmd_line(argv):
     """Remove non-nova CLI options from argv."""
     cli_opt_names = ['--%s' % o.name for o in CLI_OPTIONS]
@@ -58,10 +77,5 @@ def _sanitize_cmd_line(argv):
 
 
 def prepare_service(argv=[]):
-    cfg.CONF(argv[1:])
-    # FIXME(dhellmann): We must set up the nova.flags module in order
-    # to have the RPC and DB access work correctly because we are
-    # still using the Service object out of nova directly. We need to
-    # move that into openstack.common.
-    flags.parse_args(_sanitize_cmd_line(argv))
+    cfg.CONF(argv[1:], project='ceilometer')
     log.setup('ceilometer')

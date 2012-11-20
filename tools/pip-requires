@@ -4,8 +4,13 @@ iso8601
 lockfile
 netaddr
 argparse
-sqlalchemy
+SQLAlchemy>=0.7.3,<=0.7.9
+sqlalchemy-migrate>=0.7.2
+pymongo>=2.2.1
 eventlet
 anyjson>=0.3.1
 Flask==0.9
-stevedore>=0.4
+stevedore>=0.6
+python-glanceclient
+python-cinderclient
+python-novaclient

@@ -19,7 +19,11 @@
 """
 
 import datetime
+import mock
 
+from stevedore import extension
+
+from ceilometer import nova_client
 from ceilometer.compute import manager
 from ceilometer import counter
 from ceilometer import publish
@@ -30,8 +34,7 @@ from ceilometer.openstack.common import cfg
 
 def test_load_plugins():
     mgr = manager.AgentManager()
-    mgr.init_host()
-    assert mgr.pollsters, 'Failed to load any plugins'
+    assert list(mgr.ext_manager), 'Failed to load any plugins'
     return
 
 
@@ -40,7 +43,6 @@ class TestRunTasks(base.TestCase):
     class Pollster:
         counters = []
         test_data = counter.Counter(
-            source='test',
             name='test',
             type=counter.TYPE_CUMULATIVE,
             volume=1,
@@ -56,37 +58,44 @@ class TestRunTasks(base.TestCase):
             self.counters.append((manager, instance))
             return [self.test_data]
 
-    def faux_notify(self, context, msg, topic, secret):
-        self.notifications.append((msg, topic, secret))
+    def faux_notify(self, context, msg, topic, secret, source):
+        self.notifications.append((msg, topic, secret, source))
 
     def setUp(self):
         super(TestRunTasks, self).setUp()
         self.notifications = []
         self.stubs.Set(publish, 'publish_counter', self.faux_notify)
         self.mgr = manager.AgentManager()
-        self.mgr.pollsters = [('test', self.Pollster())]
+        self.mgr.ext_manager = extension.ExtensionManager('fake',
+                                                          invoke_on_load=False,
+                                                          )
+        self.mgr.ext_manager.extensions = [extension.Extension('test',
+                                                               None,
+                                                               None,
+                                                               self.Pollster(),
+                                                               ),
+                                           ]
         # Set up a fake instance value to be returned by
         # instance_get_all_by_host() so when the manager gets the list
         # of instances to poll we can control the results.
-        self.instance = {'name': 'faux', 'vm_state': 'active'}
-        stillborn_instance = {'name': 'stillborn', 'vm_state': 'error'}
-        self.mox.StubOutWithMock(self.mgr.db, 'instance_get_all_by_host')
-        self.mgr.db.instance_get_all_by_host(
-            None,
-            self.mgr.host,
-            ).AndReturn([self.instance, stillborn_instance])
-
+        self.instance = {'name': 'faux',
+                         'OS-EXT-STS:vm_state': 'active'}
+        stillborn_instance = {'name': 'stillborn',
+                              'OS-EXT-STS:vm_state': 'error'}
+        self.stubs.Set(nova_client.Client, 'instance_get_all_by_host',
+                       lambda *x: [self.instance, stillborn_instance])
         self.mox.ReplayAll()
         # Invoke the periodic tasks to call the pollsters.
         self.mgr.periodic_tasks(None)
 
     def test_message(self):
-        assert len(self.Pollster.counters) == 1
+        self.assertEqual(len(self.Pollster.counters), 2)
         assert self.Pollster.counters[0][1] is self.instance
 
     def test_notifications(self):
         actual = self.notifications
-        assert actual == [(self.Pollster.test_data,
-                           cfg.CONF.metering_topic,
-                           cfg.CONF.metering_secret,
-                           )]
+        assert list(actual[0]) == [self.Pollster.test_data,
+                                   cfg.CONF.metering_topic,
+                                   cfg.CONF.metering_secret,
+                                   cfg.CONF.counter_source,
+                                  ]

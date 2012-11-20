@@ -22,6 +22,7 @@ import re
 import time
 
 import sqlalchemy
+from sqlalchemy import func
 from sqlalchemy.exc import DisconnectionError, OperationalError
 import sqlalchemy.orm
 from sqlalchemy.pool import NullPool, StaticPool
@@ -189,8 +190,3 @@ def get_maker(engine, autocommit=True, expire_on_commit=False, autoflush=True):
                                        autocommit=autocommit,
                                        autoflush=autoflush,
                                        expire_on_commit=expire_on_commit)
-
-
-def func():
-    # ugly hack sqlalchemy name conflict from impl_sqlalchemy
-    return sqlalchemy.func

@@ -18,14 +18,17 @@
 """Tests for ceilometer/agent/manager.py
 """
 
-import datetime
+from datetime import datetime
+
+from mock import patch
+
+from stevedore import extension
+from stevedore.tests import manager as test_manager
 
 from ceilometer import meter
-from ceilometer.collector import manager
+from ceilometer.collector import service
 from ceilometer.openstack.common import cfg
 from ceilometer.storage import base
-from ceilometer.openstack.common import rpc
-from ceilometer.openstack.common import cfg
 from ceilometer.tests import base as tests_base
 from ceilometer.compute import notifications
 
@@ -80,29 +83,21 @@ TEST_NOTICE = {
     }
 
 
-class StubConnection(object):
-    def declare_topic_consumer(*args, **kwargs):
-        pass
-
-    def create_worker(*args, **kwargs):
-        pass
-
-    def consume_in_thread(self):
-        pass
-
-
-class TestCollectorManager(tests_base.TestCase):
+class TestCollectorService(tests_base.TestCase):
 
     def setUp(self):
-        super(TestCollectorManager, self).setUp()
-        self.mgr = manager.CollectorManager()
+        super(TestCollectorService, self).setUp()
+        self.srv = service.CollectorService('the-host', 'the-topic')
         self.ctx = None
         #cfg.CONF.metering_secret = 'not-so-secret'
 
     def test_init_host(self):
-        self.stubs.Set(rpc, 'create_connection', lambda: StubConnection())
         cfg.CONF.database_connection = 'log://localhost'
-        self.mgr.init_host()
+        # If we try to create a real RPC connection, init_host() never
+        # returns. Mock it out so we can establish the manager
+        # configuration.
+        with patch('ceilometer.openstack.common.rpc.create_connection'):
+            self.srv.start()
 
     def test_valid_message(self):
         msg = {'counter_name': 'test',
@@ -114,11 +109,11 @@ class TestCollectorManager(tests_base.TestCase):
             cfg.CONF.metering_secret,
             )
 
-        self.mgr.storage_conn = self.mox.CreateMock(base.Connection)
-        self.mgr.storage_conn.record_metering_data(msg)
+        self.srv.storage_conn = self.mox.CreateMock(base.Connection)
+        self.srv.storage_conn.record_metering_data(msg)
         self.mox.ReplayAll()
 
-        self.mgr.record_metering_data(self.ctx, msg)
+        self.srv.record_metering_data(self.ctx, msg)
         self.mox.VerifyAll()
 
     def test_invalid_message(self):
@@ -135,11 +130,11 @@ class TestCollectorManager(tests_base.TestCase):
             def record_metering_data(self, data):
                 self.called = True
 
-        self.mgr.storage_conn = ErrorConnection()
+        self.srv.storage_conn = ErrorConnection()
 
-        self.mgr.record_metering_data(self.ctx, msg)
+        self.srv.record_metering_data(self.ctx, msg)
 
-        assert not self.mgr.storage_conn.called, \
+        assert not self.srv.storage_conn.called, \
             'Should not have called the storage connection'
 
     def test_timestamp_conversion(self):
@@ -155,27 +150,51 @@ class TestCollectorManager(tests_base.TestCase):
 
         expected = {}
         expected.update(msg)
-        expected['timestamp'] = datetime.datetime(2012, 7, 2, 13, 53, 40)
+        expected['timestamp'] = datetime(2012, 7, 2, 13, 53, 40)
 
-        self.mgr.storage_conn = self.mox.CreateMock(base.Connection)
-        self.mgr.storage_conn.record_metering_data(expected)
+        self.srv.storage_conn = self.mox.CreateMock(base.Connection)
+        self.srv.storage_conn.record_metering_data(expected)
         self.mox.ReplayAll()
 
-        self.mgr.record_metering_data(self.ctx, msg)
+        self.srv.record_metering_data(self.ctx, msg)
         self.mox.VerifyAll()
 
-    def test_load_plugins(self):
-        results = self.mgr._load_plugins(self.mgr.COLLECTOR_NAMESPACE)
-        self.assert_(len(results) > 0)
+    def test_timestamp_tzinfo_conversion(self):
+        msg = {'counter_name': 'test',
+               'resource_id': self.id(),
+               'counter_volume': 1,
+               'timestamp': '2012-09-30T15:31:50.262-08:00',
+               }
+        msg['message_signature'] = meter.compute_signature(
+            msg,
+            cfg.CONF.metering_secret,
+            )
 
-    def test_load_no_plugins(self):
-        results = self.mgr._load_plugins("foobar.namespace")
-        self.assertEqual(results, [])
+        expected = {}
+        expected.update(msg)
+        expected['timestamp'] = datetime(2012, 9, 30, 23, 31, 50, 262000)
+
+        self.srv.storage_conn = self.mox.CreateMock(base.Connection)
+        self.srv.storage_conn.record_metering_data(expected)
+        self.mox.ReplayAll()
+
+        self.srv.record_metering_data(self.ctx, msg)
+        self.mox.VerifyAll()
 
     def test_process_notification(self):
+        # If we try to create a real RPC connection, init_host() never
+        # returns. Mock it out so we can establish the manager
+        # configuration.
+        with patch('ceilometer.openstack.common.rpc.create_connection'):
+            self.srv.start()
         results = []
-        self.stubs.Set(self.mgr, 'publish_counter',
-                       lambda counter: results.append(counter))
-        self.mgr.handlers = [notifications.Instance()]
-        self.mgr.process_notification(TEST_NOTICE)
+        self.stubs.Set(self.srv, 'publish_counter', results.append)
+        self.srv.ext_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 notifications.Instance(),
+                                 ),
+             ])
+        self.srv.process_notification(TEST_NOTICE)
         self.assert_(len(results) >= 1)

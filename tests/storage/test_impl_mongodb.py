@@ -71,7 +71,6 @@ class MongoDBEngineTestBase(unittest.TestCase):
         self.db = self.conn.conn[self.DBNAME]
 
         self.counter = counter.Counter(
-            'test-1',
             'instance',
             counter.TYPE_CUMULATIVE,
             1,
@@ -84,11 +83,11 @@ class MongoDBEngineTestBase(unittest.TestCase):
                                }
             )
         self.msg = meter.meter_message_from_counter(self.counter,
-                                                    'not-so-secret')
+                                                    'not-so-secret',
+                                                    'test-1')
         self.conn.record_metering_data(self.msg)
 
         self.counter2 = counter.Counter(
-            'test-2',
             'instance',
             counter.TYPE_CUMULATIVE,
             1,
@@ -101,11 +100,11 @@ class MongoDBEngineTestBase(unittest.TestCase):
                                }
             )
         self.msg2 = meter.meter_message_from_counter(self.counter2,
-                                                     'not-so-secret')
+                                                     'not-so-secret',
+                                                     'test-2')
         self.conn.record_metering_data(self.msg2)
 
         self.counter3 = counter.Counter(
-            'test-3',
             'instance',
             counter.TYPE_CUMULATIVE,
             1,
@@ -118,12 +117,12 @@ class MongoDBEngineTestBase(unittest.TestCase):
                                }
             )
         self.msg3 = meter.meter_message_from_counter(self.counter3,
-                                                     'not-so-secret')
+                                                     'not-so-secret',
+                                                     'test-3')
         self.conn.record_metering_data(self.msg3)
 
         for i in range(2, 4):
             c = counter.Counter(
-                'test',
                 'instance',
                 counter.TYPE_CUMULATIVE,
                 1,
@@ -135,11 +134,19 @@ class MongoDBEngineTestBase(unittest.TestCase):
                                    'tag': 'counter-%s' % i,
                                    }
                 )
-            msg = meter.meter_message_from_counter(c, 'not-so-secret')
+            msg = meter.meter_message_from_counter(c, 'not-so-secret', 'test')
             self.conn.record_metering_data(msg)
 
     def tearDown(self):
         self.conn.drop_database(self.DBNAME)
+
+
+class IndexTest(MongoDBEngineTestBase):
+
+    def test_indexes_exist(self):
+        # ensure_index returns none if index already exists
+        assert not self.db.resource.ensure_index('foo', name='resource_idx')
+        assert not self.db.meter.ensure_index('foo', name='meter_idx')
 
 
 class UserTest(MongoDBEngineTestBase):
@@ -431,18 +438,20 @@ class TestGetEventInterval(MongoDBEngineTestBase):
     def _make_events(self, *timestamps):
         for t in timestamps:
             c = counter.Counter(
-                'test',
-                'instance',
-                counter.TYPE_CUMULATIVE,
-                1,
-                'user-id',
-                'project-id',
-                'resource-id',
+                name='instance',
+                type=counter.TYPE_CUMULATIVE,
+                volume=1,
+                user_id='user-id',
+                project_id='project-id',
+                resource_id='resource-id',
                 timestamp=t,
                 resource_metadata={'display_name': 'test-server',
                                    }
                 )
-            msg = meter.meter_message_from_counter(c, 'not-so-secret')
+            msg = meter.meter_message_from_counter(counter=c,
+                                                   secret='not-so-secret',
+                                                   source='test',
+                                                   )
             self.conn.record_metering_data(msg)
 
     def test_before_range(self):

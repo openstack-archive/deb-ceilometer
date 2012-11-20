@@ -19,13 +19,12 @@
 import copy
 import datetime
 
-from ceilometer.openstack.common import log
-from ceilometer.openstack.common import cfg
+from ceilometer.openstack.common import cfg, log, timeutils
 from ceilometer.storage import base
 from ceilometer.storage.sqlalchemy.models import Meter, Project, Resource
 from ceilometer.storage.sqlalchemy.models import Source, User
-from ceilometer.storage.sqlalchemy.session import get_session
-import ceilometer.storage.sqlalchemy.session as session
+from ceilometer.storage.sqlalchemy.session import func
+import ceilometer.storage.sqlalchemy.session as sqlalchemy_session
 
 LOG = log.getLogger(__name__)
 
@@ -84,9 +83,11 @@ def make_query_from_filter(query, event_filter, require_meter=True):
     if event_filter.source:
         query = query.filter_by(source=event_filter.source)
     if event_filter.start:
-        query = query = query.filter(Meter.timestamp >= event_filter.start)
+        ts_start = event_filter.start
+        query = query.filter(Meter.timestamp >= ts_start)
     if event_filter.end:
-        query = query = query.filter(Meter.timestamp < event_filter.end)
+        ts_end = event_filter.end
+        query = query.filter(Meter.timestamp < ts_end)
     if event_filter.user:
         query = query.filter_by(user_id=event_filter.user)
     elif event_filter.project:
@@ -109,7 +110,7 @@ class Connection(base.Connection):
     def _get_connection(self, conf):
         """Return a connection to the database.
         """
-        return session.get_session()
+        return sqlalchemy_session.get_session()
 
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
@@ -127,14 +128,14 @@ class Connection(base.Connection):
 
         # create/update user && project, add/update their sources list
         if data['user_id']:
-            user = self.session.merge(User(id=data['user_id']))
+            user = self.session.merge(User(id=str(data['user_id'])))
             if not filter(lambda x: x.id == source.id, user.sources):
                 user.sources.append(source)
         else:
             user = None
 
         if data['project_id']:
-            project = self.session.merge(Project(id=data['project_id']))
+            project = self.session.merge(Project(id=str(data['project_id'])))
             if not filter(lambda x: x.id == source.id, project.sources):
                 project.sources.append(source)
         else:
@@ -144,7 +145,7 @@ class Connection(base.Connection):
         rtimestamp = datetime.datetime.utcnow()
         rmetadata = data['resource_metadata']
 
-        resource = self.session.merge(Resource(id=data['resource_id']))
+        resource = self.session.merge(Resource(id=str(data['resource_id'])))
         if not filter(lambda x: x.id == source.id, resource.sources):
             resource.sources.append(source)
         resource.project = project
@@ -222,6 +223,8 @@ class Connection(base.Connection):
             query = query.filter(Resource.timestamp < end_timestamp)
         if project is not None:
             query = query.filter(Resource.project_id == project)
+        query = query.options(
+                    sqlalchemy_session.sqlalchemy.orm.joinedload('meters'))
 
         for resource in query.all():
             r = row2dict(resource)
@@ -248,13 +251,26 @@ class Connection(base.Connection):
             del e['id']
             yield e
 
+    def _make_volume_query(self, event_filter, counter_volume_func):
+        """Returns complex Meter counter_volume query for max and sum"""
+        subq = model_query(Meter.id, session=self.session)
+        subq = make_query_from_filter(subq, event_filter, require_meter=False)
+        subq = subq.subquery()
+        mainq = self.session.query(Resource.id, counter_volume_func)
+        mainq = mainq.join(Meter).group_by(Resource.id)
+        return mainq.filter(Meter.id.in_(subq))
+
     def get_volume_sum(self, event_filter):
-        # it isn't clear these are used
-        pass
+        counter_volume_func = func.sum(Meter.counter_volume)
+        query = self._make_volume_query(event_filter, counter_volume_func)
+        results = query.all()
+        return ({'resource_id': x, 'value': y} for x, y in results)
 
     def get_volume_max(self, event_filter):
-        # it isn't clear these are used
-        pass
+        counter_volume_func = func.max(Meter.counter_volume)
+        query = self._make_volume_query(event_filter, counter_volume_func)
+        results = query.all()
+        return ({'resource_id': x, 'value': y} for x, y in results)
 
     def get_event_interval(self, event_filter):
         """Return the min and max timestamps from events,
@@ -262,7 +278,6 @@ class Connection(base.Connection):
 
         ( datetime.datetime(), datetime.datetime() )
         """
-        func = session.func()
         query = self.session.query(func.min(Meter.timestamp),
                                    func.max(Meter.timestamp))
         query = make_query_from_filter(query, event_filter)
@@ -279,7 +294,7 @@ def model_query(*args, **kwargs):
 
     :param session: if present, the session to use
     """
-    session = kwargs.get('session') or get_session()
+    session = kwargs.get('session') or sqlalchemy_session.get_session()
     query = session.query(*args)
     return query
 

@@ -21,7 +21,16 @@
 import mock
 import datetime
 
-from nova import flags
+from stevedore import extension
+from stevedore.tests import manager as test_manager
+
+try:
+    from nova import config
+    nova_CONF = config.cfg.CONF
+except ImportError:
+    # XXX Folsom compat
+    from nova import flags
+    nova_CONF = flags.FLAGS
 from nova import db
 from nova import context
 from nova.tests import fake_network
@@ -47,7 +56,6 @@ class TestNovaNotifier(base.TestCase):
     class Pollster(object):
         counters = []
         test_data = counter.Counter(
-            source='test',
             name='test',
             type=counter.TYPE_CUMULATIVE,
             volume=1,
@@ -79,10 +87,10 @@ class TestNovaNotifier(base.TestCase):
     @skip.skip_unless(notifier_api, "Notifier API not found")
     def setUp(self):
         super(TestNovaNotifier, self).setUp()
-        flags.FLAGS.compute_driver = 'nova.virt.fake.FakeDriver'
-        flags.FLAGS.notification_driver = [nova_notifier.__name__]
-        self.compute = importutils.import_object(flags.FLAGS.compute_manager)
-        self.context = context.RequestContext('admin', 'admin', is_admin=True)
+        nova_CONF.compute_driver = 'nova.virt.fake.FakeDriver'
+        nova_CONF.notification_driver = [nova_notifier.__name__]
+        self.compute = importutils.import_object(nova_CONF.compute_manager)
+        self.context = context.get_admin_context()
         fake_network.set_stub_network_methods(self.stubs)
 
         self.instance = {"name": "instance-1",
@@ -91,6 +99,7 @@ class TestNovaNotifier(base.TestCase):
                          "user_id": "FAKE",
                          "project_id": "FAKE",
                          "display_name": "FAKE NAME",
+                         "hostname": "abcdef",
                          "reservation_id": "FAKE RID",
                          "instance_type_id": 1,
                          "architecture": "x86",
@@ -125,7 +134,14 @@ class TestNovaNotifier(base.TestCase):
         self.stubs.Set(publish, 'publish_counter', self.do_nothing)
         nova_notifier._initialize_config_options = False
         nova_notifier.initialize_manager()
-        nova_notifier._agent_manager.pollsters = [('test', self.Pollster())]
+        nova_notifier._agent_manager.ext_manager = \
+            test_manager.TestExtensionManager([
+                extension.Extension('test',
+                                    None,
+                                    None,
+                                    self.Pollster(),
+                                    ),
+                ])
 
     def tearDown(self):
         self.Pollster.counters = []

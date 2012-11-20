@@ -91,23 +91,26 @@ LOG = log.getLogger(__name__)
 blueprint = flask.Blueprint('v1', __name__)
 
 
+def request_wants_html():
+    best = flask.request.accept_mimetypes \
+        .best_match(['application/json', 'text/html'])
+    return best == 'text/html' and \
+        flask.request.accept_mimetypes[best] > \
+        flask.request.accept_mimetypes['application/json']
+
+
 ## APIs for working with resources.
 
-
-def _list_resources(source=None, user=None, project=None,
-                    start_timestamp=None, end_timestamp=None):
+def _list_resources(source=None, user=None, project=None):
     """Return a list of resource identifiers.
     """
-    if start_timestamp:
-        start_timestamp = timeutils.parse_isotime(start_timestamp)
-    if end_timestamp:
-        end_timestamp = timeutils.parse_isotime(end_timestamp)
+    q_ts = _get_query_timestamps(flask.request.args)
     resources = flask.request.storage_conn.get_resources(
         source=source,
         user=user,
         project=project,
-        start_timestamp=start_timestamp,
-        end_timestamp=end_timestamp,
+        start_timestamp=q_ts['start_timestamp'],
+        end_timestamp=q_ts['end_timestamp'],
         )
     return flask.jsonify(resources=list(resources))
 
@@ -124,11 +127,7 @@ def list_resources_by_project(project):
         (optional)
     :type end_timestamp: ISO date in UTC
     """
-    return _list_resources(
-        project=project,
-        start_timestamp=flask.request.args.get('start_timestamp'),
-        end_timestamp=flask.request.args.get('end_timestamp'),
-        )
+    return _list_resources(project=project)
 
 
 @blueprint.route('/resources')
@@ -143,6 +142,15 @@ def list_all_resources():
     :type end_timestamp: ISO date in UTC
     """
     return _list_resources()
+
+
+@blueprint.route('/sources/<source>')
+def get_source(source):
+    """Return a source details.
+
+    :param source: The ID of the reporting source.
+    """
+    return flask.jsonify(flask.request.sources.get(source, {}))
 
 
 @blueprint.route('/sources/<source>/resources')
@@ -233,22 +241,33 @@ def list_projects_by_source(source):
 ## APIs for working with events.
 
 
-def _list_events(project=None,
-                resource=None,
-                source=None,
-                user=None,
-                meter=None,
-                ):
+def _list_events(meter,
+                 project=None,
+                 resource=None,
+                 source=None,
+                 user=None):
     """Return a list of raw metering events.
     """
+    q_ts = _get_query_timestamps(flask.request.args)
     f = storage.EventFilter(user=user,
                             project=project,
                             source=source,
                             meter=meter,
                             resource=resource,
+                            start=q_ts['start_timestamp'],
+                            end=q_ts['end_timestamp'],
                             )
-    events = flask.request.storage_conn.get_raw_events(f)
-    return flask.jsonify(events=list(events))
+    events = list(flask.request.storage_conn.get_raw_events(f))
+    jsonified = flask.jsonify(events=events)
+    if request_wants_html():
+        return flask.templating.render_template('list_event.html',
+                                                user=user,
+                                                project=project,
+                                                source=source,
+                                                meter=meter,
+                                                resource=resource,
+                                                events=jsonified)
+    return jsonified
 
 
 @blueprint.route('/projects/<project>/meters/<meter>')
