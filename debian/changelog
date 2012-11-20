@@ -1,4 +1,4 @@
-ceilometer (0.1-1) experimental; urgency=low
+ceilometer (2013.1~g0+48d8f574e8-1) experimental; urgency=low
 
   * Initial release (Closes: #693406).
 
