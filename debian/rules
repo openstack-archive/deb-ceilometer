@@ -10,6 +10,7 @@ include /usr/share/openstack-pkg-tools/pkgos.make
 override_dh_clean:
 	dh_clean
 	rm -rf ceilometer.egg-info
+	rm -f debian/ceilometer-common.postinst debian/ceilometer-api.config debian/ceilometer-api.postinst
 
 override_dh_install:
 	dh_install
@@ -20,6 +21,8 @@ override_dh_install:
 override_dh_auto_build:
 	dh_auto_build
 	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func ceilometer-common.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func ceilometer-api.config
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func ceilometer-api.postinst
 
 override_dh_installchangelogs:
 	dh_installchangelogs debian/CHANGELOG

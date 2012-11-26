@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+
+#PKGOS-INCLUDE#
+
+if [ "$1" = "configure" ] ; then
+        . /usr/share/debconf/confmodule
+        pkgos_register_endpoint_postinst ceilometer ceilometer metering "Ceilometer Metering Service" 8777 /
+        db_stop
+fi
+
+#DEBHELPER#
+
+exit 0
