@@ -45,6 +45,7 @@ Depends: ${python:Depends}, ${misc:Depends},
  python-kombu,
  python-lockfile,
  python-nova (>= 2012.2),
+ python-novaclient (>= 2:2.6.10)
  python-netaddr, 
  python-stevedore (>= 0.6),
  python-webob
