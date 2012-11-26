@@ -29,10 +29,3 @@ override_dh_auto_clean:
 	rm -rf debian/*.upstart
 	rm -rf debian/ceilometer-common.postinst
 	find . -iname '*.pyc' -delete
-
-override_dh_gencontrol:
-	if dpkg-vendor --derives-from ubuntu ; then \
-		dh_gencontrol -- -T$(CURDIR)/debian/ubuntu_control_vars ; \
-	else \
-		dh_gencontrol -- -T$(CURDIR)/debian/debian_control_vars ; \
-	fi
