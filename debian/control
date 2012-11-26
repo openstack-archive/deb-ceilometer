@@ -49,7 +49,7 @@ Depends: ${python:Depends}, ${misc:Depends},
  python-sqlalchemy,
  python-stevedore (>= 0.6),
  python-webob
-Description: openstack efficient metering counters system (Python libraries)
+Description: OpenStack efficient metering counters system (Python libraries)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
@@ -57,17 +57,15 @@ Description: openstack efficient metering counters system (Python libraries)
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
  This package contains the Python libraries that are needed for all parts of
- ceilometer
+ Ceilometer.
 
 Package: ceilometer-common
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: python-ceilometer (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
 Provides: ${python:Provides}
-Description: openstack efficient metering counters system (common files)
+Description: OpenStack efficient metering counters system (common files)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
@@ -75,15 +73,13 @@ Description: openstack efficient metering counters system (common files)
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
- This package contains files that are needed for all parts of ceilometer
+ This package contains files that are needed for all parts of Ceilometer.
 
 Package: ceilometer-collector
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: openstack efficient metering counters system  (collector service)
+Description: OpenStack efficient metering counters system  (collector service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
@@ -91,15 +87,13 @@ Description: openstack efficient metering counters system  (collector service)
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
- This package contains the collector service
+ This package contains the collector service.
 
 Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, python-keystone (>= 2012.2)
-Description: openstack efficient metering counters system (API service)
+Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
@@ -107,13 +101,13 @@ Description: openstack efficient metering counters system (API service)
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- This package contains the API service
+ This package contains the API service.
 
 Package: ceilometer-agent-compute
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: openstack efficient metering counters system (compute agent)
+Description: OpenStack efficient metering counters system (compute agent)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
@@ -121,23 +115,19 @@ Description: openstack efficient metering counters system (compute agent)
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
- This package contains the compute agent
+ This package contains the compute agent.
 
 Package: ceilometer-agent-central
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends},
  ${misc:Depends}, python-keystoneclient
-Description: openstack efficient metering counters system (central agent)
+Description: OpenStack efficient metering counters system (central agent)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
  current and future OpenStack components. The delivery of counters must be
  tracable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
- .
- (A ceilometer is an instrument that measures cloud coverage.)
  .
  This package contains the central agent.
