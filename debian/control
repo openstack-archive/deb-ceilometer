@@ -78,7 +78,7 @@ Description: OpenStack efficient metering counters system (common files)
 Package: ceilometer-collector
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Recommends: python-pymongo (>= 2.2)
+Recommends: python-pymongo (>= 2.2), python-sqlalchemy
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
 Description: OpenStack efficient metering counters system  (collector service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
@@ -93,7 +93,7 @@ Description: OpenStack efficient metering counters system  (collector service)
 Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Recommends: python-pymongo (>= 2.2)
+Recommends: python-pymongo (>= 2.2), python-sqlalchemy
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, python-keystone (>= 2012.2)
 Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
