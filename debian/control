@@ -8,6 +8,7 @@ Uploaders: Loic Dachary (OuoU) <loic@debian.org>,
            Ghe Rivero <ghe.rivero@stackops.com>,
            Mehdi Abaakouk <sileht@sileht.net>
 Build-Depends: debhelper (>= 9),
+ po-debconf,
  python-all (>= 2.6.6-3~),
  openstack-pkg-tools
 Build-Depends-Indep: pep8,
@@ -94,7 +95,7 @@ Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Recommends: python-pymongo (>= 2.2), python-sqlalchemy
-Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, python-keystone (>= 2012.2)
+Depends: debconf, ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, python-keystone (>= 2012.2), python-keystoneclient
 Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
