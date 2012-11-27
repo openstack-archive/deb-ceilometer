@@ -8,3 +8,7 @@ if [ "${1}" = "purge" ] ; then
 	rm -f /etc/ceilometer/sources.json
 	rmdir --ignore-fail-on-non-empty /etc/ceilometer
 fi
+
+#DEBHELPER#
+
+exit 0
