@@ -1,0 +1,24 @@
+Description: Adds missing files in MANIFEST.in
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: no
+
+--- ceilometer-2013.1~g0+48d8f574e8.orig/MANIFEST.in
++++ ceilometer-2013.1~g0+48d8f574e8/MANIFEST.in
+@@ -4,3 +4,17 @@ exclude .gitignore
+ exclude .gitreview
+ 
+ global-exclude *.pyc
++include ceilometer/api/static/LICENSE.d3.v2.min.js
++include ceilometer/api/static/LICENSE.rickshaw
++include ceilometer/api/static/bootstrap/css/bootstrap-responsive.css
++include ceilometer/api/static/bootstrap/css/bootstrap.css
++include ceilometer/api/static/bootstrap/img/glyphicons-halflings-white.png
++include ceilometer/api/static/bootstrap/img/glyphicons-halflings.png
++include ceilometer/api/static/bootstrap/js/bootstrap.js
++include ceilometer/api/static/d3.v2.js
++include ceilometer/api/static/jquery-1.8.3.js
++include ceilometer/api/static/rickshaw.css
++include ceilometer/api/static/rickshaw.js
++include ceilometer/api/templates/list_event.html
++include ceilometer/storage/sqlalchemy/migrate_repo/README
++include ceilometer/storage/sqlalchemy/migrate_repo/migrate.cfg
