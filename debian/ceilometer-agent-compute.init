@@ -16,8 +16,6 @@ DESC="Ceilometer Agent Compute"
 SYS_NAME=ceilometer
 NAME=ceilometer-agent-compute
 DAEMON=/usr/bin/ceilometer-agent-compute
-DAEMON_ARGS="--config-file /etc/nova/nova.conf"
-[ -f '/etc/nova/nova-compute.conf' ] && DAEMON_ARGS=${DAEMON_ARGS}" --config-file=/etc/nova/nova-compute.conf"
 
 SCRIPTNAME=/etc/init.d/${NAME}
 DAEMON_USER=${SYS_NAME}

@@ -17,8 +17,6 @@ DESC="Ceilometer Collector"
 SYS_NAME=ceilometer
 NAME=ceilometer-collector
 DAEMON=/usr/bin/${NAME}
-DAEMON_ARGS="--config-file /etc/nova/nova.conf"
-[ -f '/etc/nova/nova-compute.conf' ] && DAEMON_ARGS=${DAEMON_ARGS}" --config-file=/etc/nova/nova-compute.conf"
 
 SCRIPTNAME=/etc/init.d/${NAME}
 DAEMON_USER=${SYS_NAME}
