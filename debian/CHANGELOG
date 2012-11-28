@@ -1,3 +1,1357 @@
+commit 0ca8c83df916ff0fa62f9cb0aa1045c9097d32c8
+Merge: 55cdc08 0d891c7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 26 16:34:17 2012 +0000
+
+    Merge "Remove rickshaw subproject"
+
+commit 55cdc081304233de8721101bd2d03bf31027aff4
+Merge: 45e573e 57bea4d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 26 16:32:23 2012 +0000
+
+    Merge "tools: set novaclient minimum version"
+
+commit 45e573e89024597a8b2c094b5f29ff51712b4a77
+Merge: 9ef03b2 fb8d86e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 26 16:31:20 2012 +0000
+
+    Merge "Lower pymongo dependency"
+
+commit 9ef03b220cedad948c7aef3326d8af2818ac826d
+Merge: 3e3a303 36998cb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 26 16:29:28 2012 +0000
+
+    Merge "libvirt: fix Folsom compatibility"
+
+commit 3e3a30336f12da2e553971b77d5c15671b977dfb
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 26 16:17:33 2012 +0100
+
+    network: remove left-over useless nova import
+    
+    Change-Id: I1845743343b9cb64a0d37547b9e9f76d5fdb7ef9
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 57bea4d4b789813d09dbe8143991fea81f03153b
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Nov 16 16:56:26 2012 +0100
+
+    tools: set novaclient minimum version
+    
+    This is set accordingly to - at least - the no_cache option used.
+    
+    This is likely to fix #1083104
+    
+    Change-Id: I14d878cbeae84e40f2b81720d6d8dbee4a3278c3
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 36998cb142f11c2b2a372da7d3c33c622b44a714
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 26 15:52:40 2012 +0100
+
+    libvirt: fix Folsom compatibility
+    
+    Change-Id: I1b60add4dadf2eecfe582fceb18acb614b67f7f8
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit fb8d86eead992ec31e93b6b109d6e99108872ba8
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 26 15:34:00 2012 +0100
+
+    Lower pymongo dependency
+    
+    Debian has only 2.2, and there's no reason it wouldn't work according to
+    PyMongo changelog.
+    
+    Change-Id: I4ca3d79aa1845ee513d93b25afaa0d41fab4bf59
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 0d891c7d0f6d55c833eeca88824d1fc2e1da5a8b
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Nov 23 12:02:13 2012 +0100
+
+    Remove rickshaw subproject
+    
+    Change-Id: I6c8689ed9748a6f66d6f972c7cba623cc7ec8193
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit c6502e119197ebaea707e9a62e93c9c983cd5d50
+Author: Shane Wang <shane.wang@intel.com>
+Date:   Thu Nov 22 21:02:54 2012 +0800
+
+    Remove unused rpc import
+    
+    commit 2789f144d4776a79551ec7603b292460e08f3518 uses service.py
+    in openstack-common and changes the collector from a manager into
+    a Service. The rpc connection creation in CollectorManager is not
+    called any more. So, remove the unnecessary rpc import.
+    
+    Change-Id: I710e14beb3485661e8aeeae0792fae68cba48979
+    Signed-off-by: Shane Wang <shane.wang@intel.com>
+
+commit 9cd9e9522de077529185b4e9c1cc7486d2fe4a92
+Author: Lianhao Lu <lianhao.lu@intel.com>
+Date:   Thu Nov 22 11:39:59 2012 +0800
+
+    Adapted to nova's compute_driver moving.
+    
+    Nova moved the compute_driver into nova.virt.driver in recent changes.
+    It also provided 2 new functions load_compute_driver() and
+    compute_driver_matches().
+    
+    Leveraging that change while still keeps folsom compatibility.
+    
+    Change-Id: I53f6f295cef6173aaea26c9bbac977b3ae66c6d2
+
+commit 7f46361beec191fc598779cdf757334bfb632c90
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Nov 21 16:36:54 2012 +0100
+
+    doc: fix cpu counter unit
+    
+    This fixes bug #1071461
+    
+    Change-Id: I358f23d07df2f8123d52912a01a4d5a02ba22b77
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit af7f5ce54974f7e8ce0ffa548f47fae42eeb608f
+Merge: c13231f 59a1937
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 21 13:19:32 2012 +0000
+
+    Merge "api: replace minified files by complete version"
+
+commit c13231f56d6bb7a20f9332a72fea102f027acfaa
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Nov 21 12:09:42 2012 +0100
+
+    tools: use tarballs rather than git for Folsom tests
+    
+    Change-Id: I84479f4dd5f49063e957f30d38ad079c40cdcfd7
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 1cc462843c9ac4aea2833748b80516d0f472bf39
+Author: Lianhao Lu <lianhao.lu@intel.com>
+Date:   Tue Nov 20 14:13:12 2012 +0800
+
+    Used auth_token middleware from keystoneclient.
+    
+    The auth_token middleware was moved from keystone to keystoneclient.
+    
+    Fixed the bug 1080990.
+    
+    Change-Id: I424489b73e420546df96a52f639d0ee1c8ee6287
+
+commit a96e1a73cd548f51e4884a380c725c28cde188a1
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Nov 20 16:01:12 2012 +0100
+
+    Remove cinderclient dependency
+    
+    Change-Id: I7c38be05e9288ad001aabf73a37824b19918c3a3
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 48d8f574e80b7dd0d14e4ee8e7ff3b5f37cebc6b
+Merge: 45da4ee a9e5f84
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 20 11:33:34 2012 +0000
+
+    Merge "api: add timestamp interval support in _list_events()"
+
+commit 45da4ee18b675d0d583fb4d19abfcc373281a684
+Merge: 7fabd09 334bf86
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 20 11:18:10 2012 +0000
+
+    Merge "Provide default configuration file"
+
+commit 7fabd090675a0c258b2951101c637d2bea583d7d
+Merge: bbdd547 8d4287a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 20 11:16:28 2012 +0000
+
+    Merge "Add Folsom tests to tox"
+
+commit bbdd54766935af9eebd57bed21be02a71d37f85f
+Merge: 4641d34 a45e971
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 20 11:14:02 2012 +0000
+
+    Merge "api: add support for timestamp in _list_resources()"
+
+commit 4641d344a0c2a4c18d256bdeb6311e62c32496cf
+Merge: f918b5b f4f2ab3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 20 11:11:13 2012 +0000
+
+    Merge "tests: simplify api list_resources"
+
+commit f918b5bfdf94899e70e07c310e53233843e87f8d
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Nov 20 09:52:30 2012 +0100
+
+    Fix latest nova changes
+    
+    Change-Id: I08fa2ce3fca4b5c66e77a42d00b94067abfef7c7
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit fc826bcb3ee31daf783f3c3b33397cfeca680742
+Merge: c942064 c5bf442
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 19 18:02:19 2012 +0000
+
+    Merge "Fix mysql_engine option type"
+
+commit 59a193789ddd7a700e8ab9e781da94997b65a99a
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 19 16:04:30 2012 +0100
+
+    api: replace minified files by complete version
+    
+    Minified files are problematic at least for Debian because it's not free
+    according to the DFSG. So let's replace them with full versions.
+    
+    This fixes bug #1078788
+    
+    Change-Id: Id401feea7ed7d0a7861a44f9ccc294615617f928
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 8d4287ad8e5af46fde0625dbd18a8f5c67da061a
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 19 17:49:35 2012 +0100
+
+    Add Folsom tests to tox
+    
+    Change-Id: I0cc43bc6a22e42f9bc9ad9cb9571e5391e4cd240
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit c942064bbe21ffd7bbf4bb4352c4d6d6b3336682
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 19 16:22:16 2012 +0100
+
+    Handle nova.flags removal
+    
+    nova.flags has been removed and we're now supposed to use nova.config
+    Put some compat code for Foslom.
+    
+    Change-Id: I53bd74310df35ba37fdaaf26139ab73a46bebd1f
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 334bf8605285aeda23a9d16093c3e3ce9b0a70da
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 19 12:18:43 2012 +0100
+
+    Provide default configuration file
+    
+    This fixes bug #1057473
+    
+    Change-Id: I1ca0edd4eadaa166f9b807532cbaa058ba2b119e
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit c5bf44204d1c9e53686053d45006782e77305fab
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 19 12:04:09 2012 +0100
+
+    Fix mysql_engine option type
+    
+    Change-Id: Ife965c9a8a9ef9fd3c2d28e9e98ec9add1334732
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 97c96f7ebfda6e98a4945c1cbf97e6e6c05ff8b0
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Nov 16 17:22:57 2012 +0100
+
+    Remove nova.flags usage
+    
+    The only one left is now in libvirt for the compute driver. How to remove
+    this and rewrite this pollster is still under discussion.
+    
+    This implements blueprint nova-flags-removal.
+    
+    Change-Id: Ife54e402cb307b9b4cb360d8ee54683ac1e73e1c
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit a45e9714e566c6a36ceb9daedfd170bf5526c7b5
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Nov 16 15:32:30 2012 +0100
+
+    api: add support for timestamp in _list_resources()
+    
+    Change-Id: I683bcbc2072b782eb94739aaa99e151ee9d0df3e
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit a9e5f84e9a808d5401a39f1ec0f1b4557c6160c3
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Nov 16 16:10:37 2012 +0100
+
+    api: add timestamp interval support in _list_events()
+    
+    We also remove test_all() because it's already tested in
+    test_list_resources, where it belongs.
+    
+    This fixes bug #1079235
+    
+    Change-Id: Ib57fad688c09b38944c0129ede68b9620f074a1d
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit f4f2ab3b795bc477c48fb771e98340bc4544c913
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Nov 16 15:05:47 2012 +0100
+
+    tests: simplify api list_resources
+    
+    Change-Id: I1ab962ca381cfcddb13a87013bca471d69ee8bd0
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 26c5ce081a8bfa2f6c7d6200426787ec94aea7d7
+Author: Lianhao Lu <lianhao.lu@intel.com>
+Date:   Thu Nov 15 18:38:36 2012 +0800
+
+    Update openstack.common(except policy).
+    
+    Fixed bug 1078190.
+    
+    Change-Id: I293f1888362c64b0af3f9c66e4ebea94d987e59a
+
+commit 2b30965869701fbbb5ed03b020820f7e04274748
+Author: Lianhao Lu <lianhao.lu@intel.com>
+Date:   Thu Nov 8 16:28:16 2012 +0800
+
+    Adopted the oslo's rpc.Service change.
+    
+    This fixes the collector part of the bug 1075463.
+    
+    Declaring a consumer topic on the same rpc connection after the consume
+    thread has started would result the eventlet raise RuntimeError
+    exception. So all the declaring work should be done before calling
+    rpc.conn.consume_in_thread().
+    
+    Using the hook 'initialize_service_hook()' provided by rpc.Service in
+    oslo to decalre the collector's specific topic consumers before starting
+    the consuming thread.
+    
+    Change-Id: I33a98c228d45f7716e46d40d9203188f4e827c11
+
+commit 7e595e8f2885fc706230ba4145b76405bdeec36b
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Wed Nov 14 14:35:58 2012 +0000
+
+    Use libvirt num_cpu for CPU utilization calculation.
+    
+    Previously we used the vcpus count for the corresponding flavor,
+    but this can be incorrect if the instance type was deleted and
+    re-created with a different number of cores after the instance
+    was booted.
+    
+    Also the total number of CPUs on-host is dropped from the formula
+    as this is not relevant to the CPU util for the instance.
+    
+    Change-Id: I23e2ad30696f11f413fd1570fe85c3a12fb0bf1e
+
+commit cdc962dffb378366f0bc2591a1ed926e4503175c
+Merge: 5aac98a e4d170a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 14 10:14:13 2012 +0000
+
+    Merge "Change references of /etc/ceilometer-{agent,collector}.conf to /etc/ceilometer/ceilometer.conf"
+
+commit 5aac98a2bde475fc5a94ba889cfe8d1366b45a89
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Wed Nov 14 09:22:12 2012 +0000
+
+    Remove obsolete reference to instance.vcpus
+    
+    Left in place as an oversight in:
+    
+      https://github.com/openstack/ceilometer/commit/5d00eb39
+    
+    Change-Id: I156d5bd0df2eec1fe75845cfb8d3395f3897ba09
+
+commit e4d170a57c76ee83c858372a79ae7a43b32b6968
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Wed Nov 14 15:50:19 2012 +1100
+
+    Change references of /etc/ceilometer-{agent,collector}.conf to /etc/ceilometer/ceilometer.conf
+    
+    Complete the change to the global config file.
+    
+    So by adding the project name to the call to cfg.CONF() we go from
+    the following search dirs:
+    cfg_dirs: ['/home/asalkeld', '/etc']
+    to:
+    cfg_dirs: ['/home/asalkeld/.ceilometer', '/home/asalkeld', '/etc/ceilometer', '/etc']
+    
+    So you can end up with multiple configs loading like this:
+    
+    DEBUG ceilometer.openstack.common.service [-] config file: ['/etc/ceilometer/ceilometer.conf', '/etc/ceilometer-collector.conf']
+    
+    Change-Id: I8e75facb5f1dc7e3e66493824a2da15a5b9ab311
+
+commit 6d72e832fd52927c238209c5a7797ef22868c11b
+Merge: a09096b 0909643
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 14 00:51:41 2012 +0000
+
+    Merge "Avoid TypeError when loading libvirt.LibvirtDriver"
+
+commit a09096bf619076a5b03032b63e0208f39bb868a7
+Merge: f13593c d57c5b5
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 13 22:43:46 2012 +0000
+
+    Merge "Add keystone requirement for doc build"
+
+commit f13593caa50c48e5e0d4ed1e13183ee4b49238b3
+Merge: 5d00eb3 8bcc13c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 13 22:43:33 2012 +0000
+
+    Merge "Add comment about folsom compatibility change"
+
+commit 5d00eb39f20201c9d2c8d05e44e69db8f644f917
+Merge: 89d536b 454c486
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 13 21:37:03 2012 +0000
+
+    Merge "Determine instance cores from public flavors API"
+
+commit 89d536b19534986f37730e1a71f34475a4598b62
+Merge: 2a39164 f3641de
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 13 21:36:35 2012 +0000
+
+    Merge "Determine flavor type from the public nova API."
+
+commit 454c486e01b7782d5e01ed45dca00528865d929f
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Tue Nov 13 20:20:19 2012 +0000
+
+    Determine instance cores from public flavors API
+    
+    Fixes bug 1078371
+    
+    Previously the flavor vcpus used in the CPU utilization metering
+    was available from the nova DB instance representation.
+    
+    Now that we retrieve the on-host instances from the public nova API
+    as opposed to the DB, we need to retrieve the flavor vcpus from
+    the flavors API.
+    
+    Note that it's a known issue with nova that a flavor associated
+    with a running instance can be deleted and re-created with the
+    same ID but a different resource configuration (in this case, a
+    different number of cores would led to an incorrect CPU util
+    calculation). This will be addressed in a future nova patch.
+    
+    Change-Id: I093acb94a4818f671782a3cb4e2c846f29b8cec5
+
+commit f3641de37fbcb36dddc15d4a918ff771a07b5702
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Tue Nov 13 14:01:58 2012 +0000
+
+    Determine flavor type from the public nova API.
+    
+    Fixes bug 1078298
+    
+    Previously the flavor name used in the flavor-specific instance meter
+    was available from the nova DB instance representation.
+    
+    Now that we retrieve the on-host instances from the public nova
+    API as opposed to the DB, we need to retrieve and cache the flavor
+    name separately.
+    
+    Change-Id: Ifd15eedd34e4128d5f9bdaa9318049e973dac9ed
+
+commit 8bcc13c082fd366b3e4f7e93d4cf31a99846418d
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Nov 13 15:11:56 2012 -0500
+
+    Add comment about folsom compatibility change
+    
+    Provide inline documentation explaining the change in
+    https://review.openstack.org/#/c/15778/ as requested.
+    
+    Change-Id: I70c8420ddd9956d90e20449f4c7509db40b50a8e
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit d57c5b5f4cd71678d812cfb55fb122c26382df3a
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Tue Nov 13 14:42:55 2012 -0500
+
+    Add keystone requirement for doc build
+    
+    In order to create the app to pass through the autodoc
+    directives in sphinx we need to have the keystone
+    middleware installed.
+    
+    Change-Id: Ib78ac6bedca33628f139a922a438944e5763e6f3
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 090964310b2eb57874edfd81001b75c7cb42c096
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Tue Nov 13 16:31:00 2012 +0000
+
+    Avoid TypeError when loading libvirt.LibvirtDriver
+    
+    Fixes bug 1078304
+    
+    The libvirt.LibvirtDriver.__init__() signature has changed since:
+    
+      https://github.com/openstack/nova/commit/081b652c
+    
+    to take a new virtapi parameter. This is not required by any
+    ceilometer usage of the driver, however the absence of a
+    corresponding argument causes importutils.import_object_ns()
+    to fail with TypeError.
+    
+    For testing the nova fake.FakeVirtAPI still uses the old
+    signature, hence we try both.
+    
+    Change-Id: I05a9728ceb435a72f5fa8a648cd70b079126396e
+
+commit 2a391644c0618ab0bf9eaba44a9619ac083d8f44
+Merge: e478328 566f4cc
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 13 15:55:45 2012 +0000
+
+    Merge "Fix pymongo requirements"
+
+commit e478328d46980d70642313c91895a86388db11be
+Merge: 77b2d35 325715c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 13 15:51:44 2012 +0000
+
+    Merge "doc: rename stackforge to openstack"
+
+commit 77b2d355993facae064d808b933b2fd1840edf0c
+Author: Endre Karlson <endre.karlson@gmail.com>
+Date:   Tue Nov 13 12:06:54 2012 +0100
+
+    Don't re-import flags and do parse_args instead of flags.FLAGS()
+    
+    Change-Id: I8f1a4e8eae0fddc011fcc12957f58001a00722b0
+
+commit 325715c01f72a43f22b973439ef5d3d0560961a5
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Nov 13 10:08:41 2012 +0100
+
+    doc: rename stackforge to openstack
+    
+    Change-Id: I31b0b7107742950e82473a9e776461994ab342f7
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 566f4ccd6511b82a2b31ce51ab6e83deca5f613e
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Nov 12 20:16:13 2012 +0100
+
+    Fix pymongo requirements
+    
+    This fixes bug #1077104
+    
+    Change-Id: Ib2d936d71d6c253a141abed65794ea800d0c8354
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 171b1ce4495c104b8cf19f0a7609a71a354446ba
+Merge: 1226dbf b595728
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 12 17:22:28 2012 +0000
+
+    Merge "Update use of nova config to work with folsom"
+
+commit 1226dbf9577d31f67610cafac8cfc78fde5dcb37
+Author: Jeremy Stanley <fungi@yuggoth.org>
+Date:   Sun Nov 11 19:11:23 2012 +0000
+
+    Update .gitreview for openstack.
+    
+    Following a successful incubation period, the Ceilometer project is
+    moving from the StackForge ecosystem organization to become an official
+    OpenStack project. This handles the necessary update to .gitreview
+    reflecting the new remote name.
+    
+    Change-Id: Iac0e2525df805e96ddff15cbe776603a7aabcf76
+
+commit b595728df9be4f241893e56c21e8e632ec0298a5
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Nov 8 17:06:08 2012 -0500
+
+    Update use of nova config to work with folsom
+    
+    The configuration API for nova changed between folsom and
+    grizzly. This change uses the folsom API if necessary,
+    allowing the trunk version of ceilometer to continue to
+    work with folsom.
+    
+    Change-Id: Ib59649ed6c04ea7218efa245dea428e0db4a16d0
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 62c30ec42670217763dafb75525dcdf281e66598
+Merge: 46f3c01 12184dc
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 9 16:50:20 2012 +0000
+
+    Merge "Use openstack versioning"
+
+commit 46f3c01dc76fbb35dabd3018df0490541c586a17
+Merge: 4d08816 4a31748
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 9 16:50:12 2012 +0000
+
+    Merge "Fix documentation build"
+
+commit 4d088162c3816a2041d0e8fd5dd28377d926ec4d
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Nov 8 23:12:34 2012 +0100
+
+    compute: remove get_disks work-around
+    
+    The bug referenced on get_disks in nova has been fixed and the fix released
+    in Folsom.
+    
+    Change-Id: I5443bb918166b71b6af2216776044c2a76cee704
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit cd02257cc9e22feac57090302591c80a56653514
+Merge: a5f966c c9247f1
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Nov 8 22:04:51 2012 +0000
+
+    Merge "Remove database access from agent pollsters"
+
+commit 12184dc5c5de8689dc02ccc1271880eb520dcca8
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Nov 8 15:43:24 2012 -0500
+
+    Use openstack versioning
+    
+    1. Add the version module from openstack.common.
+    2. Create a ceilometer/version.py to set up the
+       version info.
+    3. Update setup.py from openstack.common.
+    4. Update documentation build to use the version module
+       directly instead of running setup.py to get the version.
+    5. Update setup.py to use the new version module.
+    
+    Change-Id: I9d8be62b8ece75090bf335d27adb59a46e3d6263
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 4a31748b306f546a01608268f1c339d27c30a14d
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Nov 7 16:38:32 2012 -0500
+
+    Fix documentation build
+    
+    Re-establish the static "app" instance for the autodoc
+    code and fix a formatting problem with some of the RST.
+    
+    Change-Id: I16f7db1ed66081305097b5ecf931b461347f6299
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit a5f966c5fb873fde9122e30b37dfde685d596e10
+Merge: 2a82834 f2230c5
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 7 18:29:46 2012 +0000
+
+    Merge "document utc naive timestamp"
+
+commit f2230c51762328441535a1a36d84634029fce24b
+Author: John Tran <jhtran@att.com>
+Date:   Tue Nov 6 18:23:14 2012 +0000
+
+    document utc naive timestamp
+    
+    Fixes bug #1048647
+    
+    Change-Id: I611e28054d8e0d08b1b4a5343c7f586db7b6fdbb
+
+commit c9247f10698b017ca33ca99010e3d69719019905
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 8 22:14:46 2012 +0000
+
+    Remove database access from agent pollsters
+    
+    Fixes bug #1012242.
+    
+    Patch stolen from John Tran <jhtran@att.com>
+    
+    Change-Id: Iab59eb752199e0cd3c8134a29e05b53356a30d75
+
+commit 2a82834fb92b40bdbadb668df4130b1d544db8e1
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Wed Nov 7 10:42:31 2012 +1100
+
+    Fix merge error in central/manager.py
+    
+    We should not be using nova's manager.
+    
+    Change-Id: I36af1b1aaa11a41545fa8f67a3c084cc3150641b
+
+commit 5009e425f324bdc59e0a5281367383887a4eb99c
+Author: Julien Danjou <julien@danjou.info>
+Date:   Tue Nov 6 17:17:34 2012 +0100
+
+    Fix nova config parsing
+    
+    Change-Id: Iafa3cdc2a83ccc5deb13a0718c96cf1a876d5e96
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit d78e202b580e39a1bc9c1fea4d031379bc62bc0f
+Merge: baa8dcf f15892f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 5 22:49:08 2012 +0000
+
+    Merge "pollster trap error due to zero floating ip"
+
+commit f15892f229f3909dc1e3d5baa1cc5f95e172cc93
+Author: John Tran <jhtran@att.com>
+Date:   Fri Nov 2 16:44:42 2012 +0000
+
+    pollster trap error due to zero floating ip
+    
+    fixes bug #1056087 when nova doesn't have any
+    floating ip addresses defined causes a db
+    exception instead of raising it should be
+    trapped
+    
+    Change-Id: Iea441fb8bcd720339b2446525a6202941c33a1ec
+
+commit baa8dcffbaad986aa5a14b59b8a487be566826f4
+Merge: ce853d0 2789f14
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 5 11:32:27 2012 +0000
+
+    Merge "Use the service.py in openstack-common"
+
+commit ce853d09773358c2af59853c81a6dfec6a97fb63
+Merge: 4c50ad1 445d711
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 5 10:58:39 2012 +0000
+
+    Merge "Allow no configured sources, provide a default file"
+
+commit 4c50ad1a7b3d9e5ad4e08e55ec391426072356fe
+Merge: 0a36c4c 5b2b2da
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Nov 4 22:34:42 2012 +0000
+
+    Merge "pin sqlalchemy to 0.7.x but not specifically 0.7.8"
+
+commit 2789f144d4776a79551ec7603b292460e08f3518
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Mon Nov 5 08:28:59 2012 +1100
+
+    Use the service.py in openstack-common
+    
+    Also change the collector from a manager into a Service
+    to make it easier to access the rpc connection.
+    
+    Change-Id: I1d79abb1db087110d565a9673a48de0502ac2a2b
+
+commit 445d711dd0e4fe59d7787fcea12d6024434c61aa
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Oct 31 18:29:52 2012 +0100
+
+    Allow no configured sources, provide a default file
+    
+    This fixes bug #1073654
+    
+    Change-Id: I7cfb5016ab8a70bf9738baa497f6fe173f307242
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 0a36c4c73880cd625020359503bca052c99e620e
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Thu Nov 1 13:28:47 2012 +1100
+
+    Add service.py from openstack-common
+    
+    and all it's deps
+    
+    Change-Id: I9932a12bb011c86479b363b6e5a591969f77582b
+
+commit 4c43441d9dafedbc1b73cf8abdec32b1ccb65a71
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Thu Nov 1 13:28:20 2012 +1100
+
+    Update common (except policy)
+    
+    Change-Id: I17a89a15ff3af5b9f31bf14b1bbe29b024cfc8c1
+
+commit 415453bfe817aaf2849dbd7b71c33fabde6136fb
+Author: John Tran <jhtran@att.com>
+Date:   Fri Nov 2 20:52:18 2012 +0000
+
+    nova fake libvirt library breaking tests
+    
+    fixes bug #1074488 Nova libvirt fake library
+    was updated to include additional 'virtapi' arg
+    required and our tests do not pass any args to
+    it therefore breaking them. dansmith recommended
+    to change fake.FakeDriver to Fake.FakeVirtAPI
+    which will replicate the old functionality.
+    
+    Change-Id: Iedcd32cd038c6043d782565312adf5fcba8d9b7a
+
+commit 5a21eee3c6e80eb63420a033f53568d641800179
+Merge: 2206ed8 b631dc3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 2 15:25:03 2012 +0000
+
+    Merge "Move db access out into a seperate file."
+
+commit 2206ed8ee76500ab8beab7dfa40f08a910fdd27b
+Merge: 5aa0374 15eeeb9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 2 15:24:18 2012 +0000
+
+    Merge "Add new cpu_util meter recording CPU utilization %."
+
+commit b631dc3a7ec4567da37407559c5fc3dad404e736
+Author: Angus Salkeld <asalkeld@redhat.com>
+Date:   Thu Nov 1 13:27:56 2012 +1100
+
+    Move db access out into a seperate file.
+    
+    This is in preparation for using the openstack.common Service classes.
+    
+    Change-Id: I5ac78202199217387b91685e9d0409ae08cc18e0
+
+commit 5aa03745eb77496a2e4738afbda1ac9a66614bf5
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Nov 1 14:00:50 2012 -0400
+
+    Remove invalid fixme comments
+    
+    These comments should have been removed in the changeset
+    that introduced the ActiveExtensionManager.
+    
+    Change-Id: If69d0fe0d73be3efd75fb36e4d691fdf78942781
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 15eeeb9fc16996ccf667f60752fead99597c983f
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Fri Oct 26 21:33:36 2012 +0000
+
+    Add new cpu_util meter recording CPU utilization %.
+    
+    The existing cpu meter records cumlative time, which is not
+    the most useful measure in all cases.
+    
+    We now also estimate the CPU utilization % based on sampling
+    the time over subsequent polling cycles, and correcting for the
+    fraction of host cores available to the instance. The usefulness
+    of the util estimate depends in part on the polling period,
+    which is assumed will be short (of the order of 1s) when this
+    measurement is used in anger (for example to drive alarming).
+    
+    Change-Id: Icd7de1b2cbce12396a82a3f34acb6c39c1120992
+
+commit fce52207a0ca94ebb641dbf81c25673082597cb8
+Merge: 2b92c67 085fa79
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Nov 1 16:27:15 2012 +0000
+
+    Merge "Fix auth middleware configuration"
+
+commit 2b92c67c9a9179263ed15ac4cca5ed4436e12f6c
+Merge: ec1fd77 e71000b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Nov 1 12:28:54 2012 +0000
+
+    Merge "add mongo index names"
+
+commit ec1fd77660bb4b3806d89e074be563a6194265ac
+Merge: b9ab2c5 22cf0dd
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Nov 1 10:28:17 2012 +0000
+
+    Merge "Add basic text/html renderer"
+
+commit b9ab2c5cc4155a9f020c080885d6f83de80d278c
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Wed Oct 31 15:28:15 2012 +0000
+
+    Fix TypeError from old-style publish_counter calls
+    
+    Fix calls to publish_counter() that didn't specify the source
+    explicitly, to avoid the following error since the function
+    signature has changed:
+    
+      TypeError: publish_counter() takes exactly 5 arguments (4 given)
+    
+    Change-Id: Ief05842be7b9c815a60827f6356f9064fef8182c
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 085fa79ec0240751be1bbd3c0025097970319a8e
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Wed Oct 31 15:24:42 2012 -0400
+
+    Fix auth middleware configuration
+    
+    Initialze the configuration object before initializing
+    the middleware, and pass the resulting config in to
+    the middleware so it can get the configuration settings.
+    
+    addresses bug #1071047
+    
+    Change-Id: I2a487d2a2f2d3467e522868ac78dc4645bf7d643
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 5b2b2daffe65dffeebba77e03a5eb918eb8680b3
+Author: John Tran <jhtran@att.com>
+Date:   Wed Oct 31 18:11:39 2012 +0000
+
+    pin sqlalchemy to 0.7.x but not specifically 0.7.8
+    
+    last night's release of sqlalchemy 0.8.0b1 broke
+    our build we need to stick to 0.7.x however a quick
+    patch put us strictly on 0.7.8.  The nova guys put
+    out a more elegant patch so I'd like to incorporate.
+    
+    Change-Id: Ibf2a09826ed175f844be8551d68b5420aa132f6f
+
+commit 39d854330e346f9ec1668ff433e6d2a8f261dc6c
+Merge: e1eb5d9 05d6992
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 31 18:08:58 2012 +0000
+
+    Merge "Provide a way to disable some plugins"
+
+commit e1eb5d98bfb58c2a36f4b1b300ba8a0661f4a34a
+Merge: 015c7cd ae64a79
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 31 18:02:42 2012 +0000
+
+    Merge "Use stevedore to load all plugins"
+
+commit e71000be85b9321ed7b88345671a6648bff89e91
+Author: John Tran <jhtran@att.com>
+Date:   Wed Oct 31 17:38:34 2012 +0000
+
+    add mongo index names
+    
+    fixes bug #1028485
+    
+    Change-Id: Iccdda933ebe574db2927a62516cf7e1189dac6eb
+
+commit 015c7cdc92902afa3103af3896d91b15341d2542
+Merge: 2aec7f1 9902daf
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 31 17:14:51 2012 +0000
+
+    Merge "implement get_volume_max for sqlalchemy"
+
+commit 2aec7f16f9b541673f8114d2402c24a35965d536
+Author: John Tran <jhtran@att.com>
+Date:   Tue Oct 30 23:39:00 2012 +0000
+
+    set tox to ignore global packages
+    
+    Ran into problems with Ming and stevedore
+    which tox will look at the global installed
+    pkg instead of the virtualenv pkg
+    
+    Change-Id: Ie1a834dce51fc916f1f3c3c1abd95d080ff1c9cd
+
+commit 05d6992ad778e802ef3aa1e406dce7d18606c3a1
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Oct 29 11:41:53 2012 -0400
+
+    Provide a way to disable some plugins
+    
+    Provide configuration options for the three plugin sets
+    users may want to manage (compute pollsters, central
+    pollsters, and notification listeners).
+    
+    Extend the plugin API so the extension manager can ask
+    each plugin if it should be enabled. This allows, for
+    example, the libvirt pollster to be loaded but then
+    recognize that it should not be used and disable itself.
+    
+    Addresses bug #1021350
+    
+    Change-Id: I82da823845ec49c1a93272411c43073bd4954377
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit ae64a792f8ac9a1e0969b205018d219fbaea05db
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Oct 29 09:31:52 2012 -0400
+
+    Use stevedore to load all plugins
+    
+    Move away from calling pkg_resources directly to use
+    stevedore to load plugins. This lays the ground work
+    for handling disabled plugins during the loading
+    phase.
+    
+    addresses bug #1021350
+    
+    Change-Id: I94c2d0da2a6f9222611716b96455104a71564f29
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 9902dafc548ec069e2d4094eb93d186bf56cfec6
+Author: John Tran <jhtran@att.com>
+Date:   Fri Oct 26 03:16:54 2012 +0000
+
+    implement get_volume_max for sqlalchemy
+    
+    Fixes bug #1057679
+    
+    Change-Id: I0034bec7b5da23496ac04224013e571f7ea82abc
+
+commit 22cf0dd36e4195927dd3b60032050e90bc2003cb
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 11 17:57:44 2012 +0200
+
+    Add basic text/html renderer
+    
+    Change-Id: I929d3fe0aed37bd3722f6a7dc96210a03668c87f
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit b937aa509ba1036bfc0df6965235c63cca3202cb
+Merge: 924eea2 42fdf1f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 14:34:56 2012 +0000
+
+    Merge "add unit test for CPUPollster"
+
+commit 924eea2e9bf6342b032d0b2f1a146d10717b3cf6
+Merge: d42e267 320ef64
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 14:21:47 2012 +0000
+
+    Merge "Fix sqlalchemy performance problem"
+
+commit d42e267ce526574821b16f07f275e30a680eeb3a
+Merge: aae8428 6ddc415
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 14:18:28 2012 +0000
+
+    Merge "sqlalchemy record_meter merge objs not string"
+
+commit aae84287b05b46dcc27ddd7ea2a33f55e7fcab3c
+Merge: be425c1 dff3bd6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 14:15:51 2012 +0000
+
+    Merge "Clean up context usage"
+
+commit be425c1f3412c2cc382ba17ccf8235f9fcb99807
+Merge: 1f377c1 7b13db7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 13:58:07 2012 +0000
+
+    Merge "add ceilometer-send-counter"
+
+commit 1f377c1cc00a0394817fd8e0eb0a1d32ddde2d30
+Merge: dfa64ff e74b647
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 13:53:54 2012 +0000
+
+    Merge "Update openstack.common.cfg"
+
+commit dfa64ff99b959be21589689228955c079aea4b38
+Merge: d1e3bfa 55d52ba
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 13:42:36 2012 +0000
+
+    Merge "network: floating IP account in Quantum"
+
+commit d1e3bfad7984734e4e72326a70d956c48d107e2f
+Merge: 16c892b 5512992
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 13:39:00 2012 +0000
+
+    Merge "timestamp columns in sqlalchemy not timezone aware"
+
+commit 55d52bab01d10d0b1a70e91401b53f04ae27efbf
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 25 12:16:41 2012 +0200
+
+    network: floating IP account in Quantum
+    
+    Change-Id: I0e4a8245bd524dd2073f52f7a808e9456816c4df
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 42fdf1f3bdd75229de0ffa360889097eb4335e89
+Author: John Tran <jhtran@att.com>
+Date:   Tue Oct 30 02:39:33 2012 +0000
+
+    add unit test for CPUPollster
+    
+    Fixes bug 1064126
+    
+    Change-Id: Ib5b39f77da02550829b6184462920b49c648dc12
+
+commit 16c892bbfa605aef6c80226c3198e997930cc973
+Merge: 70eab31 b47591a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 29 21:34:46 2012 +0000
+
+    Merge "Remove obsolete/incorrect install instructions"
+
+commit dff3bd6dcd1b3ba7f95656a334f236e0472d21bc
+Author: Julien Danjou <julien@danjou.info>
+Date:   Mon Oct 29 15:15:07 2012 +0100
+
+    Clean up context usage
+    
+    Don't use nova context where openstack.common is enough.
+    
+    Change-Id: Ide2198758faece70fc8cd44ffd9a46d0972e423e
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 70eab31d43966003bf57eaa11c280bd8942c1831
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Oct 29 11:53:51 2012 -0400
+
+    Add dependencies on clients used by pollsters
+    
+    Move the test requirement for glanceclient to an installation
+    requirement, since the central pollster uses it.
+    
+    Add an installation requirement for cinderclient, since there
+    is also a central pollster that needs it.
+    
+    Change-Id: I01fcc7c1d69a02b6ebf62b2c851e0e862f3439d9
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 7b13db7aef253c4a2fc6b7c641dbbd73c12ef5b3
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Oct 26 15:44:05 2012 +0200
+
+    add ceilometer-send-counter
+    
+    This program can be used to send counter manually.
+    
+    Change-Id: I11a7b7b99cf9aea6b6885cdc4640b8c2da54a564
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit e74b647d6529e1b7a216ae986c73212fd838db64
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Oct 26 22:32:47 2012 +0200
+
+    Update openstack.common.cfg
+    
+    Change-Id: Icde2348837fe35275900e00974dce24b901ec866
+
+commit d72d3a9e17532df253b04b4d0c9c46ca02942415
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Oct 26 12:43:01 2012 -0400
+
+    Fix tests broken by API change with Counter class
+    
+    A previous change moved the "source" field from the
+    Counter to the function that creates meter messages.
+    These tests are not run in the CI environment because
+    they depend on having spidermonkey installed, and it
+    is not available on that server.
+    
+    Change-Id: I1e34ce087ae56bc18875ebe28b9cdf48ce8f493c
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit acf8fb88d56b776cf0b83041f5e87e1b6ee88fd2
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Oct 26 14:34:01 2012 +0200
+
+    api: add source detail retrieval
+    
+    Change-Id: I031d237f870172e87b9bcb413573a0ad5c18afca
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit f6868e5e4827e96754f832a0eae4c4210ea41df7
+Author: Julien Danjou <julien@danjou.info>
+Date:   Thu Oct 25 18:38:52 2012 +0200
+
+    Set source at publish time
+    
+    We stop putting the source in the Counter, but we set it via the
+    configuration file and use it as a source.
+    
+    Change-Id: I82c00ac5e55e09ab38de9364cda3194beb35e3c4
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 365c7a849a4c3333e40c944ce021263280eb2149
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Thu Oct 25 21:00:29 2012 +0000
+
+    Instance pollster emits instance.<type> meter
+    
+    Fixes bug 1071486
+    
+    Previously the instance pollster emitted only the instance meter,
+    whereas the notification handler for the instance.exists event
+    emitted both instance and instance.<type>.
+    
+    Since the pollster & handler would generally be triggered at different
+    frequencies (e.g. every 600s versus once an hour) this led to an
+    imbalance in the metering store whereby the instance counters didn't
+    match the sum of the per-flavor counters as expected.
+    
+    Change-Id: Ic76a645f150a87bc92b4ccfc7a777dfe13502467
+
+commit 55129929e19164526512e1aaedbd17e9374a8053
+Author: John Tran <jhtran@att.com>
+Date:   Tue Oct 23 21:49:47 2012 +0000
+
+    timestamp columns in sqlalchemy not timezone aware
+    
+    Fixes bug # 1066148.  Sqlalchemy schema timezone
+    fields are not timezone aware therefore the
+    timestamps need to be adjusted as such
+    
+    Change-Id: I0979fe3b9487257f988790ddb23a317a3df7a19d
+
+commit 3deb7628fcbbcf090ac366d1a19420c255bcfac7
+Merge: 1472d59 52eed63
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 25 20:50:44 2012 +0000
+
+    Merge "network: emit router meter"
+
+commit 1472d594becd655ffa695a93030d483bd2da6d68
+Merge: 70442dc 6dfb634
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 25 20:44:17 2012 +0000
+
+    Merge "Change default API port"
+
+commit b47591a3c12879a659fdb08638e854b24dd82922
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Thu Oct 25 18:23:28 2012 +0100
+
+    Remove obsolete/incorrect install instructions
+    
+    Remove obsolete installation instructions for devstack, and
+    added corrected versions for manual install.
+    
+    Change-Id: I7b9f8d8c508406ba432d41b0ef58c4f407551395
+
+commit 52eed63c656fc4d15d0ee7c528d39023b6204698
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Oct 24 15:31:27 2012 +0200
+
+    network: emit router meter
+    
+    This fixes bug #1070009
+    
+    Change-Id: Ica5611d00984c8ca25e382bb8b54fbe9c87f5282
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 320ef645c84fbebdfd216574f0ff1b5623b26acc
+Author: John Tran <jhtran@att.com>
+Date:   Wed Oct 24 00:06:53 2012 +0000
+
+    Fix sqlalchemy performance problem
+    
+    Fixes bug #1070074 too much lazy loading on the
+    default model.  Removed those and only added lazy
+    loading to queries that specifically need eager
+    loading
+    
+    Change-Id: Ifa7446bddef855ae8e8b76040ba3336a53606215
+
+commit 70442dc8da560d3ccbd077e8a0faa4d4d8f1c525
+Merge: 75adc8b 4d648d7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 24 18:14:27 2012 +0000
+
+    Merge "Add OpenStack trove classifier for PyPI"
+
+commit 75adc8b779b8b3b63969712963a7692c7c7c78a4
+Merge: 1d7e928 052e2cf
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 24 18:10:56 2012 +0000
+
+    Merge "Added a working release-bugs.py script to tools/."
+
+commit 052e2cf7e7c18466f36617fc342b143173b7aacd
+Author: Graham Binns <graham.binns@canonical.com>
+Date:   Fri Oct 19 12:33:42 2012 +0100
+
+    Added a working release-bugs.py script to tools/.
+    
+    Change-Id: Ia6359aa485e8cd606e58589b6ad8b4cc2d629029
+
+commit 6dfb6347606b07728ed86d35b650b69602250ba7
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Oct 24 14:02:29 2012 +0200
+
+    Change default API port
+    
+    Change-Id: I16a7a97a32705f7db9e9f60e2f4b975b0682fd7e
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 6ddc4159d557aefd517cd9c2712c14e5b86ed707
+Author: John Tran <jhtran@att.com>
+Date:   Tue Oct 23 20:46:30 2012 +0000
+
+    sqlalchemy record_meter merge objs not string
+    
+    Fixes bug # 1066145.  Models expecting String
+    
+    Change-Id: Idbf39c29267f7d82f28cb22e5353415f6acb738e
+
+commit 1d7e928322ba2cc643870c2fe78fa50e63c6df61
+Merge: 9425fcc c01c66c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 23 08:37:06 2012 +0000
+
+    Merge "Use glance public API as opposed to registry API."
+
+commit 9425fcc577b1c4fb5d607443cfe64e0a43cc037c
+Merge: 6bc3a13 1f2f5de
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 22 22:18:15 2012 +0000
+
+    Merge "API: add Keystone ACL and policy support"
+
+commit c01c66c10fe8e78883664def0604158b7b77b7c9
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Mon Oct 8 18:26:32 2012 +0000
+
+    Use glance public API as opposed to registry API.
+    
+    Fixes bug 1064008
+    
+    The motivation for switching over to the public API:
+    
+     - the registry API is more of an artifact of the internal glance
+       architecture than a true public API
+    
+     - the registry API exposes internal attributes such as the backend
+       store image location, which is stripped from the API-provided image
+       representation for security reasons (hence should not bleed into
+       metering)
+    
+     - the internalURL should be available from the keystone service catalog,
+       so we can get rid of the registry host/port config
+    
+    Change-Id: I0d75392066a020c608a67f1ecf0e8dba15aa48f0
+
+commit 4d648d7380526572353066b86853c5b30edaec76
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Thu Oct 18 06:13:51 2012 -0700
+
+    Add OpenStack trove classifier for PyPI
+    
+    Add "Environment :: OpenStack" classifier for the PyPI
+    catalog.
+    
+    Change-Id: I1ebbc684853203abba72ef72d63999be58870f3e
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+commit 6bc3a13d931a49ae6cf9330872e032798a4ddbd1
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Fri Oct 12 10:11:55 2012 -0400
+
+    bump version number to 0.2
+    
+    Change-Id: I9b812e4b150bacc05d354e16e3089f70eae152d6
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
 commit 424c544770cb52fb0bfe3e0c24015418e50bdcc4
 Merge: 4cc7bfb 3557ac3
 Author: Jenkins <jenkins@review.openstack.org>
@@ -299,6 +1653,17 @@ Date:   Mon Oct 8 15:09:22 2012 +0200
     This fixes bug #1062219
     
     Change-Id: I87486b99a8c4d132a1fe8660d669d3f884ed7883
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+commit 1f2f5dea5fef70fe688fab6bcd04f52eac89ca4c
+Author: Julien Danjou <julien@danjou.info>
+Date:   Wed Oct 3 18:03:01 2012 +0200
+
+    API: add Keystone ACL and policy support
+    
+    This fixes bug #1060919
+    
+    Change-Id: I5257acc5eeace7f3ff38785223b1eaa7a3711d17
     Signed-off-by: Julien Danjou <julien@danjou.info>
 
 commit 55e13884edd38d85f1c290f4394077e3c8601d42
