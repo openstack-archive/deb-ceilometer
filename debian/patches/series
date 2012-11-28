@@ -1,4 +1,2 @@
 Adds-versioninfo-files.patch
-dont-rely-on-network.patch
-lower-pymongo.patch
 install-missing-files.patch
