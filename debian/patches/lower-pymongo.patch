@@ -2,8 +2,10 @@ Description: lowers pip-requires for pymongo from 2.2.1 to 2.2
 Author: Julien Danjou <acid@debian.org>
 Forwarded: not-neede
 
---- a/tools/pip-requires
-+++ b/tools/pip-requires
+Index: ceilometer/tools/pip-requires
+===================================================================
+--- ceilometer.orig/tools/pip-requires	2012-11-28 12:26:57.572879971 +0000
++++ ceilometer/tools/pip-requires	2012-11-28 12:28:52.000000000 +0000
 @@ -6,7 +6,7 @@
  argparse
  SQLAlchemy>=0.7.3,<=0.7.9

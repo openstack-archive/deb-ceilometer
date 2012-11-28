@@ -4,8 +4,8 @@ Forwarded: no
 
 Index: ceilometer/MANIFEST.in
 ===================================================================
---- ceilometer.orig/MANIFEST.in	2012-11-27 07:11:10.508578320 +0000
-+++ ceilometer/MANIFEST.in	2012-11-28 12:25:22.000000000 +0000
+--- ceilometer.orig/MANIFEST.in	2012-11-28 12:26:57.492882696 +0000
++++ ceilometer/MANIFEST.in	2012-11-28 12:28:52.000000000 +0000
 @@ -4,3 +4,17 @@
  exclude .gitreview
  
