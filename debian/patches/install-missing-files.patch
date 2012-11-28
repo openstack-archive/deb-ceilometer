@@ -10,8 +10,6 @@ Index: ceilometer/MANIFEST.in
  exclude .gitreview
  
  global-exclude *.pyc
-+include ceilometer/api/static/LICENSE.d3.v2.min.js
-+include ceilometer/api/static/LICENSE.rickshaw
 +include ceilometer/api/static/bootstrap/css/bootstrap-responsive.css
 +include ceilometer/api/static/bootstrap/css/bootstrap.css
 +include ceilometer/api/static/bootstrap/img/glyphicons-halflings-white.png
