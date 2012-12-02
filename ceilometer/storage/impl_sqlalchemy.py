@@ -35,24 +35,42 @@ class SQLAlchemyStorage(base.StorageEngine):
     Tables:
 
     - user
-      - { _id: user id
-          source: [ array of source ids reporting for the user ]
-          }
+      - { id: user uuid }
+    - source
+      - { id: source id }
     - project
-      - { _id: project id
-          source: [ array of source ids reporting for the project ]
-          }
+      - { id: project uuid }
     - meter
       - the raw incoming data
+      - { id: meter id
+          counter_name: counter name
+          user_id: user uuid            (->user.id)
+          project_id: project uuid      (->project.id)
+          resource_id: resource uuid    (->resource.id)
+          resource_metadata: metadata dictionaries
+          counter_type: counter type
+          counter_volume: counter volume
+          timestamp: datetime
+          message_signature: message signature
+          message_id: message uuid
+          }
     - resource
       - the metadata for resources
-      - { _id: uuid of resource,
-          metadata: metadata dictionaries
-          timestamp: datetime of last update
-          user_id: uuid
-          project_id: uuid
-          meter: [ array of {counter_name: string, counter_type: string} ]
-        }
+      - { id: resource uuid
+          resource_metadata: metadata dictionaries
+          received_timestamp: received datetime
+          timestamp: datetime
+          project_id: project uuid      (->project.id)
+          user_id: user uuid            (->user.id)
+          }
+    - sourceassoc
+      - the relationships
+      - { meter_id: meter id            (->meter.id)
+          project_id: project uuid      (->project.id)
+          resource_id: resource uuid    (->resource.id)
+          user_id: user uuid            (->user.id)
+          source_id: source id          (->source.id)
+          }
     """
 
     OPTIONS = []
@@ -194,8 +212,7 @@ class Connection(base.Connection):
         return (x[0] for x in query.all())
 
     def get_resources(self, user=None, project=None, source=None,
-                      start_timestamp=None, end_timestamp=None,
-                      session=None):
+                      start_timestamp=None, end_timestamp=None):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -212,7 +229,7 @@ class Connection(base.Connection):
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
         """
-        query = model_query(Resource, session=session)
+        query = model_query(Resource, session=self.session)
         if user is not None:
             query = query.filter(Resource.user_id == user)
         if source is not None:
@@ -232,6 +249,12 @@ class Connection(base.Connection):
             # caller's expectations.
             r['resource_id'] = r['id']
             del r['id']
+            # Replace the 'resource_metadata' with 'metadata'
+            r['metadata'] = r['resource_metadata']
+            del r['resource_metadata']
+            # Replace the 'meters' with 'meter'
+            r['meter'] = r['meters']
+            del r['meters']
             yield r
 
     def get_raw_events(self, event_filter):
@@ -301,7 +324,7 @@ def model_query(*args, **kwargs):
 
 def row2dict(row, srcflag=None):
     """Convert User, Project, Meter, Resource instance to dictionary object
-       with nested Source(s)
+       with nested Source(s) and Meter(s)
     """
     d = copy.copy(row.__dict__)
     for col in ['_sa_instance_state', 'sources']:
@@ -309,4 +332,6 @@ def row2dict(row, srcflag=None):
             del d[col]
     if not srcflag:
         d['sources'] = map(lambda x: row2dict(x, True), row.sources)
+        if d.get('meters') is not None:
+            d['meters'] = map(lambda x: row2dict(x, True), d['meters'])
     return d
