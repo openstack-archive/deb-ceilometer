@@ -18,7 +18,7 @@ Build-Depends-Indep: pep8,
  python-glance,
  python-glanceclient (>= 0.6),
  python-iso8601,
- python-keystoneclient (>= 0.2),
+ python-keystoneclient (>= 1:0.2),
  python-kombu,  
  python-lockfile,
  python-ming,
@@ -45,7 +45,7 @@ Depends: ${python:Depends}, ${misc:Depends},
  python-flask (>= 0.9),
  python-glanceclient (>= 0.6),
  python-greenlet (>= 0.4),
- python-keystoneclient (>= 0.2),
+ python-keystoneclient (>= 1:0.2),
  python-iso8601,
  python-kombu,
  python-lockfile,
@@ -128,7 +128,7 @@ Package: ceilometer-agent-central
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends},
- ${misc:Depends}, python-keystoneclient
+ ${misc:Depends}
 Description: OpenStack efficient metering counters system (central agent)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
  aquire all counters they need to establish customer billing, accross all
