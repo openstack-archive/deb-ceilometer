@@ -23,8 +23,8 @@ import re
 import sqlalchemy
 import unittest
 
+from ceilometer.collector import meter
 from ceilometer import counter
-from ceilometer import meter
 from ceilometer import storage
 from ceilometer.storage import migration
 from ceilometer.openstack.common import cfg
@@ -299,6 +299,21 @@ class ResourceTest(SQLAlchemyEngineTestBase):
         ids = set(r['resource_id'] for r in resources)
         assert ids == set(['resource-id', 'resource-id-alternate'])
 
+    def test_get_resources_by_metaquery(self):
+        q = {'metadata.display_name': 'test-server'}
+        got_not_imp = False
+        try:
+            list(self.conn.get_resources(metaquery=q))
+        except NotImplementedError:
+            got_not_imp = True
+        self.assertTrue(got_not_imp)
+        #this should work, but it doesn't.
+        #actually unless I wrap get_resources in list()
+        #it doesn't get called - weird
+        #self.assertRaises(NotImplementedError,
+        #                  self.conn.get_resources,
+        #                  metaquery=q)
+
 
 class MeterTest(SQLAlchemyEngineTestBase):
 
@@ -326,11 +341,42 @@ class MeterTest(SQLAlchemyEngineTestBase):
         meter = self.session.query(Meter).first()
         assert meter is not None
 
+    def test_get_meters(self):
+        results = list(self.conn.get_meters())
+        assert len(results) == 4
+
+    def test_get_meters_by_user(self):
+        results = list(self.conn.get_meters(user='user-id'))
+        assert len(results) == 1
+
+    def test_get_meters_by_project(self):
+        results = list(self.conn.get_meters(project='project-id'))
+        assert len(results) == 2
+
+    def test_get_meters_by_metaquery(self):
+        q = {'metadata.display_name': 'test-server'}
+        got_not_imp = False
+        try:
+            list(self.conn.get_meters(metaquery=q))
+        except NotImplementedError:
+            got_not_imp = True
+        self.assertTrue(got_not_imp)
+
     def test_get_raw_events_by_user(self):
         f = storage.EventFilter(user='user-id')
         results = list(self.conn.get_raw_events(f))
         assert len(results) == 2
         self._iterate_msgs(results)
+
+    def test_get_events_by_metaquery(self):
+        q = {'metadata.display_name': 'test-server'}
+        f = storage.EventFilter(metaquery=q)
+        got_not_imp = False
+        try:
+            list(self.conn.get_raw_events(f))
+        except NotImplementedError:
+            got_not_imp = True
+        self.assertTrue(got_not_imp)
 
     def test_get_raw_events_by_project(self):
         f = storage.EventFilter(project='project-id')

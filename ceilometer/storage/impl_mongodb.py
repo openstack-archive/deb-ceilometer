@@ -22,7 +22,6 @@ import copy
 import datetime
 
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import cfg
 from ceilometer.storage import base
 
 import bson.code
@@ -115,6 +114,10 @@ def make_query_from_filter(event_filter, require_meter=True):
     if event_filter.source:
         q['source'] = event_filter.source
 
+    # so the events call metadata resource_metadata, so we convert
+    # to that.
+    q.update(dict(('resource_%s' % k, v)
+                  for (k, v) in event_filter.metaquery.iteritems()))
     return q
 
 
@@ -300,7 +303,8 @@ class Connection(base.Connection):
         return sorted(self.db.project.find(q).distinct('_id'))
 
     def get_resources(self, user=None, project=None, source=None,
-                      start_timestamp=None, end_timestamp=None):
+                      start_timestamp=None, end_timestamp=None,
+                      metaquery={}):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -316,6 +320,7 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
+        :param metaquery: Optional dict with metadata to match on.
         """
         q = {}
         if user is not None:
@@ -324,6 +329,8 @@ class Connection(base.Connection):
             q['project_id'] = project
         if source is not None:
             q['source'] = source
+        q.update(metaquery)
+
         # FIXME(dhellmann): This may not perform very well,
         # but doing any better will require changing the database
         # schema and that will need more thought than I have time
@@ -347,6 +354,44 @@ class Connection(base.Connection):
             r['resource_id'] = r['_id']
             del r['_id']
             yield r
+
+    def get_meters(self, user=None, project=None, resource=None, source=None,
+                   metaquery={}):
+        """Return an iterable of dictionaries containing meter information.
+
+        { 'name': name of the meter,
+          'type': type of the meter (guage, counter),
+          'resource_id': UUID of the resource,
+          'project_id': UUID of project owning the resource,
+          'user_id': UUID of user owning the resource,
+          }
+
+        :param user: Optional ID for user that owns the resource.
+        :param project: Optional ID for project that owns the resource.
+        :param resource: Optional resource filter.
+        :param source: Optional source filter.
+        :param metaquery: Optional dict with metadata to match on.
+        """
+        q = {}
+        if user is not None:
+            q['user_id'] = user
+        if project is not None:
+            q['project_id'] = project
+        if resource is not None:
+            q['_id'] = resource
+        if source is not None:
+            q['source'] = source
+        q.update(metaquery)
+
+        for r in self.db.resource.find(q):
+            for r_meter in r['meter']:
+                m = {}
+                m['name'] = r_meter['counter_name']
+                m['type'] = r_meter['counter_type']
+                m['resource_id'] = r['_id']
+                m['project_id'] = r['project_id']
+                m['user_id'] = r['user_id']
+                yield m
 
     def get_raw_events(self, event_filter):
         """Return an iterable of raw event data as created by

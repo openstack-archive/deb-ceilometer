@@ -78,7 +78,8 @@ class Connection(object):
 
     @abc.abstractmethod
     def get_resources(self, user=None, project=None, source=None,
-                      start_timestamp=None, end_timestamp=None):
+                      start_timestamp=None, end_timestamp=None,
+                      metaquery={}):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -94,6 +95,26 @@ class Connection(object):
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
+        :param metaquery: Optional dict with metadata to match on..
+        """
+
+    @abc.abstractmethod
+    def get_meters(self, user=None, project=None, resource=None, source=None,
+                   metaquery={}):
+        """Return an iterable of dictionaries containing meter information.
+
+        { 'name': name of the meter,
+          'type': type of the meter (guage, counter),
+          'resource_id': UUID of the resource,
+          'project_id': UUID of project owning the resource,
+          'user_id': UUID of user owning the resource,
+          }
+
+        :param user: Optional ID for user that owns the resource.
+        :param project: Optional ID for project that owns the resource.
+        :param resource: Optional resource filter.
+        :param source: Optional source filter.
+        :param metaquery: Optional dict with metadata to match on.
         """
 
     @abc.abstractmethod

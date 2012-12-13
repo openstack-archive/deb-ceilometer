@@ -40,10 +40,11 @@
 #
 # [ ] /resources/<resource> -- metadata
 #
-# [ ] /projects/<project>/meters -- list of meters reporting for parent obj
-# [ ] /resources/<resource>/meters -- list of meters reporting for parent obj
-# [ ] /sources/<source>/meters -- list of meters reporting for parent obj
-# [ ] /users/<user>/meters -- list of meters reporting for parent obj
+# [x] /meters -- list of meters
+# [x] /projects/<project>/meters -- list of meters reporting for parent obj
+# [x] /resources/<resource>/meters -- list of meters reporting for parent obj
+# [x] /sources/<source>/meters -- list of meters reporting for parent obj
+# [x] /users/<user>/meters -- list of meters reporting for parent obj
 #
 # [x] /projects/<project>/meters/<meter> -- events
 # [x] /resources/<resource>/meters/<meter> -- events
@@ -99,18 +100,90 @@ def request_wants_html():
         flask.request.accept_mimetypes['application/json']
 
 
+def _get_metaquery(args):
+    return dict((k, v)
+                for (k, v) in args.iteritems()
+                    if k.startswith('metadata.'))
+
+## APIs for working with meters.
+
+
+@blueprint.route('/meters')
+def list_meters_all():
+    """Return a list of meters.
+    :param metadata.<key> match on the metadata within the resource. (optional)
+    """
+    rq = flask.request
+    meters = rq.storage_conn.get_meters(metaquery=_get_metaquery(rq.args))
+    return flask.jsonify(meters=list(meters))
+
+
+@blueprint.route('/resources/<resource>/meters')
+def list_meters_by_resource(resource):
+    """Return a list of meters by resource.
+
+    :param resource: The ID of the resource.
+    :param metadata.<key> match on the metadata within the resource. (optional)
+    """
+    rq = flask.request
+    meters = rq.storage_conn.get_meters(resource=resource,
+                                        metaquery=_get_metaquery(rq.args))
+    return flask.jsonify(meters=list(meters))
+
+
+@blueprint.route('/users/<user>/meters')
+def list_meters_by_user(user):
+    """Return a list of meters by user.
+
+    :param user: The ID of the owning user.
+    :param metadata.<key> match on the metadata within the resource. (optional)
+    """
+    rq = flask.request
+    meters = rq.storage_conn.get_meters(user=user,
+                                        metaquery=_get_metaquery(rq.args))
+    return flask.jsonify(meters=list(meters))
+
+
+@blueprint.route('/projects/<project>/meters')
+def list_meters_by_project(project):
+    """Return a list of meters by project.
+
+    :param project: The ID of the owning project.
+    :param metadata.<key> match on the metadata within the resource. (optional)
+    """
+    rq = flask.request
+    meters = rq.storage_conn.get_meters(project=project,
+                                        metaquery=_get_metaquery(rq.args))
+    return flask.jsonify(meters=list(meters))
+
+
+@blueprint.route('/sources/<source>/meters')
+def list_meters_by_source(source):
+    """Return a list of meters by source.
+
+    :param source: The ID of the owning source.
+    :param metadata.<key> match on the metadata within the resource. (optional)
+    """
+    rq = flask.request
+    meters = rq.storage_conn.get_meters(source=source,
+                                        metaquery=_get_metaquery(rq.args))
+    return flask.jsonify(meters=list(meters))
+
+
 ## APIs for working with resources.
 
 def _list_resources(source=None, user=None, project=None):
     """Return a list of resource identifiers.
     """
-    q_ts = _get_query_timestamps(flask.request.args)
-    resources = flask.request.storage_conn.get_resources(
+    rq = flask.request
+    q_ts = _get_query_timestamps(rq.args)
+    resources = rq.storage_conn.get_resources(
         source=source,
         user=user,
         project=project,
         start_timestamp=q_ts['start_timestamp'],
         end_timestamp=q_ts['end_timestamp'],
+        metaquery=_get_metaquery(rq.args),
         )
     return flask.jsonify(resources=list(resources))
 
@@ -126,6 +199,7 @@ def list_resources_by_project(project):
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
+    :param metadata.<key> match on the metadata within the resource. (optional)
     """
     return _list_resources(project=project)
 
@@ -140,6 +214,7 @@ def list_all_resources():
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
+    :param metadata.<key> match on the metadata within the resource. (optional)
     """
     return _list_resources()
 
@@ -165,6 +240,7 @@ def list_resources_by_source(source):
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
+    :param metadata.<key> match on the metadata within the resource. (optional)
     """
     return _list_resources(source=source)
 
@@ -180,6 +256,7 @@ def list_resources_by_user(user):
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
+    :param metadata.<key> match on the metadata within the resource. (optional)
     """
     return _list_resources(user=user)
 
@@ -256,6 +333,7 @@ def _list_events(meter,
                             resource=resource,
                             start=q_ts['start_timestamp'],
                             end=q_ts['end_timestamp'],
+                            metaquery=_get_metaquery(flask.request.args),
                             )
     events = list(flask.request.storage_conn.get_raw_events(f))
     jsonified = flask.jsonify(events=events)

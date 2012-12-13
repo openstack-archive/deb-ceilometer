@@ -15,48 +15,30 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""Set up the API server application instance
-"""
 
-import flask
-
-from ceilometer.openstack.common import cfg
-from ceilometer.openstack.common import jsonutils
-from ceilometer import storage
-from ceilometer.api import v1
-from ceilometer.api import acl
+from pecan import make_app
+from ceilometer.api import hooks
+from ceilometer.api import middleware
+from ceilometer.service import prepare_service
 
 
-storage.register_opts(cfg.CONF)
+def setup_app(config, extra_hooks=[]):
 
+    # Initialize the cfg.CONF object
+    prepare_service([])
 
-def make_app(enable_acl=True, attach_storage=True):
-    app = flask.Flask('ceilometer.api')
-    app.register_blueprint(v1.blueprint, url_prefix='/v1')
+    # FIXME: Replace DBHook with a hooks.TransactionHook
+    app_hooks = [hooks.ConfigHook(),
+                 hooks.DBHook()]
+    app_hooks.extend(extra_hooks)
 
-    try:
-        with open("sources.json", "r") as f:
-            sources = jsonutils.load(f)
-    except IOError:
-        sources = {}
-
-    @app.before_request
-    def attach_config():
-        flask.request.cfg = cfg.CONF
-        flask.request.sources = sources
-
-    if attach_storage:
-        @app.before_request
-        def attach_storage():
-            storage_engine = storage.get_engine(cfg.CONF)
-            flask.request.storage_engine = storage_engine
-            flask.request.storage_conn = \
-                storage_engine.get_connection(cfg.CONF)
-
-    # Install the middleware wrapper
-    if enable_acl:
-        return acl.install(app, cfg.CONF)
-    return app
-
-# For documentation
-app = make_app(enable_acl=False, attach_storage=False)
+    return make_app(
+        config.app.root,
+        static_root=config.app.static_root,
+        template_path=config.app.template_path,
+        logging=getattr(config, 'logging', {}),
+        debug=getattr(config.app, 'debug', False),
+        force_canonical=getattr(config.app, 'force_canonical', True),
+        hooks=app_hooks,
+        wrap_app=middleware.ParsableErrorMiddleware,
+    )
