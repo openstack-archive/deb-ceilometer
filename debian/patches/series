@@ -1,2 +1,3 @@
 install-missing-files.patch
-removes-pecan-from-toolspip-requires
+removes-pecan-from-toolspip-requires.patch
+updates-versioninfo.patch
