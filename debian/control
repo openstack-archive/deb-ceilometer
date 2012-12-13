@@ -40,6 +40,7 @@ Package: python-ceilometer
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${python:Depends}, ${misc:Depends},
+ libjs-jquery,
  python-anyjson,   
  python-eventlet,
  python-flask (>= 0.9),
