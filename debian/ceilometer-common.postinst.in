@@ -4,10 +4,36 @@ set -e
 
 #PKGOS-INCLUDE#
 
+# We need to do that for ceilometer-agent-compute
+libvirt_user_group () {
+	if ! getent group libvirt >/dev/null; then
+		addgroup --system libvirt
+	fi
+
+	# user and group libvirt runs qemu/kvm instances with
+	if ! getent group kvm >/dev/null; then
+		addgroup --quiet --system kvm
+	fi
+	if ! getent passwd libvirt-qemu >/dev/null; then
+		adduser --quiet \
+			--system \
+			--ingroup kvm \
+			--quiet \
+			--disabled-login \
+			--disabled-password \
+			--home /var/lib/libvirt \
+			--no-create-home \
+			-gecos "Libvirt Qemu" \
+			libvirt-qemu
+	fi
+}
+
 if [ "$1" = "configure" ]; then
 	pkgos_var_user_group nova
 	pkgos_var_user_group ceilometer
+	libvirt_user_group
 	adduser ceilometer nova || true
+	adduser ceilometer libvirt || true
 	pkgos_write_new_conf ceilometer ceilometer.conf
 	pkgos_write_new_conf ceilometer policy.json
 	pkgos_write_new_conf ceilometer sources.json
