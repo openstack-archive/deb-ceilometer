@@ -16,7 +16,7 @@ DESC="Ceilometer API"
 SYS_NAME=ceilometer
 NAME=ceilometer-api
 DAEMON=/usr/bin/${NAME}
-DAEMON_ARGS="-d -v --log-dir=/var/log/ceilometer"
+DAEMON_ARGS="--log-dir=/var/log/ceilometer"
 
 SCRIPTNAME=/etc/init.d/${NAME}
 DAEMON_USER=${SYS_NAME}
