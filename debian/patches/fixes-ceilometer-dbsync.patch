@@ -1,0 +1,12 @@
+Description: Fixes ceilometer-dbsync which was failing
+Author: Julien Danjou <acid@debian.org>
+Origin: upstream, https://github.com/openstack/ceilometer/commit/eada7872f2cf935d9a6e8e7cd410a895bee979e7
+
+--- ceilometer-2013.1~g0.4+23ff2f9bbf.orig/bin/ceilometer-dbsync
++++ ceilometer-2013.1~g0.4+23ff2f9bbf/bin/ceilometer-dbsync
+@@ -25,4 +25,4 @@ from ceilometer.openstack.common import
+ 
+ if __name__ == '__main__':
+     service.prepare_service(sys.argv)
+-    storage.get_connection(cfg.CONF).db_sync()
++    storage.get_connection(cfg.CONF).upgrade()
