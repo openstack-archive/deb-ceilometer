@@ -37,7 +37,7 @@ if [ "$1" = "configure" ]; then
 	pkgos_write_new_conf ceilometer ceilometer.conf
 	pkgos_write_new_conf ceilometer policy.json
 	pkgos_write_new_conf ceilometer sources.json
-	/usr/bin/ceilometer-dbsync || true
+	ceilometer-dbsync || true
 fi
 
 #DEBHELPER#
