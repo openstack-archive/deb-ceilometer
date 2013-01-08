@@ -5,4 +5,4 @@ Forwarded: not-needed
 --- /dev/null
 +++ ceilometer-2013.1~g0.3+ad5ff3e4e5/ceilometer/versioninfo
 @@ -0,0 +1 @@
-+2013.1~g0.3+ad5ff3e4e5
++2013.1~g0.5+dcfb45320a
