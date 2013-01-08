@@ -52,18 +52,20 @@ class TestBase(db_test_base.TestBase):
         def attach_storage_connection():
             flask.request.storage_conn = self.conn
 
-    def get(self, path, **kwds):
+    def get(self, path, headers=None, **kwds):
         if kwds:
             query = path + '?' + urllib.urlencode(kwds)
         else:
             query = path
-        rv = self.test_app.get(query)
-        try:
-            data = json.loads(rv.data)
-        except ValueError:
-            print 'RAW DATA:', rv
-            raise
-        return data
+        rv = self.test_app.get(query, headers=headers)
+        if rv.status_code == 200 and rv.content_type == 'application/json':
+            try:
+                data = json.loads(rv.data)
+            except ValueError:
+                print 'RAW DATA:', rv
+                raise
+            return data
+        return rv
 
 
 class FunctionalTest(unittest.TestCase):
@@ -106,6 +108,7 @@ class FunctionalTest(unittest.TestCase):
             'logging': {
                 'loggers': {
                     'root': {'level': 'INFO', 'handlers': ['console']},
+                    'wsme': {'level': 'INFO', 'handlers': ['console']},
                     'ceilometer': {'level': 'DEBUG',
                                    'handlers': ['console'],
                                    },
@@ -152,11 +155,15 @@ class FunctionalTest(unittest.TestCase):
         self.mox.VerifyAll()
         set_config({}, overwrite=True)
 
-    def get_json(self, path, expect_errors=False, headers=None, **params):
+    def get_json(self, path, expect_errors=False, headers=None,
+                 extra_params={}, **params):
         full_path = self.PATH_PREFIX + path
-        print 'GET: %s %r' % (full_path, params)
+        all_params = {}
+        all_params.update(params)
+        all_params.update(extra_params)
+        print 'GET: %s %r' % (full_path, all_params)
         response = self.app.get(full_path,
-                                params=params,
+                                params=all_params,
                                 headers=headers,
                                 expect_errors=expect_errors)
         if not expect_errors:

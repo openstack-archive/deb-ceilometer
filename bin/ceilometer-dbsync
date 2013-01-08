@@ -25,4 +25,4 @@ from ceilometer.openstack.common import cfg
 
 if __name__ == '__main__':
     service.prepare_service(sys.argv)
-    storage.get_connection(cfg.CONF).db_sync()
+    storage.get_connection(cfg.CONF).upgrade()

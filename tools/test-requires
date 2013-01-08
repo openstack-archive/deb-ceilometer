@@ -3,6 +3,7 @@ coverage
 pep8>=1.0
 mock
 mox
+Babel>=0.9.6
 # NOTE(dhellmann): Ming is necessary to provide the Mongo-in-memory
 # implementation of MongoDB. The original source for Ming is at
 # http://sourceforge.net/project/merciless but there does not seem to
@@ -20,3 +21,12 @@ setuptools-git>=0.4
 # checkout on bitbucket. I hope to have that resolved
 # very soon.
 hg+https://bitbucket.org/cdevienne/wsme
+pecan
+# We should use swift>1.7.5, but it's not yet available
+swift
+# Swift dep that is not necessary if we depend on swift>1.7.5
+netifaces
+# Docs Requirements
+sphinx
+docutils==0.9.1 # for bug 1091333, remove after sphinx >1.1.3 is released.
+python-spidermonkey
