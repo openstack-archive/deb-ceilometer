@@ -1,23 +1,21 @@
-Description: install-missing-files.patch
+Description: Install missing files
 Author: Thomas Goirand <zigo@debian.org>
 Forwarded: no
 
---- ceilometer-2013.1~g0.5+dcfb45320a.orig/MANIFEST.in
-+++ ceilometer-2013.1~g0.5+dcfb45320a/MANIFEST.in
-@@ -7,3 +7,16 @@ exclude .gitreview
+--- ceilometer-2013.1~g3.orig/MANIFEST.in
++++ ceilometer-2013.1~g3/MANIFEST.in
+@@ -7,4 +7,12 @@ exclude .gitreview
  global-exclude *.pyc
  recursive-include public *
  recursive-include ceilometer/locale *
+-recursive-include ceilometer *.html
+\ No newline at end of file
++recursive-include ceilometer *.html
 +include ceilometer/api/v1/static/bootstrap/css/bootstrap-responsive.css
 +include ceilometer/api/v1/static/bootstrap/css/bootstrap.css
 +include ceilometer/api/v1/static/bootstrap/img/glyphicons-halflings-white.png
 +include ceilometer/api/v1/static/bootstrap/img/glyphicons-halflings.png
 +include ceilometer/api/v1/static/bootstrap/js/bootstrap.js
 +include ceilometer/api/v1/static/d3.v2.js
-+include ceilometer/api/v1/static/jquery-1.8.3.js
 +include ceilometer/api/v1/static/rickshaw.css
 +include ceilometer/api/v1/static/rickshaw.js
-+include ceilometer/api/v1/templates/list_event.html
-+include ceilometer/locale/ceilometer.pot
-+include ceilometer/storage/sqlalchemy/migrate_repo/README
-+include ceilometer/storage/sqlalchemy/migrate_repo/migrate.cfg
