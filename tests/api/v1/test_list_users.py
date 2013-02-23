@@ -22,10 +22,11 @@
 import datetime
 import logging
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
 
-from ceilometer.openstack.common import cfg
 from ceilometer.tests import api as tests_api
 
 LOG = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ class TestListUsers(tests_api.TestBase):
         counter1 = counter.Counter(
             'instance',
             'cumulative',
+            'instance',
             1,
             'user-id',
             'project-id',
@@ -54,7 +56,7 @@ class TestListUsers(tests_api.TestBase):
             resource_metadata={'display_name': 'test-server',
                                'tag': 'self.counter',
                                }
-            )
+        )
         msg = meter.meter_message_from_counter(counter1,
                                                cfg.CONF.metering_secret,
                                                'test_list_users',
@@ -64,6 +66,7 @@ class TestListUsers(tests_api.TestBase):
         counter2 = counter.Counter(
             'instance',
             'cumulative',
+            '',
             1,
             'user-id2',
             'project-id',
@@ -72,7 +75,7 @@ class TestListUsers(tests_api.TestBase):
             resource_metadata={'display_name': 'test-server',
                                'tag': 'self.counter2',
                                }
-            )
+        )
         msg2 = meter.meter_message_from_counter(counter2,
                                                 cfg.CONF.metering_secret,
                                                 'not-test',

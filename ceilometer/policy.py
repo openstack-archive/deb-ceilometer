@@ -19,8 +19,9 @@
 
 import os
 
+from oslo.config import cfg
+
 from ceilometer import utils
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import policy
 
 
@@ -31,7 +32,7 @@ OPTS = [
     cfg.StrOpt('policy_default_rule',
                default='default',
                help='Rule checked when requested rule is not found'),
-    ]
+]
 
 cfg.CONF.register_opts(OPTS)
 
@@ -49,26 +50,18 @@ def init():
         if not _POLICY_PATH:
             raise cfg.ConfigFilesNotFoundError([cfg.CONF.policy_file])
     utils.read_cached_file(_POLICY_PATH, _POLICY_CACHE,
-                           reload_func=_set_brain)
+                           reload_func=_set_rules)
 
 
-def _set_brain(data):
+def _set_rules(data):
     default_rule = cfg.CONF.policy_default_rule
-    policy.set_brain(policy.Brain.load_json(data, default_rule))
+    policy.set_rules(policy.Rules.load_json(data, default_rule))
 
 
-def check_is_admin(roles, project_id, project_name):
+def check_is_admin(roles):
     """Whether or not roles contains 'admin' role according to policy setting.
 
     """
     init()
 
-    match_list = ('rule:context_is_admin',)
-    target = {}
-    credentials = {
-        'roles': roles,
-        'project_id': project_id,
-        'project_name': project_name,
-    }
-
-    return policy.enforce(match_list, target, credentials)
+    return policy.check('context_is_admin', {}, {'roles': roles})

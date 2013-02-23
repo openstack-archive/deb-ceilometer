@@ -55,7 +55,8 @@ class MongoDBStorage(base.StorageEngine):
               timestamp: datetime of last update
               user_id: uuid
               project_id: uuid
-              meter: [ array of {counter_name: string, counter_type: string} ]
+              meter: [ array of {counter_name: string, counter_type: string,
+                                 counter_unit: string} ]
             }
     """
 
@@ -175,6 +176,66 @@ class Connection(base.Connection):
     }
     """)
 
+    MAP_STATS = bson.code.Code("""
+    function () {
+        emit('statistics', { min : this.counter_volume,
+                             max : this.counter_volume,
+                             sum : this.counter_volume,
+                             count : NumberInt(1),
+                             duration_start : this.timestamp,
+                             duration_end : this.timestamp,
+                             period_start : this.timestamp,
+                             period_end : this.timestamp} )
+    }
+    """)
+
+    MAP_STATS_PERIOD = bson.code.Code("""
+    function () {
+        var period = %d * 1000;
+        var period_first = %d * 1000;
+        var period_start = period_first
+                           + (Math.floor(new Date(this.timestamp.getTime()
+                                         - period_first) / period)
+                              * period);
+        emit(period_start,
+             { min : this.counter_volume,
+               max : this.counter_volume,
+               sum : this.counter_volume,
+               count : 1,
+               duration_start : this.timestamp,
+               duration_end : this.timestamp,
+               period_start : new Date(period_start),
+               period_end : new Date(period_start + period) } )
+    }
+    """)
+
+    REDUCE_STATS = bson.code.Code("""
+    function (key, values) {
+        var res = values[0];
+        for ( var i=1; i<values.length; i++ ) {
+            if ( values[i].min < res.min )
+               res.min = values[i].min;
+            if ( values[i].max > res.max )
+               res.max = values[i].max;
+            res.count += values[i].count;
+            res.sum += values[i].sum;
+            if ( values[i].duration_start < res.duration_start )
+               res.duration_start = values[i].duration_start;
+            if ( values[i].duration_end > res.duration_end )
+               res.duration_end = values[i].duration_end;
+        }
+        return res;
+    }
+    """)
+
+    FINALIZE_STATS = bson.code.Code("""
+    function (key, value) {
+        value.avg = value.sum / value.count;
+        value.duration = (value.duration_end - value.duration_start) / 1000;
+        value.period = (value.period_end - value.period_start) / 1000;
+        return value;
+    }""")
+
     def __init__(self, conf):
         opts = self._parse_connection_url(conf.database_connection)
         LOG.info('connecting to MongoDB on %s:%s', opts['host'], opts['port'])
@@ -192,17 +253,16 @@ class Connection(base.Connection):
         # including both.
         for primary in ['user_id', 'project_id']:
             self.db.resource.ensure_index([
-                    (primary, pymongo.ASCENDING),
-                    ('source', pymongo.ASCENDING),
-                    ], name='resource_idx')
+                (primary, pymongo.ASCENDING),
+                ('source', pymongo.ASCENDING),
+            ], name='resource_idx')
             self.db.meter.ensure_index([
-                    ('resource_id', pymongo.ASCENDING),
-                    (primary, pymongo.ASCENDING),
-                    ('counter_name', pymongo.ASCENDING),
-                    ('timestamp', pymongo.ASCENDING),
-                    ('source', pymongo.ASCENDING),
-                    ], name='meter_idx')
-        return
+                ('resource_id', pymongo.ASCENDING),
+                (primary, pymongo.ASCENDING),
+                ('counter_name', pymongo.ASCENDING),
+                ('timestamp', pymongo.ASCENDING),
+                ('source', pymongo.ASCENDING),
+            ], name='meter_idx')
 
     def upgrade(self, version=None):
         pass
@@ -248,14 +308,14 @@ class Connection(base.Connection):
                            },
              },
             upsert=True,
-            )
+        )
         self.db.project.update(
             {'_id': data['project_id']},
             {'$addToSet': {'source': data['source'],
                            },
              },
             upsert=True,
-            )
+        )
 
         # Record the updated resource metadata
         received_timestamp = datetime.datetime.utcnow()
@@ -272,11 +332,12 @@ class Connection(base.Connection):
                       },
              '$addToSet': {'meter': {'counter_name': data['counter_name'],
                                      'counter_type': data['counter_type'],
+                                     'counter_unit': data['counter_unit'],
                                      },
                            },
              },
             upsert=True,
-            )
+        )
 
         # Record the raw data for the event. Use a copy so we do not
         # modify a data structure owned by our caller (the driver adds
@@ -307,7 +368,7 @@ class Connection(base.Connection):
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
-                      metaquery={}):
+                      metaquery={}, resource=None):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -324,6 +385,7 @@ class Connection(base.Connection):
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
         :param metaquery: Optional dict with metadata to match on.
+        :param resource: Optional resource filter.
         """
         q = {}
         if user is not None:
@@ -332,6 +394,8 @@ class Connection(base.Connection):
             q['project_id'] = project
         if source is not None:
             q['source'] = source
+        if resource is not None:
+            q['_id'] = resource
         q.update(metaquery)
 
         # FIXME(dhellmann): This may not perform very well,
@@ -364,6 +428,7 @@ class Connection(base.Connection):
 
         { 'name': name of the meter,
           'type': type of the meter (guage, counter),
+          'unit': unit of the meter,
           'resource_id': UUID of the resource,
           'project_id': UUID of project owning the resource,
           'user_id': UUID of user owning the resource,
@@ -391,6 +456,7 @@ class Connection(base.Connection):
                 m = {}
                 m['name'] = r_meter['counter_name']
                 m['type'] = r_meter['counter_type']
+                m['unit'] = r_meter['counter_unit']
                 m['resource_id'] = r['_id']
                 m['project_id'] = r['project_id']
                 m['user_id'] = r['user_id']
@@ -408,6 +474,46 @@ class Connection(base.Connection):
             # detail that should not leak outside of the driver.
             del e['_id']
             yield e
+
+    def get_meter_statistics(self, event_filter, period=None):
+        """Return a dictionary containing meter statistics.
+        described by the query parameters.
+
+        The filter must have a meter value set.
+
+        { 'min':
+          'max':
+          'avg':
+          'sum':
+          'count':
+          'period':
+          'period_start':
+          'period_end':
+          'duration':
+          'duration_start':
+          'duration_end':
+          }
+
+        """
+        q = make_query_from_filter(event_filter)
+
+        if period:
+            map_stats = self.MAP_STATS_PERIOD % \
+                (period,
+                 int(event_filter.start.strftime('%s'))
+                 if event_filter.start else 0)
+        else:
+            map_stats = self.MAP_STATS
+
+        results = self.db.meter.map_reduce(
+            map_stats,
+            self.REDUCE_STATS,
+            {'inline': 1},
+            finalize=self.FINALIZE_STATS,
+            query=q,
+        )
+
+        return [r['value'] for r in results['results']]
 
     def get_volume_sum(self, event_filter):
         """Return the sum of the volume field for the events
@@ -435,6 +541,34 @@ class Connection(base.Connection):
         return ({'resource_id': r['_id'], 'value': r['value']}
                 for r in results['results'])
 
+    def _fix_interval_min_max(self, a_min, a_max):
+        if hasattr(a_min, 'valueOf') and a_min.valueOf is not None:
+            # NOTE (dhellmann): HACK ALERT
+            #
+            # The real MongoDB server can handle Date objects and
+            # the driver converts them to datetime instances
+            # correctly but the in-memory implementation in MIM
+            # (used by the tests) returns a spidermonkey.Object
+            # representing the "value" dictionary and there
+            # doesn't seem to be a way to recursively introspect
+            # that object safely to convert the min and max values
+            # back to datetime objects. In this method, we know
+            # what type the min and max values are expected to be,
+            # so it is safe to do the conversion
+            # here. JavaScript's time representation uses
+            # different units than Python's, so we divide to
+            # convert to the right units and then create the
+            # datetime instances to return.
+            #
+            # The issue with MIM is documented at
+            # https://sourceforge.net/p/merciless/bugs/3/
+            #
+            a_min = datetime.datetime.fromtimestamp(
+                a_min.valueOf() // 1000)
+            a_max = datetime.datetime.fromtimestamp(
+                a_max.valueOf() // 1000)
+        return (a_min, a_max)
+
     def get_event_interval(self, event_filter):
         """Return the min and max timestamps from events,
         using the event_filter to limit the events seen.
@@ -449,32 +583,5 @@ class Connection(base.Connection):
                                            )
         if results['results']:
             answer = results['results'][0]['value']
-            a_min = answer['min']
-            a_max = answer['max']
-            if hasattr(a_min, 'valueOf') and a_min.valueOf is not None:
-                # NOTE (dhellmann): HACK ALERT
-                #
-                # The real MongoDB server can handle Date objects and
-                # the driver converts them to datetime instances
-                # correctly but the in-memory implementation in MIM
-                # (used by the tests) returns a spidermonkey.Object
-                # representing the "value" dictionary and there
-                # doesn't seem to be a way to recursively introspect
-                # that object safely to convert the min and max values
-                # back to datetime objects. In this method, we know
-                # what type the min and max values are expected to be,
-                # so it is safe to do the conversion
-                # here. JavaScript's time representation uses
-                # different units than Python's, so we divide to
-                # convert to the right units and then create the
-                # datetime instances to return.
-                #
-                # The issue with MIM is documented at
-                # https://sourceforge.net/p/merciless/bugs/3/
-                #
-                a_min = datetime.datetime.fromtimestamp(
-                    a_min.valueOf() // 1000)
-                a_max = datetime.datetime.fromtimestamp(
-                    a_max.valueOf() // 1000)
-            return (a_min, a_max)
+            return self._fix_interval_min_max(answer['min'], answer['max'])
         return (None, None)

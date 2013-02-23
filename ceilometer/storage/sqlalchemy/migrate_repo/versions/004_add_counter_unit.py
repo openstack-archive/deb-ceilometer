@@ -1,8 +1,6 @@
 # -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
-#
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+# Author: Guillaume Pernot <gpernot@praksys.org>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -15,12 +13,21 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""Version information for ceilometer.
-"""
 
-from ceilometer.openstack.common import version as common_version
+from sqlalchemy import *
 
-NEXT_VERSION = '2013.1'
+meta = MetaData()
 
-version_info = common_version.VersionInfo('ceilometer',
-                                          pre_version=NEXT_VERSION)
+
+def upgrade(migrate_engine):
+    meta.bind = migrate_engine
+    meter = Table('meter', meta, autoload=True)
+    unit = Column('counter_unit', String(255))
+    meter.create_column(unit)
+
+
+def downgrade(migrate_engine):
+    meta.bind = migrate_engine
+    meter = Table('meter', meta, autoload=True)
+    unit = Column('counter_unit', String(255))
+    meter.drop_column(unit)

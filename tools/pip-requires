@@ -1,4 +1,4 @@
-webob
+WebOb>=1.2
 kombu
 iso8601
 lockfile
@@ -10,9 +10,15 @@ pymongo>=2.2
 eventlet
 anyjson>=0.2.4
 Flask==0.9
+pecan>=0.2.0
 stevedore>=0.6
 python-glanceclient
 python-novaclient>=2.6.10
 python-keystoneclient>=0.2,<0.3
 python-swiftclient
 lxml
+requests<1.0
+extras
+wsme>=0.5b1
+pyyaml
+http://tarballs.openstack.org/oslo-config/oslo-config-2013.1b3.tar.gz#egg=oslo-config

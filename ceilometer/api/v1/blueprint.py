@@ -91,7 +91,9 @@ from ceilometer.api.v1 import acl
 LOG = log.getLogger(__name__)
 
 
-blueprint = flask.Blueprint('v1', __name__)
+blueprint = flask.Blueprint('v1', __name__,
+                            template_folder='templates',
+                            static_folder='static')
 
 
 def request_wants_html():
@@ -105,7 +107,7 @@ def request_wants_html():
 def _get_metaquery(args):
     return dict((k, v)
                 for (k, v) in args.iteritems()
-                    if k.startswith('metadata.'))
+                if k.startswith('metadata.'))
 
 
 def check_authorized_project(project):
@@ -120,7 +122,8 @@ def check_authorized_project(project):
 @blueprint.route('/meters')
 def list_meters_all():
     """Return a list of meters.
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     rq = flask.request
     meters = rq.storage_conn.get_meters(
@@ -134,7 +137,8 @@ def list_meters_by_resource(resource):
     """Return a list of meters by resource.
 
     :param resource: The ID of the resource.
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     rq = flask.request
     meters = rq.storage_conn.get_meters(
@@ -149,7 +153,8 @@ def list_meters_by_user(user):
     """Return a list of meters by user.
 
     :param user: The ID of the owning user.
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     rq = flask.request
     meters = rq.storage_conn.get_meters(
@@ -164,7 +169,8 @@ def list_meters_by_project(project):
     """Return a list of meters by project.
 
     :param project: The ID of the owning project.
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     check_authorized_project(project)
 
@@ -180,7 +186,8 @@ def list_meters_by_source(source):
     """Return a list of meters by source.
 
     :param source: The ID of the owning source.
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     rq = flask.request
     meters = rq.storage_conn.get_meters(
@@ -204,7 +211,7 @@ def _list_resources(source=None, user=None, project=None):
         start_timestamp=q_ts['start_timestamp'],
         end_timestamp=q_ts['end_timestamp'],
         metaquery=_get_metaquery(rq.args),
-        )
+    )
     return flask.jsonify(resources=list(resources))
 
 
@@ -219,7 +226,8 @@ def list_resources_by_project(project):
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     check_authorized_project(project)
     return _list_resources(project=project)
@@ -235,7 +243,8 @@ def list_all_resources():
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     return _list_resources(
         project=acl.get_limited_to_project(flask.request.headers))
@@ -262,7 +271,8 @@ def list_resources_by_source(source):
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     return _list_resources(
         source=source,
@@ -281,7 +291,8 @@ def list_resources_by_user(user):
     :param end_timestamp: Limits resources by last update time < this value.
         (optional)
     :type end_timestamp: ISO date in UTC
-    :param metadata.<key> match on the metadata within the resource. (optional)
+    :param metadata.<key>: match on the metadata within the resource.
+                           (optional)
     """
     return _list_resources(
         user=user,
@@ -371,14 +382,15 @@ def _list_events(meter,
     """Return a list of raw metering events.
     """
     q_ts = _get_query_timestamps(flask.request.args)
-    f = storage.EventFilter(user=user,
-                            project=project,
-                            source=source,
-                            meter=meter,
-                            resource=resource,
-                            start=q_ts['start_timestamp'],
-                            end=q_ts['end_timestamp'],
-                            metaquery=_get_metaquery(flask.request.args),
+    f = storage.EventFilter(
+        user=user,
+        project=project,
+        source=source,
+        meter=meter,
+        resource=resource,
+        start=q_ts['start_timestamp'],
+        end=q_ts['end_timestamp'],
+        metaquery=_get_metaquery(flask.request.args),
     )
     events = list(flask.request.storage_conn.get_raw_events(f))
     jsonified = flask.jsonify(events=events)
@@ -558,10 +570,7 @@ def compute_duration_by_resource(resource, meter):
     # sentinal indicating that there is something "funny"
     # about the range.
     if min_ts and max_ts and (min_ts <= max_ts):
-        # Can't use timedelta.total_seconds() because
-        # it is not available in Python 2.6.
-        diff = max_ts - min_ts
-        duration = (diff.seconds + (diff.days * 24 * 60 ** 2)) / 60
+        duration = timeutils.delta_seconds(min_ts, max_ts)
     else:
         min_ts = max_ts = duration = None
 

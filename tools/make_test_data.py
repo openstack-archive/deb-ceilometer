@@ -25,10 +25,11 @@ import datetime
 import logging
 import sys
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
 from ceilometer import storage
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import timeutils
 
 
@@ -59,6 +60,11 @@ def main():
         choices=('gauge', 'cumulative'),
         default='gauge',
         help='counter type',
+        )
+    parser.add_argument(
+        '--unit',
+        default=None,
+        help='counter unit',
         )
     parser.add_argument(
         '--project',
@@ -115,6 +121,7 @@ def main():
     while timestamp <= end:
         c = counter.Counter(name=args.counter,
                             type=args.type,
+                            unit=args.unit,
                             volume=args.volume,
                             user_id=args.user,
                             project_id=args.project,

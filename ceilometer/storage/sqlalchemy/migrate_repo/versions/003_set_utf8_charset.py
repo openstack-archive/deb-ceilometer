@@ -14,14 +14,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from sqlalchemy import MetaData
-
 
 def upgrade(migrate_engine):
 
     if migrate_engine.name == "mysql":
         tables = ['meter', 'user', 'resource', 'project', 'source',
-        'sourceassoc']
+                  'sourceassoc']
         sql = "SET foreign_key_checks = 0;"
 
         for table in tables:
@@ -36,7 +34,7 @@ def downgrade(migrate_engine):
     # Operations to reverse the above upgrade go here.
     if migrate_engine.name == "mysql":
         tables = ['meter', 'user', 'resource', 'project', 'source',
-        'sourceassoc']
+                  'sourceassoc']
         sql = "SET foreign_key_checks = 0;"
 
         for table in tables:

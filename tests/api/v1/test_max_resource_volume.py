@@ -20,10 +20,11 @@
 
 import datetime
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
 
-from ceilometer.openstack.common import cfg
 from ceilometer.tests import api as tests_api
 from ceilometer.tests.db import require_map_reduce
 
@@ -39,6 +40,7 @@ class TestMaxResourceVolume(tests_api.TestBase):
             c = counter.Counter(
                 'volume.size',
                 'gauge',
+                'GiB',
                 5 + i,
                 'user-id',
                 'project1',
@@ -47,7 +49,7 @@ class TestMaxResourceVolume(tests_api.TestBase):
                 resource_metadata={'display_name': 'test-volume',
                                    'tag': 'self.counter',
                                    }
-                )
+            )
             self.counters.append(c)
             msg = meter.meter_message_from_counter(c,
                                                    cfg.CONF.metering_secret,

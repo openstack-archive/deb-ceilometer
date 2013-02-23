@@ -28,6 +28,7 @@ from ceilometer.tests import base
 
 class TestFloatingIPPollster(base.TestCase):
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
         super(TestFloatingIPPollster, self).setUp()
         self.context = context.get_admin_context()
@@ -36,12 +37,12 @@ class TestFloatingIPPollster(base.TestCase):
         self.stubs.Set(nova_client.Client, 'floating_ip_get_all',
                        self.faux_get_ips)
 
+    @staticmethod
     def faux_get_ips(self):
         ips = []
         for i in range(1, 4):
             ip = mock.MagicMock()
             ip.address = '1.1.1.%d' % i
-            ip.host = self.manager.host
             ips.append(ip)
         return ips
 
@@ -59,7 +60,7 @@ class TestFloatingIPPollster(base.TestCase):
     #         assert False, 'Should have seen an error'
 
     def test_get_counters_not_empty(self):
-        counters = list(self.pollster.get_counters(self.manager, self.context))
+        counters = list(self.pollster.get_counters(self.manager))
         self.assertEqual(len(counters), 3)
         addresses = [c.resource_metadata['address']
                      for c in counters
@@ -68,3 +69,8 @@ class TestFloatingIPPollster(base.TestCase):
                                      '1.1.1.2',
                                      '1.1.1.3',
                                      ])
+
+    def test_get_counter_names(self):
+        counters = list(self.pollster.get_counters(self.manager))
+        self.assertEqual(set([c.name for c in counters]),
+                         set(self.pollster.get_counter_names()))

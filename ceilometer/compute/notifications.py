@@ -18,10 +18,11 @@
 """Converters for producing compute counter messages from notification events.
 """
 
+from oslo.config import cfg
+
 from ceilometer import counter
 from ceilometer import plugin
 from ceilometer.compute import instance
-from ceilometer.openstack.common import cfg
 
 
 OPTS = [
@@ -50,8 +51,7 @@ class _Base(plugin.NotificationBase):
                 'compute.instance.exists',
                 'compute.instance.delete.start',
                 'compute.instance.finish_resize.end',
-                'compute.instance.resize.revert.end',
-        ]
+                'compute.instance.resize.revert.end']
 
     @staticmethod
     def get_exchange_topics(conf):
@@ -71,6 +71,7 @@ class Instance(_Base):
         return [
             counter.Counter(name='instance',
                             type=counter.TYPE_GAUGE,
+                            unit='instance',
                             volume=1,
                             user_id=message['payload']['user_id'],
                             project_id=message['payload']['tenant_id'],
@@ -79,7 +80,7 @@ class Instance(_Base):
                             resource_metadata=self.notification_to_metadata(
                                 message),
                             ),
-            ]
+        ]
 
 
 class Memory(_Base):
@@ -88,15 +89,15 @@ class Memory(_Base):
         return [
             counter.Counter(name='memory',
                             type=counter.TYPE_GAUGE,
+                            unit='B',
                             volume=message['payload']['memory_mb'],
                             user_id=message['payload']['user_id'],
                             project_id=message['payload']['tenant_id'],
                             resource_id=message['payload']['instance_id'],
                             timestamp=message['timestamp'],
                             resource_metadata=self.notification_to_metadata(
-                                message),
-                        ),
-            ]
+                                message)),
+        ]
 
 
 class VCpus(_Base):
@@ -105,15 +106,15 @@ class VCpus(_Base):
         return [
             counter.Counter(name='vcpus',
                             type=counter.TYPE_GAUGE,
+                            unit='vcpu',
                             volume=message['payload']['vcpus'],
                             user_id=message['payload']['user_id'],
                             project_id=message['payload']['tenant_id'],
                             resource_id=message['payload']['instance_id'],
                             timestamp=message['timestamp'],
                             resource_metadata=self.notification_to_metadata(
-                                message),
-                        ),
-            ]
+                                message)),
+        ]
 
 
 class RootDiskSize(_Base):
@@ -122,15 +123,15 @@ class RootDiskSize(_Base):
         return [
             counter.Counter(name='disk.root.size',
                             type=counter.TYPE_GAUGE,
+                            unit='B',
                             volume=message['payload']['root_gb'],
                             user_id=message['payload']['user_id'],
                             project_id=message['payload']['tenant_id'],
                             resource_id=message['payload']['instance_id'],
                             timestamp=message['timestamp'],
                             resource_metadata=self.notification_to_metadata(
-                                message),
-                        ),
-            ]
+                                message)),
+        ]
 
 
 class EphemeralDiskSize(_Base):
@@ -139,15 +140,15 @@ class EphemeralDiskSize(_Base):
         return [
             counter.Counter(name='disk.ephemeral.size',
                             type=counter.TYPE_GAUGE,
+                            unit='B',
                             volume=message['payload']['ephemeral_gb'],
                             user_id=message['payload']['user_id'],
                             project_id=message['payload']['tenant_id'],
                             resource_id=message['payload']['instance_id'],
                             timestamp=message['timestamp'],
                             resource_metadata=self.notification_to_metadata(
-                                message),
-                        ),
-            ]
+                                message)),
+        ]
 
 
 class InstanceFlavor(_Base):
@@ -160,6 +161,7 @@ class InstanceFlavor(_Base):
                 counter.Counter(
                     name='instance:%s' % instance_type,
                     type=counter.TYPE_GAUGE,
+                    unit='instance',
                     volume=1,
                     user_id=message['payload']['user_id'],
                     project_id=message['payload']['tenant_id'],

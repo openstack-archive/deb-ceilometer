@@ -17,13 +17,14 @@
 # under the License.
 """Set up the ACL to acces the API server."""
 
-from ceilometer import policy
-
+import keystoneclient.middleware.auth_token as auth_token
+from oslo.config import cfg
 from pecan import hooks
-
 from webob import exc
 
-import keystoneclient.middleware.auth_token as auth_token
+from ceilometer import policy
+
+OPT_GROUP_NAME = 'keystone_authtoken'
 
 OPT_GROUP_NAME = 'keystone_authtoken'
 
@@ -36,9 +37,11 @@ def register_opts(conf):
     auth_token.CONF = conf
 
 
+register_opts(cfg.CONF)
+
+
 def install(app, conf):
     """Install ACL check on application."""
-    register_opts(conf)
     return auth_token.AuthProtocol(app,
                                    conf=dict(conf.get(OPT_GROUP_NAME)))
 
@@ -49,7 +52,5 @@ class AdminAuthHook(hooks.PecanHook):
 
     def before(self, state):
         headers = state.request.headers
-        if not policy.check_is_admin(headers.get('X-Roles', "").split(","),
-                                     headers.get('X-Tenant-Id'),
-                                     headers.get('X-Tenant-Name')):
+        if not policy.check_is_admin(headers.get('X-Roles', "").split(",")):
             raise exc.HTTPUnauthorized()

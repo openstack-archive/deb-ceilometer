@@ -83,7 +83,7 @@ class Connection(object):
     @abc.abstractmethod
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
-                      metaquery={}):
+                      metaquery={}, resource=None):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -99,7 +99,8 @@ class Connection(object):
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
-        :param metaquery: Optional dict with metadata to match on..
+        :param metaquery: Optional dict with metadata to match on.
+        :param resource: Optional resource filter.
         """
 
     @abc.abstractmethod
@@ -109,6 +110,7 @@ class Connection(object):
 
         { 'name': name of the meter,
           'type': type of the meter (guage, counter),
+          'unit': unit of the meter,
           'resource_id': UUID of the resource,
           'project_id': UUID of project owning the resource,
           'user_id': UUID of user owning the resource,
@@ -157,4 +159,26 @@ class Connection(object):
         using the event_filter to limit the events seen.
 
         ( datetime.datetime(), datetime.datetime() )
+        """
+
+    @abc.abstractmethod
+    def get_meter_statistics(self, event_filter, period=None):
+        """Return a dictionary containing meter statistics.
+        described by the query parameters.
+
+        The filter must have a meter value set.
+
+        { 'min':
+          'max':
+          'avg':
+          'sum':
+          'count':
+          'period':
+          'period_start':
+          'period_end':
+          'duration':
+          'duration_start':
+          'duration_end':
+          }
+
         """

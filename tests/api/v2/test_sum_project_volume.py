@@ -20,17 +20,18 @@
 
 import datetime
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
 
-from ceilometer.openstack.common import cfg
 from .base import FunctionalTest
 from ceilometer.tests.db import require_map_reduce
 
 
 class TestSumProjectVolume(FunctionalTest):
 
-    PATH = '/projects/project1/meters/volume.size/volume/sum'
+    PATH = '/meters/volume.size/statistics'
 
     def setUp(self):
         super(TestSumProjectVolume, self).setUp()
@@ -41,6 +42,7 @@ class TestSumProjectVolume(FunctionalTest):
             c = counter.Counter(
                 'volume.size',
                 'gauge',
+                'GiB',
                 5 + i,
                 'user-id',
                 'project1',
@@ -49,7 +51,7 @@ class TestSumProjectVolume(FunctionalTest):
                 resource_metadata={'display_name': 'test-volume',
                                    'tag': 'self.counter',
                                    }
-                )
+            )
             self.counters.append(c)
             msg = meter.meter_message_from_counter(c,
                                                    cfg.CONF.metering_secret,
@@ -58,42 +60,72 @@ class TestSumProjectVolume(FunctionalTest):
             self.conn.record_metering_data(msg)
 
     def test_no_time_bounds(self):
-        data = self.get_json(self.PATH)
-        expected = {'volume': 5 + 6 + 7}
-        assert data == expected
+        data = self.get_json(self.PATH, q=[{'field': 'project_id',
+                                            'value': 'project1',
+                                            }])
+        expected = 5 + 6 + 7
+        self.assertEqual(data[0]['sum'], expected)
+        self.assertEqual(data[0]['count'], 3)
 
     def test_start_timestamp(self):
-        data = self.get_json(
-            self.PATH,
-            extra_params={'daterange.start': '2012-09-25T11:30:00'})
-        expected = {'volume': 6 + 7}
-        assert data == expected
+        data = self.get_json(self.PATH, q=[{'field': 'project_id',
+                                            'value': 'project1',
+                                            },
+                                           {'field': 'timestamp',
+                                            'op': 'ge',
+                                            'value': '2012-09-25T11:30:00',
+                                            },
+                                           ])
+        expected = 6 + 7
+        self.assertEqual(data[0]['sum'], expected)
+        self.assertEqual(data[0]['count'], 2)
 
     def test_start_timestamp_after(self):
-        data = self.get_json(
-            self.PATH,
-            extra_params={'daterange.start': '2012-09-25T12:34:00'})
-        expected = {'volume': None}
-        assert data == expected
+        data = self.get_json(self.PATH, q=[{'field': 'project_id',
+                                            'value': 'project1',
+                                            },
+                                           {'field': 'timestamp',
+                                            'op': 'ge',
+                                            'value': '2012-09-25T12:34:00',
+                                            },
+                                           ])
+        self.assertEqual(data, [])
 
     def test_end_timestamp(self):
-        data = self.get_json(
-            self.PATH,
-            extra_params={'daterange.end': '2012-09-25T11:30:00'})
-        expected = {'volume': 5}
-        assert data == expected
+        data = self.get_json(self.PATH, q=[{'field': 'project_id',
+                                            'value': 'project1',
+                                            },
+                                           {'field': 'timestamp',
+                                            'op': 'le',
+                                            'value': '2012-09-25T11:30:00',
+                                            },
+                                           ])
+        self.assertEqual(data[0]['sum'], 5)
+        self.assertEqual(data[0]['count'], 1)
 
     def test_end_timestamp_before(self):
-        data = self.get_json(
-            self.PATH,
-            extra_params={'daterange.end': '2012-09-25T09:54:00'})
-        expected = {'volume': None}
-        assert data == expected
+        data = self.get_json(self.PATH, q=[{'field': 'project_id',
+                                            'value': 'project1',
+                                            },
+                                           {'field': 'timestamp',
+                                            'op': 'le',
+                                            'value': '2012-09-25T09:54:00',
+                                            },
+                                           ])
+        self.assertEqual(data, [])
 
     def test_start_end_timestamp(self):
-        data = self.get_json(
-            self.PATH,
-            extra_params={'daterange.start': '2012-09-25T11:30:00',
-                          'daterange.end': '2012-09-25T11:32:00'})
-        expected = {'volume': 6}
-        assert data == expected
+        data = self.get_json(self.PATH, q=[{'field': 'project_id',
+                                            'value': 'project1',
+                                            },
+                                           {'field': 'timestamp',
+                                            'op': 'ge',
+                                            'value': '2012-09-25T11:30:00',
+                                            },
+                                           {'field': 'timestamp',
+                                            'op': 'le',
+                                            'value': '2012-09-25T11:32:00',
+                                            },
+                                           ])
+        self.assertEqual(data[0]['sum'], 6)
+        self.assertEqual(data[0]['count'], 1)

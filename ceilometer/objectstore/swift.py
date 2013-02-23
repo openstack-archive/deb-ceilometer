@@ -22,12 +22,11 @@ from __future__ import absolute_import
 
 import abc
 
-from keystoneclient.v2_0 import client as ksclient
+from oslo.config import cfg
 from swiftclient import client as swift
 
 from ceilometer import plugin
 from ceilometer import counter
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import timeutils
 from ceilometer.openstack.common import log
 
@@ -36,8 +35,8 @@ LOG = log.getLogger(__name__)
 OPTS = [
     cfg.StrOpt('reseller_prefix',
                default='AUTH_',
-               help="Swift reseller prefix. Must be on par with "\
-                   "reseller_prefix in proxy-server.conf."),
+               help="Swift reseller prefix. Must be on par with "
+               "reseller_prefix in proxy-server.conf."),
 ]
 
 cfg.CONF.register_opts(OPTS)
@@ -49,15 +48,16 @@ class _Base(plugin.PollsterBase):
 
     @staticmethod
     @abc.abstractmethod
-    def iter_accounts():
+    def iter_accounts(ksclient):
         """Iterate over all accounts, yielding (tenant_id, stats) tuples."""
 
-    def get_counters(self, manager, context):
-        for tenant, account in self.iter_accounts():
+    def get_counters(self, manager):
+        for tenant, account in self.iter_accounts(manager.keystone):
             yield counter.Counter(
                 name='storage.objects',
                 type=counter.TYPE_GAUGE,
                 volume=int(account['x-account-object-count']),
+                unit='object',
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
@@ -68,6 +68,7 @@ class _Base(plugin.PollsterBase):
                 name='storage.objects.size',
                 type=counter.TYPE_GAUGE,
                 volume=int(account['x-account-bytes-used']),
+                unit='B',
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
@@ -78,6 +79,7 @@ class _Base(plugin.PollsterBase):
                 name='storage.objects.containers',
                 type=counter.TYPE_GAUGE,
                 volume=int(account['x-account-container-count']),
+                unit='container',
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
@@ -91,14 +93,17 @@ class SwiftPollster(_Base):
     """
 
     @staticmethod
-    def iter_accounts():
-        ks = ksclient.Client(username=cfg.CONF.os_username,
-                             password=cfg.CONF.os_password,
-                             tenant_name=cfg.CONF.os_tenant_name,
-                             auth_url=cfg.CONF.os_auth_url)
-        endpoint = ks.service_catalog.url_for(service_type='object-store',
-                                              endpoint_type='adminURL')
+    def get_counter_names():
+        return ['storage.objects',
+                'storage.objects.size',
+                'storage.objects.containers']
+
+    @staticmethod
+    def iter_accounts(ksclient):
+        endpoint = ksclient.service_catalog.url_for(
+            service_type='object-store',
+            endpoint_type='adminURL')
         base_url = '%s/v1/%s' % (endpoint, cfg.CONF.reseller_prefix)
-        for t in ks.tenants.list():
+        for t in ksclient.tenants.list():
             yield (t.id, swift.head_account('%s%s' % (base_url, t.id),
-                                            ks.auth_token))
+                                            ksclient.auth_token))

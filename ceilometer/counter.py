@@ -24,6 +24,17 @@ in by the plugins that create them.
 
 import collections
 
+from oslo.config import cfg
+
+OPTS = [
+    cfg.StrOpt('counter_source',
+               default='openstack',
+               help='Source for counters emited on this instance'),
+]
+
+cfg.CONF.register_opts(OPTS)
+
+
 # Fields explanation:
 #
 # Name: the name of the counter, must be unique
@@ -31,6 +42,7 @@ import collections
 #       - cumulative: the value is incremented and never reset to 0
 #       - delta: the value is reset to 0 each time it is sent
 #       - gauge: the value is an absolute value and is not a counter
+# Unit: the unit of the counter
 # Volume: the counter value
 # User ID: the user ID
 # Project ID: the project ID
@@ -41,6 +53,7 @@ Counter = collections.namedtuple('Counter',
                                  ' '.join([
                                      'name',
                                      'type',
+                                     'unit',
                                      'volume',
                                      'user_id',
                                      'project_id',

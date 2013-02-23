@@ -13,8 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from oslo.config import cfg
 
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import context as req_context
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log as logging
@@ -41,6 +41,6 @@ def notify(context, message):
         topic = '%s.%s' % (topic, priority)
         try:
             rpc.notify(context, topic, message)
-        except Exception, e:
+        except Exception:
             LOG.exception(_("Could not send notification to %(topic)s. "
                             "Payload=%(message)s"), locals())

@@ -14,12 +14,13 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import os
 from functools import wraps
-from novaclient.v1_1 import client as nova_client
 
-import ceilometer.service
-from ceilometer.openstack.common import cfg, log
+from novaclient.v1_1 import client as nova_client
+from oslo.config import cfg
+
+from ceilometer.openstack.common import log
+from ceilometer import service  # For cfg.CONF.os_*
 
 LOG = log.getLogger(__name__)
 
@@ -61,8 +62,8 @@ class Client(object):
         """Returns list of instances on particular host"""
         search_opts = {'host': hostname, 'all_tenants': True}
         return self._with_flavor(self.nova_client.servers.list(
-                                                  detailed=True,
-                                                  search_opts=search_opts))
+            detailed=True,
+            search_opts=search_opts))
 
     @logged
     def floating_ip_get_all(self):

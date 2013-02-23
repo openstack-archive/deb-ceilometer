@@ -22,9 +22,10 @@
 import datetime
 import logging
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
-from ceilometer.openstack.common import cfg
 
 from ceilometer.tests import api as tests_api
 
@@ -47,58 +48,58 @@ class TestListMeters(tests_api.TestBase):
                 counter.Counter(
                     'meter.test',
                     'cumulative',
+                    '',
                     1,
                     'user-id',
                     'project-id',
                     'resource-id',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 40),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter',
-                                   }),
+                                       'tag': 'self.counter'}),
                 counter.Counter(
                     'meter.test',
                     'cumulative',
+                    '',
                     3,
                     'user-id',
                     'project-id',
                     'resource-id',
                     timestamp=datetime.datetime(2012, 7, 2, 11, 40),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter',
-                                   }),
+                                       'tag': 'self.counter'}),
                 counter.Counter(
                     'meter.mine',
                     'gauge',
+                    '',
                     1,
                     'user-id',
                     'project-id',
                     'resource-id2',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 41),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'two.counter',
-                                   }),
+                                       'tag': 'two.counter'}),
                 counter.Counter(
                     'meter.test',
                     'cumulative',
+                    '',
                     1,
                     'user-id2',
                     'project-id2',
                     'resource-id3',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 42),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'three.counter',
-                                   }),
+                                       'tag': 'three.counter'}),
                 counter.Counter(
                     'meter.mine',
                     'gauge',
+                    '',
                     1,
                     'user-id4',
                     'project-id2',
                     'resource-id4',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 43),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'four.counter',
-                                   })]:
+                                       'tag': 'four.counter'})]:
             msg = meter.meter_message_from_counter(cnt,
                                                    cfg.CONF.metering_secret,
                                                    'test_list_resources')
@@ -231,7 +232,7 @@ class TestListMeters(tests_api.TestBase):
                                  "X-Tenant-Id": "project-id2"})
         self.assertEquals(1, len(data['meters']))
 
-    def test_metaquery2_non_admin(self):
+    def test_metaquery2_non_admin_wrong_project(self):
         data = self.get('/meters?metadata.tag=four.counter',
                         headers={"X-Roles": "Member",
                                  "X-Tenant-Id": "project-666"})

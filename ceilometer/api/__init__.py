@@ -17,8 +17,8 @@
 # under the License.
 
 import flask.helpers
+from oslo.config import cfg
 
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import jsonutils
 
 # Replace the json module used by flask with the one from
@@ -32,5 +32,5 @@ API_SERVICE_OPTS = [
                default=8777,
                help='The port for the ceilometer API server',
                ),
-    ]
+]
 cfg.CONF.register_opts(API_SERVICE_OPTS)

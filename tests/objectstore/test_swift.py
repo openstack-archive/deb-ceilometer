@@ -17,6 +17,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import mock
+from ceilometer.central import manager
 from ceilometer.objectstore import swift
 from ceilometer.tests import base
 
@@ -30,19 +32,33 @@ ACCOUNTS = [('tenant-000', {'x-account-object-count': 12,
                             })]
 
 
+class TestManager(manager.AgentManager):
+
+    def __init__(self):
+        super(TestManager, self).__init__()
+        self.keystone = None
+
+
 class TestSwiftPollster(base.TestCase):
 
     @staticmethod
-    def fake_iter_accounts(_dummy):
+    def fake_iter_accounts(self, ksclient):
         for i in ACCOUNTS:
             yield i
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
         super(TestSwiftPollster, self).setUp()
         self.pollster = swift.SwiftPollster()
+        self.manager = TestManager()
         self.stubs.Set(swift.SwiftPollster, 'iter_accounts',
                        self.fake_iter_accounts)
 
     def test_objectstore_metering(self):
-        counters = list(self.pollster.get_counters(None, None))
+        counters = list(self.pollster.get_counters(self.manager))
         self.assertEqual(len(counters), 6)
+
+    def test_objectstore_get_counter_names(self):
+        counters = list(self.pollster.get_counters(self.manager))
+        self.assertEqual(set([c.name for c in counters]),
+                         set(self.pollster.get_counter_names()))

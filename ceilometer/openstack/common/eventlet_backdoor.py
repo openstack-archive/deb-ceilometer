@@ -24,8 +24,7 @@ import traceback
 import eventlet
 import eventlet.backdoor
 import greenlet
-
-from ceilometer.openstack.common import cfg
+from oslo.config import cfg
 
 eventlet_backdoor_opts = [
     cfg.IntOpt('backdoor_port',
@@ -46,9 +45,16 @@ def _find_objects(t):
 
 
 def _print_greenthreads():
-    for i, gt in enumerate(find_objects(greenlet.greenlet)):
+    for i, gt in enumerate(_find_objects(greenlet.greenlet)):
         print i, gt
         traceback.print_stack(gt.gr_frame)
+        print
+
+
+def _print_nativethreads():
+    for threadId, stack in sys._current_frames().items():
+        print threadId
+        traceback.print_stack(stack)
         print
 
 
@@ -58,6 +64,7 @@ def initialize_if_enabled():
         'quit': _dont_use_this,      # So we don't exit the entire process
         'fo': _find_objects,
         'pgt': _print_greenthreads,
+        'pnt': _print_nativethreads,
     }
 
     if CONF.backdoor_port is None:

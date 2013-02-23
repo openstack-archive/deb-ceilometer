@@ -13,8 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from oslo.config import cfg
 
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import jsonutils
 from ceilometer.openstack.common import log as logging
 

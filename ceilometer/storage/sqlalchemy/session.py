@@ -22,7 +22,6 @@ import re
 import time
 
 import sqlalchemy
-from sqlalchemy import func
 from sqlalchemy.exc import DisconnectionError, OperationalError
 import sqlalchemy.orm
 from sqlalchemy.pool import NullPool, StaticPool
@@ -41,8 +40,8 @@ sql_opts = [
                help='Verbosity of SQL debugging information. 0=None, '
                     '100=Everything'),
     cfg.BoolOpt('sql_connection_trace',
-               default=False,
-               help='Add python stack traces to SQL as comment strings'),
+                default=False,
+                help='Add python stack traces to SQL as comment strings'),
     cfg.BoolOpt('sqlite_synchronous',
                 default=True,
                 help='If passed, use synchronous mode for sqlite'),
@@ -56,7 +55,7 @@ sql_opts = [
     cfg.IntOpt('sql_retry_interval',
                default=10,
                help='interval between retries of opening a sql connection'),
-           ]
+]
 
 cfg.CONF.register_opts(sql_opts)
 
@@ -121,7 +120,7 @@ def get_engine():
     global _ENGINE
     if _ENGINE is None:
         connection_dict = sqlalchemy.engine.url.make_url(
-                                                  cfg.CONF.database_connection)
+            cfg.CONF.database_connection)
 
         engine_args = {
             "pool_recycle": cfg.CONF.sql_idle_timeout,
@@ -169,7 +168,7 @@ def get_engine():
             if remaining == -1:
                 remaining = 'infinite'
             while True:
-                msg = _('SQL connection failed. %s attempts left.')
+                msg = 'SQL connection failed. %s attempts left.'
                 LOG.warn(msg % remaining)
                 if remaining != 'infinite':
                     remaining -= 1
@@ -178,8 +177,8 @@ def get_engine():
                     _ENGINE.connect()
                     break
                 except OperationalError, e:
-                    if (remaining != 'infinite' and remaining == 0) or \
-                       not is_db_connection_error(e.args[0]):
+                    if (remaining != 'infinite' and remaining == 0) \
+                            or not is_db_connection_error(e.args[0]):
                         raise
     return _ENGINE
 

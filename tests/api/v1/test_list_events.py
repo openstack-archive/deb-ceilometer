@@ -22,9 +22,10 @@
 import datetime
 import logging
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
-from ceilometer.openstack.common import cfg
 
 from ceilometer.tests import api as tests_api
 
@@ -39,38 +40,38 @@ class TestListEvents(tests_api.TestBase):
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     1,
                     'user-id',
                     'project1',
                     'resource-id',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 40),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter',
-                                   }
+                                       'tag': 'self.counter'}
                 ),
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     2,
                     'user-id',
                     'project1',
                     'resource-id',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 41),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter',
-                                   }
+                                       'tag': 'self.counter'}
                 ),
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     1,
                     'user-id2',
                     'project2',
                     'resource-id-alternate',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 42),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter2',
-                                   }
+                                       'tag': 'self.counter2'}
                 ),
         ]:
             msg = meter.meter_message_from_counter(cnt,
@@ -113,14 +114,14 @@ class TestListEvents(tests_api.TestBase):
 
     def test_by_resource_non_admin(self):
         data = self.get('/resources/resource-id-alternate/meters/instance',
-                                headers={"X-Roles": "Member",
-                                         "X-Tenant-Id": "project2"})
+                        headers={"X-Roles": "Member",
+                                 "X-Tenant-Id": "project2"})
         self.assertEquals(1, len(data['events']))
 
     def test_by_resource_some_tenant(self):
         data = self.get('/resources/resource-id/meters/instance',
-                                headers={"X-Roles": "Member",
-                                         "X-Tenant-Id": "project2"})
+                        headers={"X-Roles": "Member",
+                                 "X-Tenant-Id": "project2"})
         self.assertEquals(0, len(data['events']))
 
     def test_empty_source(self):
@@ -165,7 +166,7 @@ class TestListEvents(tests_api.TestBase):
     def test_by_user_with_timestamps(self):
         data = self.get('/users/user-id/meters/instance',
                         start_timestamp=datetime.datetime(2012, 7, 2, 10, 41),
-                          end_timestamp=datetime.datetime(2012, 7, 2, 10, 42))
+                        end_timestamp=datetime.datetime(2012, 7, 2, 10, 42))
         self.assertEquals(1, len(data['events']))
 
     def test_metaquery1(self):
@@ -200,6 +201,12 @@ class TestListEvents(tests_api.TestBase):
     def test_metaquery3_with_project(self):
         q = '/sources/source1/meters/instance'
         data = self.get('%s?metadata.display_name=test-server' % q,
-                    headers={"X-Roles": "Member",
-                             "X-Tenant-Id": "project2"})
+                        headers={"X-Roles": "Member",
+                                 "X-Tenant-Id": "project2"})
         self.assertEquals(1, len(data['events']))
+
+    def test_template_list_event(self):
+        rv = self.get('/resources/resource-id/meters/instance',
+                      headers={"Accept": "text/html"})
+        self.assertEqual(200, rv.status_code)
+        self.assertTrue("text/html" in rv.content_type)

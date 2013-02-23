@@ -16,15 +16,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from stevedore import extension
+from oslo.config import cfg
+from stevedore import dispatch
 
-from ceilometer.collector import meter
+from ceilometer.collector import meter as meter_api
 from ceilometer import extension_manager
-from ceilometer import publish
+from ceilometer import pipeline
 from ceilometer import service
 from ceilometer import storage
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer.openstack.common.rpc import dispatcher as rpc_dispatcher
@@ -35,7 +35,7 @@ OPTS = [
                 default=[],
                 help='list of listener plugins to disable',
                 ),
-    ]
+]
 
 cfg.CONF.register_opts(OPTS)
 
@@ -56,16 +56,23 @@ class CollectorService(service.PeriodicService):
 
     def initialize_service_hook(self, service):
         '''Consumers must be declared before consume_thread start.'''
-        self.ext_manager = extension_manager.ActivatedExtensionManager(
-            namespace=self.COLLECTOR_NAMESPACE,
-            disabled_names=cfg.CONF.disabled_notification_listeners,
+        publisher_manager = dispatch.NameDispatchExtensionManager(
+            namespace=pipeline.PUBLISHER_NAMESPACE,
+            check_func=lambda x: True,
+            invoke_on_load=True,
+        )
+        self.pipeline_manager = pipeline.setup_pipeline(publisher_manager)
+
+        self.notification_manager = \
+            extension_manager.ActivatedExtensionManager(
+                namespace=self.COLLECTOR_NAMESPACE,
+                disabled_names=cfg.CONF.disabled_notification_listeners,
             )
 
-        if not list(self.ext_manager):
+        if not list(self.notification_manager):
             LOG.warning('Failed to load any notification handlers for %s',
                         self.COLLECTOR_NAMESPACE)
-
-        self.ext_manager.map(self._setup_subscription)
+        self.notification_manager.map(self._setup_subscription)
 
         # Set ourselves up as a separate worker for the metering data,
         # since the default for service is to use create_consumer().
@@ -73,7 +80,7 @@ class CollectorService(service.PeriodicService):
             cfg.CONF.metering_topic,
             rpc_dispatcher.RpcDispatcher([self]),
             'ceilometer.collector.' + cfg.CONF.metering_topic,
-            )
+        )
 
     def _setup_subscription(self, ext, *args, **kwds):
         handler = ext.obj
@@ -81,66 +88,63 @@ class CollectorService(service.PeriodicService):
                   ext.name, ', '.join(handler.get_event_types()))
         for exchange_topic in handler.get_exchange_topics(cfg.CONF):
             for topic in exchange_topic.topics:
-                # FIXME(dhellmann): Should be using create_worker(), except
-                # that notification messages do not conform to the RPC
-                # invocation protocol (they do not include a "method"
-                # parameter).
-                self.conn.declare_topic_consumer(
-                    queue_name="ceilometer.notifications",
-                    topic=topic,
-                    exchange_name=exchange_topic.exchange,
-                    callback=self.process_notification,
+                try:
+                    self.conn.join_consumer_pool(
+                        callback=self.process_notification,
+                        pool_name='ceilometer.notifications',
+                        topic=topic,
+                        exchange_name=exchange_topic.exchange,
                     )
+                except Exception:
+                    LOG.exception('Could not join consumer pool %s/%s' %
+                                  (topic, exchange_topic.exchange))
 
     def process_notification(self, notification):
         """Make a notification processed by an handler."""
         LOG.debug('notification %r', notification.get('event_type'))
-        self.ext_manager.map(self._process_notification_for_ext,
-                             notification=notification,
-                             )
+        self.notification_manager.map(self._process_notification_for_ext,
+                                      notification=notification,
+                                      )
 
     def _process_notification_for_ext(self, ext, notification):
         handler = ext.obj
         if notification['event_type'] in handler.get_event_types():
-            for c in handler.process_notification(notification):
-                LOG.info('COUNTER: %s', c)
+            ctxt = context.get_admin_context()
+            with self.pipeline_manager.publisher(ctxt,
+                                                 cfg.CONF.counter_source) as p:
                 # FIXME(dhellmann): Spawn green thread?
-                self.publish_counter(c)
-
-    @staticmethod
-    def publish_counter(counter):
-        """Create a metering message for the counter and publish it."""
-        ctxt = context.get_admin_context()
-        publish.publish_counter(ctxt, counter,
-                                cfg.CONF.metering_topic,
-                                cfg.CONF.metering_secret,
-                                cfg.CONF.counter_source)
+                p(list(handler.process_notification(notification)))
 
     def record_metering_data(self, context, data):
         """This method is triggered when metering data is
         cast from an agent.
         """
-        #LOG.info('metering data: %r', data)
-        LOG.info('metering data %s for %s @ %s: %s',
-                 data['counter_name'],
-                 data['resource_id'],
-                 data.get('timestamp', 'NO TIMESTAMP'),
-                 data['counter_volume'])
-        if not meter.verify_signature(data, cfg.CONF.metering_secret):
-            LOG.warning('message signature invalid, discarding message: %r',
-                        data)
-        else:
-            try:
-                # Convert the timestamp to a datetime instance.
-                # Storage engines are responsible for converting
-                # that value to something they can store.
-                if data.get('timestamp'):
-                    ts = timeutils.parse_isotime(data['timestamp'])
-                    data['timestamp'] = timeutils.normalize_time(ts)
-                self.storage_conn.record_metering_data(data)
-            except Exception as err:
-                LOG.error('Failed to record metering data: %s', err)
-                LOG.exception(err)
+        # We may have receive only one counter on the wire
+        if not isinstance(data, list):
+            data = [data]
+
+        for meter in data:
+            LOG.info('metering data %s for %s @ %s: %s',
+                     meter['counter_name'],
+                     meter['resource_id'],
+                     meter.get('timestamp', 'NO TIMESTAMP'),
+                     meter['counter_volume'])
+            if meter_api.verify_signature(meter, cfg.CONF.metering_secret):
+                try:
+                    # Convert the timestamp to a datetime instance.
+                    # Storage engines are responsible for converting
+                    # that value to something they can store.
+                    if meter.get('timestamp'):
+                        ts = timeutils.parse_isotime(meter['timestamp'])
+                        meter['timestamp'] = timeutils.normalize_time(ts)
+                    self.storage_conn.record_metering_data(meter)
+                except Exception as err:
+                    LOG.error('Failed to record metering data: %s', err)
+                    LOG.exception(err)
+            else:
+                LOG.warning(
+                    'message signature invalid, discarding message: %r',
+                    meter)
 
     def periodic_tasks(self, context):
         pass

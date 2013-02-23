@@ -20,9 +20,10 @@
 
 """
 
+from oslo.config import cfg
+
 from ceilometer import counter
 from ceilometer import plugin
-from ceilometer.openstack.common import cfg
 from ceilometer.openstack.common import log as logging
 
 
@@ -75,6 +76,7 @@ class NetworkNotificationBase(plugin.NotificationBase):
 
         yield counter.Counter(name=counter_name,
                               type=counter.TYPE_GAUGE,
+                              unit=self.resource_name,
                               volume=1,
                               user_id=message['_context_user_id'],
                               project_id=message['payload']['tenant_id'],
@@ -88,6 +90,7 @@ class NetworkNotificationBase(plugin.NotificationBase):
             yield counter.Counter(name=counter_name
                                   + "." + event_type_split[1],
                                   type=counter.TYPE_DELTA,
+                                  unit=self.resource_name,
                                   volume=1,
                                   user_id=message['_context_user_id'],
                                   project_id=message['payload']['tenant_id'],

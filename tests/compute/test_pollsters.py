@@ -28,8 +28,6 @@ from ceilometer.compute import manager
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer.tests import base as test_base
 
-import mox
-
 
 class TestPollsterBase(test_base.TestCase):
 
@@ -51,6 +49,7 @@ class TestInstancePollster(TestPollsterBase):
     def setUp(self):
         super(TestInstancePollster, self).setUp()
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def test_get_counters(self):
         self.mox.ReplayAll()
 
@@ -67,13 +66,14 @@ class TestDiskIOPollster(TestPollsterBase):
     def setUp(self):
         super(TestDiskIOPollster, self).setUp()
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def test_get_counters(self):
         disks = [
-                 (virt_inspector.Disk(device='vda'),
-                  virt_inspector.DiskStats(read_bytes=1L, read_requests=2L,
-                                           write_bytes=3L, write_requests=4L,
-                                           errors=-1L))
-                ]
+            (virt_inspector.Disk(device='vda'),
+             virt_inspector.DiskStats(read_bytes=1L, read_requests=2L,
+                                      write_bytes=3L, write_requests=4L,
+                                      errors=-1L))
+        ]
         self.inspector.inspect_disks(self.instance.name).AndReturn(disks)
         self.mox.ReplayAll()
 
@@ -81,6 +81,9 @@ class TestDiskIOPollster(TestPollsterBase):
         pollster = pollsters.DiskIOPollster()
         counters = list(pollster.get_counters(mgr, self.instance))
         assert counters
+
+        self.assertEqual(set([c.name for c in counters]),
+                         set(pollster.get_counter_names()))
 
         def _verify_disk_metering(name, expected_volume):
             match = [c for c in counters if c.name == name]
@@ -99,23 +102,26 @@ class TestNetPollster(TestPollsterBase):
     def setUp(self):
         super(TestNetPollster, self).setUp()
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def test_get_counters(self):
-        vnic0 = virt_inspector.Interface(name='vnet0',
-                                         fref='fa163e71ec6e',
-                                         mac='fa:16:3e:71:ec:6d',
-                                         parameters=dict(ip='10.0.0.2',
-                                                     projmask='255.255.255.0',
-                                                     projnet='proj1',
-                                                     dhcp_server='10.0.0.1'))
+        vnic0 = virt_inspector.Interface(
+            name='vnet0',
+            fref='fa163e71ec6e',
+            mac='fa:16:3e:71:ec:6d',
+            parameters=dict(ip='10.0.0.2',
+                            projmask='255.255.255.0',
+                            projnet='proj1',
+                            dhcp_server='10.0.0.1'))
         stats0 = virt_inspector.InterfaceStats(rx_bytes=1L, rx_packets=2L,
                                                tx_bytes=3L, tx_packets=4L)
-        vnic1 = virt_inspector.Interface(name='vnet1',
-                                         fref='fa163e71ec6f',
-                                         mac='fa:16:3e:71:ec:6e',
-                                         parameters=dict(ip='192.168.0.3',
-                                                     projmask='255.255.255.0',
-                                                     projnet='proj2',
-                                                     dhcp_server='10.0.0.2'))
+        vnic1 = virt_inspector.Interface(
+            name='vnet1',
+            fref='fa163e71ec6f',
+            mac='fa:16:3e:71:ec:6e',
+            parameters=dict(ip='192.168.0.3',
+                            projmask='255.255.255.0',
+                            projnet='proj2',
+                            dhcp_server='10.0.0.2'))
         stats1 = virt_inspector.InterfaceStats(rx_bytes=5L, rx_packets=6L,
                                                tx_bytes=7L, tx_packets=8L)
         vnics = [(vnic0, stats0), (vnic1, stats1)]
@@ -127,6 +133,8 @@ class TestNetPollster(TestPollsterBase):
         pollster = pollsters.NetPollster()
         counters = list(pollster.get_counters(mgr, self.instance))
         assert counters
+        self.assertEqual(set([c.name for c in counters]),
+                         set(pollster.get_counter_names()))
 
         def _verify_vnic_metering(name, ip, expected_volume):
             match = [c for c in counters if c.name == name and
@@ -150,6 +158,7 @@ class TestCPUPollster(TestPollsterBase):
     def setUp(self):
         super(TestCPUPollster, self).setUp()
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def test_get_counters(self):
         self.inspector.inspect_cpus(self.instance.name).AndReturn(
             virt_inspector.CPUStats(time=1 * (10 ** 6), number=2))
@@ -166,6 +175,8 @@ class TestCPUPollster(TestPollsterBase):
         def _verify_cpu_metering(zero, expected_time):
             counters = list(pollster.get_counters(mgr, self.instance))
             self.assertEquals(len(counters), 2)
+            self.assertEqual(set([c.name for c in counters]),
+                             set(pollster.get_counter_names()))
             assert counters[0].name == 'cpu_util'
             assert (counters[0].volume == 0.0 if zero else
                     counters[0].volume > 0.0)

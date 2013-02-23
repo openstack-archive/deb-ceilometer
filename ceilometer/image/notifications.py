@@ -19,11 +19,10 @@
    events.
 """
 
+from oslo.config import cfg
+
 from ceilometer import counter
 from ceilometer import plugin
-
-from ceilometer.openstack.common import cfg
-
 
 OPTS = [
     cfg.StrOpt('glance_control_exchange',
@@ -90,6 +89,7 @@ class ImageCRUD(ImageCRUDBase):
             counter.Counter(
                 name=message['event_type'],
                 type=counter.TYPE_DELTA,
+                unit='event',
                 volume=1,
                 resource_id=message['payload']['id'],
                 user_id=None,
@@ -108,6 +108,7 @@ class Image(ImageCRUDBase):
             counter.Counter(
                 name='image',
                 type=counter.TYPE_GAUGE,
+                unit='image',
                 volume=1,
                 resource_id=message['payload']['id'],
                 user_id=None,
@@ -126,6 +127,7 @@ class ImageSize(ImageCRUDBase):
             counter.Counter(
                 name='image.size',
                 type=counter.TYPE_GAUGE,
+                unit='B',
                 volume=message['payload']['size'],
                 resource_id=message['payload']['id'],
                 user_id=None,
@@ -153,6 +155,7 @@ class ImageDownload(ImageBase):
             counter.Counter(
                 name='image.download',
                 type=counter.TYPE_DELTA,
+                unit='B',
                 volume=message['payload']['bytes_sent'],
                 resource_id=message['payload']['image_id'],
                 user_id=message['payload']['receiver_user_id'],
@@ -181,6 +184,7 @@ class ImageServe(ImageBase):
             counter.Counter(
                 name='image.serve',
                 type=counter.TYPE_DELTA,
+                unit='B',
                 volume=message['payload']['bytes_sent'],
                 resource_id=message['payload']['image_id'],
                 user_id=None,

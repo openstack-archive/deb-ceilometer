@@ -16,14 +16,18 @@
 """SQLAlchemy storage backend
 """
 
+from __future__ import absolute_import
+
 import copy
 import datetime
+import math
+from sqlalchemy import func
 
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
 from ceilometer.storage import base
 from ceilometer.storage.sqlalchemy.models import Meter, Project, Resource
 from ceilometer.storage.sqlalchemy.models import Source, User
-from ceilometer.storage.sqlalchemy.session import func
 import ceilometer.storage.sqlalchemy.session as sqlalchemy_session
 from ceilometer.storage.sqlalchemy import migration
 
@@ -50,6 +54,7 @@ class SQLAlchemyStorage(base.StorageEngine):
               resource_id: resource uuid    (->resource.id)
               resource_metadata: metadata dictionaries
               counter_type: counter type
+              counter_unit: counter unit
               counter_volume: counter volume
               timestamp: datetime
               message_signature: message signature
@@ -100,7 +105,7 @@ def make_query_from_filter(query, event_filter, require_meter=True):
     elif require_meter:
         raise RuntimeError('Missing required meter specifier')
     if event_filter.source:
-        query = query.filter_by(source=event_filter.source)
+        query = query.filter(Meter.sources.any(id=event_filter.source))
     if event_filter.start:
         ts_start = event_filter.start
         query = query.filter(Meter.timestamp >= ts_start)
@@ -184,6 +189,7 @@ class Connection(base.Connection):
 
         # Record the raw data for the event.
         meter = Meter(counter_type=data['counter_type'],
+                      counter_unit=data['counter_unit'],
                       counter_name=data['counter_name'], resource=resource)
         self.session.add(meter)
         if not filter(lambda x: x.id == source.id, meter.sources):
@@ -220,7 +226,7 @@ class Connection(base.Connection):
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
-                      metaquery=None):
+                      metaquery=None, resource=None):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -237,6 +243,7 @@ class Connection(base.Connection):
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
         :param metaquery: Optional dict with metadata to match on.
+        :param resource: Optional resource filter.
         """
         query = model_query(Resource, session=self.session)
         if user is not None:
@@ -249,8 +256,10 @@ class Connection(base.Connection):
             query = query.filter(Resource.timestamp < end_timestamp)
         if project is not None:
             query = query.filter(Resource.project_id == project)
+        if resource is not None:
+            query = query.filter(Resource.id == resource)
         query = query.options(
-                    sqlalchemy_session.sqlalchemy.orm.joinedload('meters'))
+            sqlalchemy_session.sqlalchemy.orm.joinedload('meters'))
         if metaquery is not None:
             raise NotImplementedError('metaquery not implemented')
 
@@ -274,6 +283,7 @@ class Connection(base.Connection):
 
         { 'name': name of the meter,
           'type': type of the meter (guage, counter),
+          'unit': unit of the meter,
           'resource_id': UUID of the resource,
           'project_id': UUID of project owning the resource,
           'user_id': UUID of user owning the resource,
@@ -295,7 +305,7 @@ class Connection(base.Connection):
         if project is not None:
             query = query.filter(Resource.project_id == project)
         query = query.options(
-                    sqlalchemy_session.sqlalchemy.orm.joinedload('meters'))
+            sqlalchemy_session.sqlalchemy.orm.joinedload('meters'))
         if len(metaquery) > 0:
             raise NotImplementedError('metaquery not implemented')
 
@@ -311,6 +321,7 @@ class Connection(base.Connection):
                 m['user_id'] = resource.user_id
                 m['name'] = meter.counter_name
                 m['type'] = meter.counter_type
+                m['unit'] = meter.counter_unit
                 yield m
 
     def get_raw_events(self, event_filter):
@@ -328,6 +339,11 @@ class Connection(base.Connection):
             # detail that should not leak outside of the driver.
             e = row2dict(e)
             del e['id']
+            # Replace 'sources' with 'source' to meet the caller's
+            # expectation, Meter.sources contains one and only one
+            # source in the current implementation.
+            e['source'] = e['sources'][0]['id']
+            del e['sources']
             yield e
 
     def _make_volume_query(self, event_filter, counter_volume_func):
@@ -364,8 +380,78 @@ class Connection(base.Connection):
         a_min, a_max = results[0]
         return (a_min, a_max)
 
+    def _make_stats_query(self, event_filter):
+        query = self.session.query(
+            func.min(Meter.timestamp).label('tsmin'),
+            func.max(Meter.timestamp).label('tsmax'),
+            func.avg(Meter.counter_volume).label('avg'),
+            func.sum(Meter.counter_volume).label('sum'),
+            func.min(Meter.counter_volume).label('min'),
+            func.max(Meter.counter_volume).label('max'),
+            func.count(Meter.counter_volume).label('count'))
 
-############################
+        return make_query_from_filter(query, event_filter)
+
+    @staticmethod
+    def _stats_result_to_dict(result, period_start, period_end):
+        return {'count': result.count,
+                'min': result.min,
+                'max': result.max,
+                'avg': result.avg,
+                'sum': result.sum,
+                'duration_start': result.tsmin,
+                'duration_end': result.tsmax,
+                'duration': timeutils.delta_seconds(result.tsmin,
+                                                    result.tsmax),
+                'period': timeutils.delta_seconds(period_start, period_end),
+                'period_start': period_start,
+                'period_end': period_end}
+
+    def get_meter_statistics(self, event_filter, period=None):
+        """Return a dictionary containing meter statistics.
+        described by the query parameters.
+
+        The filter must have a meter value set.
+
+        { 'min':
+          'max':
+          'avg':
+          'sum':
+          'count':
+          'period':
+          'period_start':
+          'period_end':
+          'duration':
+          'duration_start':
+          'duration_end':
+          }
+        """
+
+        res = self._make_stats_query(event_filter).all()[0]
+
+        if not period:
+            return [self._stats_result_to_dict(res, res.tsmin, res.tsmax)]
+
+        query = self._make_stats_query(event_filter)
+        # HACK(jd) This is an awful method to compute stats by period, but
+        # since we're trying to be SQL agnostic we have to write portable
+        # code, so here it is, admire! We're going to do one request to get
+        # stats by period. We would like to use GROUP BY, but there's no
+        # portable way to manipulate timestamp in SQL, so we can't.
+        results = []
+        for i in range(int(math.ceil(
+                timeutils.delta_seconds(event_filter.start or res.tsmin,
+                                        event_filter.end or res.tsmax)
+                / float(period)))):
+            period_start = (event_filter.start
+                            + datetime.timedelta(seconds=i * period))
+            period_end = period_start + datetime.timedelta(seconds=period)
+            q = query.filter(Meter.timestamp >= period_start)
+            q = q.filter(Meter.timestamp < period_end)
+            results.append(self._stats_result_to_dict(q.all()[0],
+                                                      period_start,
+                                                      period_end))
+        return results
 
 
 def model_query(*args, **kwargs):

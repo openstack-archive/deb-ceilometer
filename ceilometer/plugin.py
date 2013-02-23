@@ -21,10 +21,9 @@
 import abc
 from collections import namedtuple
 
-from ceilometer.openstack.common import cfg
-# Import rabbit_notifier to register notification_topics flag so that
+# Import rpc_notifier to register notification_topics flag so that
 # plugins can use it
-import ceilometer.openstack.common.notifier.rabbit_notifier
+import ceilometer.openstack.common.notifier.rpc_notifier
 
 
 ExchangeTopics = namedtuple('ExchangeTopics', ['exchange', 'topics'])
@@ -57,11 +56,16 @@ class NotificationBase(PluginBase):
     @abc.abstractmethod
     def get_exchange_topics(self, conf):
         """Return a sequence of ExchangeTopics defining the exchange and
-        topics to be connected for this plugin."""
+        topics to be connected for this plugin.
+
+        :param conf: Configuration.
+        """
 
     @abc.abstractmethod
     def process_notification(self, message):
-        """Return a sequence of Counter instances for the given message."""
+        """Return a sequence of Counter instances for the given message.
+
+        :param message: Message to process."""
 
     def notification_to_metadata(self, event):
         """Transform a payload dict to a metadata dict."""
@@ -78,6 +82,54 @@ class PollsterBase(PluginBase):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
+    def get_counter_names(self):
+        """Return a sequence of Counter names supported by the pollster."""
+
+    @abc.abstractmethod
     def get_counters(self, manager, instance):
         """Return a sequence of Counter instances from polling the
         resources."""
+
+
+class PublisherBase(PluginBase):
+    """Base class for plugins that publish the sampler."""
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def publish_counters(self, context, counters, source):
+        "Publish counters into final conduit."
+
+
+class TransformerBase(PluginBase):
+    """Base class for plugins that transform the counter."""
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def handle_sample(self, context, counter, source):
+        """Transform a counter.
+
+        :param context: Passed from the data collector.
+        :param counter: A counter.
+        :param source: Passed from data collector.
+        """
+
+    def flush(self, context, source):
+        """Flush counters cached previously.
+
+        :param context: Passed from the data collector.
+        :param source: Source of counters that are being published."""
+        return []
+
+    def __init__(self, **kwargs):
+        """Setup transformer.
+
+        Each time a transformed is involved in a pipeline, a new transformer
+        instance is created and chained into the pipeline. i.e. transformer
+        instance is per pipeline. This helps if transformer need keep some
+        cache and per-pipeline information.
+
+        :param kwargs: The parameters that are defined in pipeline config file.
+        """
+        super(TransformerBase, self).__init__()

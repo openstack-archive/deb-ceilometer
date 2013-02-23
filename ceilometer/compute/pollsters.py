@@ -35,33 +35,40 @@ def _instance_name(instance):
     return getattr(instance, 'OS-EXT-SRV-ATTR:instance_name', None)
 
 
-def make_counter_from_instance(instance, name, type, volume):
+def make_counter_from_instance(instance, name, type, unit, volume):
     return counter.Counter(
         name=name,
         type=type,
+        unit=unit,
         volume=volume,
         user_id=instance.user_id,
         project_id=instance.tenant_id,
         resource_id=instance.id,
         timestamp=timeutils.isotime(),
         resource_metadata=compute_instance.get_metadata_from_object(instance),
-        )
+    )
 
 
 class InstancePollster(plugin.ComputePollster):
+
+    @staticmethod
+    def get_counter_names():
+        # Instance type counter is specific because it includes
+        # variable. We don't need such format in future
+        return ['instance', 'instance:*']
 
     def get_counters(self, manager, instance):
         yield make_counter_from_instance(instance,
                                          name='instance',
                                          type=counter.TYPE_GAUGE,
-                                         volume=1,
-        )
+                                         unit='instance',
+                                         volume=1)
         yield make_counter_from_instance(instance,
                                          name='instance:%s' %
                                          instance.flavor['name'],
                                          type=counter.TYPE_GAUGE,
-                                         volume=1,
-        )
+                                         unit='instance',
+                                         volume=1)
 
 
 class DiskIOPollster(plugin.ComputePollster):
@@ -76,6 +83,13 @@ class DiskIOPollster(plugin.ComputePollster):
                                      "write-bytes=%d",
                                      "errors=%d",
                                      ])
+
+    @staticmethod
+    def get_counter_names():
+        return ['disk.read.requests',
+                'disk.read.bytes',
+                'disk.write.requests',
+                'disk.write.bytes']
 
     def get_counters(self, manager, instance):
         instance_name = _instance_name(instance)
@@ -96,21 +110,25 @@ class DiskIOPollster(plugin.ComputePollster):
             yield make_counter_from_instance(instance,
                                              name='disk.read.requests',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='request',
                                              volume=r_requests,
                                              )
             yield make_counter_from_instance(instance,
                                              name='disk.read.bytes',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='B',
                                              volume=r_bytes,
                                              )
             yield make_counter_from_instance(instance,
                                              name='disk.write.requests',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='request',
                                              volume=w_requests,
                                              )
             yield make_counter_from_instance(instance,
                                              name='disk.write.bytes',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='B',
                                              volume=w_bytes,
                                              )
         except Exception as err:
@@ -142,6 +160,10 @@ class CPUPollster(plugin.ComputePollster):
             cpu_util = 100 * cores_fraction * time_used / elapsed
         return cpu_util
 
+    @staticmethod
+    def get_counter_names():
+        return ['cpu', 'cpu_util']
+
     def get_counters(self, manager, instance):
         self.LOG.info('checking instance %s', instance.id)
         instance_name = _instance_name(instance)
@@ -160,11 +182,13 @@ class CPUPollster(plugin.ComputePollster):
             yield make_counter_from_instance(instance,
                                              name='cpu_util',
                                              type=counter.TYPE_GAUGE,
+                                             unit='%',
                                              volume=cpu_util,
                                              )
             yield make_counter_from_instance(instance,
                                              name='cpu',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='ns',
                                              volume=cpu_info.time,
                                              )
         except Exception as err:
@@ -181,16 +205,17 @@ class NetPollster(plugin.ComputePollster):
                                   "write-bytes=%d"])
 
     @staticmethod
-    def make_vnic_counter(instance, name, type, volume, vnic_data):
+    def make_vnic_counter(instance, name, type, unit, volume, vnic_data):
         metadata = copy.copy(vnic_data)
         resource_metadata = dict(zip(metadata._fields, metadata))
         resource_metadata['instance_id'] = instance.id
-        resource_metadata['instance_type'] = instance.flavor['id'] if   \
-                        instance.flavor else None,
+        resource_metadata['instance_type'] = \
+            instance.flavor['id'] if instance.flavor else None
 
         return counter.Counter(
             name=name,
             type=type,
+            unit=unit,
             volume=volume,
             user_id=instance.user_id,
             project_id=instance.tenant_id,
@@ -198,6 +223,13 @@ class NetPollster(plugin.ComputePollster):
             timestamp=timeutils.isotime(),
             resource_metadata=resource_metadata
         )
+
+    @staticmethod
+    def get_counter_names():
+        return ['network.incoming.bytes',
+                'network.incoming.packets',
+                'network.outgoing.bytes',
+                'network.outgoing.packets']
 
     def get_counters(self, manager, instance):
         instance_name = _instance_name(instance)
@@ -209,24 +241,28 @@ class NetPollster(plugin.ComputePollster):
                 yield self.make_vnic_counter(instance,
                                              name='network.incoming.bytes',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='B',
                                              volume=info.rx_bytes,
                                              vnic_data=vnic,
                                              )
                 yield self.make_vnic_counter(instance,
                                              name='network.outgoing.bytes',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='B',
                                              volume=info.tx_bytes,
                                              vnic_data=vnic,
                                              )
                 yield self.make_vnic_counter(instance,
                                              name='network.incoming.packets',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='packet',
                                              volume=info.rx_packets,
                                              vnic_data=vnic,
                                              )
                 yield self.make_vnic_counter(instance,
                                              name='network.outgoing.packets',
                                              type=counter.TYPE_CUMULATIVE,
+                                             unit='packet',
                                              volume=info.tx_packets,
                                              vnic_data=vnic,
                                              )

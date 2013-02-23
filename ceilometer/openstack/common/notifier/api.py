@@ -15,7 +15,8 @@
 
 import uuid
 
-from ceilometer.openstack.common import cfg
+from oslo.config import cfg
+
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import importutils
@@ -137,10 +138,11 @@ def notify(context, publisher_id, event_type, priority, payload):
     for driver in _get_drivers():
         try:
             driver.notify(context, msg)
-        except Exception, e:
+        except Exception as e:
             LOG.exception(_("Problem '%(e)s' attempting to "
                             "send to notification system. "
-                            "Payload=%(payload)s") % locals())
+                            "Payload=%(payload)s")
+                          % dict(e=e, payload=payload))
 
 
 _drivers = None
@@ -166,7 +168,7 @@ def add_driver(notification_driver):
         try:
             driver = importutils.import_module(notification_driver)
             _drivers[notification_driver] = driver
-        except ImportError as e:
+        except ImportError:
             LOG.exception(_("Failed to load notifier %s. "
                             "These notifications will not be sent.") %
                           notification_driver)

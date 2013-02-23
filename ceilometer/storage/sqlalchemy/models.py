@@ -22,7 +22,7 @@ import json
 from sqlalchemy import Column, Integer, String, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import ForeignKey, DateTime
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship
 from sqlalchemy.types import TypeDecorator, VARCHAR
 from urlparse import urlparse
 
@@ -33,7 +33,7 @@ sql_opts = [
     cfg.StrOpt('mysql_engine',
                default='InnoDB',
                help='MySQL engine')
-           ]
+]
 
 cfg.CONF.register_opts(sql_opts)
 
@@ -78,12 +78,16 @@ Base = declarative_base(cls=CeilometerBase)
 
 
 sourceassoc = Table('sourceassoc', Base.metadata,
-    Column('meter_id', Integer, ForeignKey("meter.id")),
-    Column('project_id', String(255), ForeignKey("project.id")),
-    Column('resource_id', String(255), ForeignKey("resource.id")),
-    Column('user_id', String(255), ForeignKey("user.id")),
-    Column('source_id', String(255), ForeignKey("source.id"))
-)
+                    Column('meter_id', Integer,
+                           ForeignKey("meter.id")),
+                    Column('project_id', String(255),
+                           ForeignKey("project.id")),
+                    Column('resource_id', String(255),
+                           ForeignKey("resource.id")),
+                    Column('user_id', String(255),
+                           ForeignKey("user.id")),
+                    Column('source_id', String(255),
+                           ForeignKey("source.id")))
 
 
 class Source(Base):
@@ -103,6 +107,7 @@ class Meter(Base):
     resource_id = Column(String(255), ForeignKey('resource.id'))
     resource_metadata = Column(JSONEncodedDict)
     counter_type = Column(String(255))
+    counter_unit = Column(String(255))
     counter_volume = Column(Integer)
     timestamp = Column(DateTime, default=timeutils.utcnow)
     message_signature = Column(String)

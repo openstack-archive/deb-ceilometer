@@ -20,7 +20,9 @@
 import os
 import socket
 
-from ceilometer.openstack.common import cfg
+from oslo.config import cfg
+
+from ceilometer.openstack.common import rpc
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common.rpc import service as rpc_service
@@ -66,8 +68,8 @@ class PeriodicService(rpc_service.Service):
         super(PeriodicService, self).start()
         admin_context = context.RequestContext('admin', 'admin', is_admin=True)
         self.tg.add_timer(cfg.CONF.periodic_interval,
-                    self.manager.periodic_tasks,
-                    context=admin_context)
+                          self.manager.periodic_tasks,
+                          context=admin_context)
 
 
 def _sanitize_cmd_line(argv):
@@ -77,5 +79,6 @@ def _sanitize_cmd_line(argv):
 
 
 def prepare_service(argv=[]):
+    rpc.set_defaults(control_exchange='ceilometer')
     cfg.CONF(argv[1:], project='ceilometer')
     log.setup('ceilometer')

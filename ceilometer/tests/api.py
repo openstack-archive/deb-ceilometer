@@ -21,21 +21,17 @@
 import json
 import os
 import urllib
-import unittest
 
 import flask
+from oslo.config import cfg
 from pecan import set_config
 from pecan.testing import load_test_app
-
-import mox
-import stubout
 
 from ceilometer import storage
 from ceilometer.api.v1 import app as v1_app
 from ceilometer.api.v1 import blueprint as v1_blueprint
-from ceilometer.api.controllers import v2
-from ceilometer.openstack.common import cfg
 from ceilometer.tests import db as db_test_base
+from ceilometer.tests import base
 
 
 class TestBase(db_test_base.TestBase):
@@ -44,7 +40,9 @@ class TestBase(db_test_base.TestBase):
 
     def setUp(self):
         super(TestBase, self).setUp()
-        self.app = v1_app.make_app(enable_acl=False, attach_storage=False)
+        self.app = v1_app.make_app(cfg.CONF,
+                                   enable_acl=False,
+                                   attach_storage=False)
         self.app.register_blueprint(v1_blueprint.blueprint)
         self.test_app = self.app.test_client()
 
@@ -68,7 +66,7 @@ class TestBase(db_test_base.TestBase):
         return rv
 
 
-class FunctionalTest(unittest.TestCase):
+class FunctionalTest(base.TestCase):
     """
     Used for functional tests of Pecan controllers where you need to
     test your literal application and its integration with the
@@ -82,20 +80,21 @@ class FunctionalTest(unittest.TestCase):
     SOURCE_DATA = {'test_source': {'somekey': '666'}}
 
     def setUp(self):
+        super(FunctionalTest, self).setUp()
 
         cfg.CONF.database_connection = 'test://localhost/%s' % self.DBNAME
         self.conn = storage.get_connection(cfg.CONF)
-        # Don't want to use drop_database() because we
-        # may end up running out of spidermonkey instances.
-        # http://davisp.lighthouseapp.com/projects/26898/tickets/22
-        self.conn.conn[self.DBNAME].clear()
+        self.conn.drop_database(self.DBNAME)
+        self.app = self._make_app()
 
+    def _make_app(self, enable_acl=False):
         # Determine where we are so we can set up paths in the config
         root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                 '..',
                                                 '..',
                                                 )
                                    )
+
         self.config = {
 
             'app': {
@@ -103,7 +102,8 @@ class FunctionalTest(unittest.TestCase):
                 'modules': ['ceilometer.api'],
                 'static_root': '%s/public' % root_dir,
                 'template_path': '%s/ceilometer/api/templates' % root_dir,
-                },
+                'enable_acl': enable_acl,
+            },
 
             'logging': {
                 'loggers': {
@@ -112,55 +112,43 @@ class FunctionalTest(unittest.TestCase):
                     'ceilometer': {'level': 'DEBUG',
                                    'handlers': ['console'],
                                    },
-                    },
+                },
                 'handlers': {
                     'console': {
                         'level': 'DEBUG',
                         'class': 'logging.StreamHandler',
                         'formatter': 'simple'
-                        }
-                    },
+                    }
+                },
                 'formatters': {
                     'simple': {
                         'format': ('%(asctime)s %(levelname)-5.5s [%(name)s]'
                                    '[%(threadName)s] %(message)s')
-                        }
-                    },
+                    }
                 },
-            }
+            },
+        }
 
-        self.mox = mox.Mox()
-        self.stubs = stubout.StubOutForTesting()
-
-        self.app = self._make_app()
-        self._stubout_sources()
-
-    def _make_app(self):
         return load_test_app(self.config)
 
-    def _stubout_sources(self):
-        """Source data is usually read from a file, but
-        we want to let tests define their own. The class
-        attribute SOURCE_DATA is injected into the controller
-        as though it was read from the usual configuration
-        file.
-        """
-        self.stubs.SmartSet(v2.SourcesController, 'sources',
-                            self.SOURCE_DATA)
-
     def tearDown(self):
-        self.mox.UnsetStubs()
-        self.stubs.UnsetAll()
-        self.stubs.SmartUnsetAll()
-        self.mox.VerifyAll()
+        super(FunctionalTest, self).tearDown()
         set_config({}, overwrite=True)
 
     def get_json(self, path, expect_errors=False, headers=None,
-                 extra_params={}, **params):
+                 q=[], **params):
         full_path = self.PATH_PREFIX + path
+        query_params = {'q.field': [],
+                        'q.value': [],
+                        'q.op': [],
+                        }
+        for query in q:
+            for name in ['field', 'op', 'value']:
+                query_params['q.%s' % name].append(query.get(name, ''))
         all_params = {}
         all_params.update(params)
-        all_params.update(extra_params)
+        if q:
+            all_params.update(query_params)
         print 'GET: %s %r' % (full_path, all_params)
         response = self.app.get(full_path,
                                 params=all_params,

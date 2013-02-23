@@ -22,9 +22,10 @@
 import datetime
 import logging
 
+from oslo.config import cfg
+
 from ceilometer.collector import meter
 from ceilometer import counter
-from ceilometer.openstack.common import cfg
 
 from ceilometer.tests import api as tests_api
 
@@ -47,47 +48,51 @@ class TestListResources(tests_api.TestBase):
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     1,
                     'user-id',
                     'project-id',
                     'resource-id',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 40),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter',
-                                   }),
+                                       'tag': 'self.counter'},
+                ),
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     1,
                     'user-id',
                     'project-id',
                     'resource-id-alternate',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 41),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter2',
-                                   }),
+                                       'tag': 'self.counter2'},
+                ),
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     1,
                     'user-id2',
                     'project-id2',
                     'resource-id2',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 42),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter3',
-                                   }),
+                                       'tag': 'self.counter3'},
+                ),
                 counter.Counter(
                     'instance',
                     'cumulative',
+                    '',
                     1,
                     'user-id',
                     'project-id',
                     'resource-id',
                     timestamp=datetime.datetime(2012, 7, 2, 10, 43),
                     resource_metadata={'display_name': 'test-server',
-                                       'tag': 'self.counter4',
-                                   })]:
+                                       'tag': 'self.counter4'}
+                )]:
             msg = meter.meter_message_from_counter(cnt,
                                                    cfg.CONF.metering_secret,
                                                    'test_list_resources')

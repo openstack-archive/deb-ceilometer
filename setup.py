@@ -22,13 +22,13 @@ import os
 import setuptools
 
 from ceilometer.openstack.common import setup as common_setup
-from ceilometer.version import version_info
 
 requires = common_setup.parse_requirements(['tools/pip-requires'])
 depend_links = common_setup.parse_dependency_links(['tools/pip-requires'])
+project = 'ceilometer'
+version = common_setup.get_version(project, '2013.1')
 
 url_base = 'http://tarballs.openstack.org/ceilometer/ceilometer-%s.tar.gz'
-version_string = version_info.canonical_version_string(always=True)
 
 
 def directories(target_dir):
@@ -39,7 +39,7 @@ def directories(target_dir):
 setuptools.setup(
 
     name='ceilometer',
-    version=version_string,
+    version=version,
 
     description='cloud computing metering',
 
@@ -47,7 +47,7 @@ setuptools.setup(
     author_email='ceilometer@lists.launchpad.net',
 
     url='https://launchpad.net/ceilometer',
-    download_url=url_base % version_string,
+    download_url=url_base % version,
 
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -67,14 +67,12 @@ setuptools.setup(
     cmdclass=common_setup.get_cmdclass(),
     package_data={
         "ceilometer":
-        directories("ceilomter/api/static")
+        directories("ceilometer/api/static")
         + directories("ceilometer/api/templates"),
     },
     include_package_data=True,
 
     test_suite='nose.collector',
-
-    setup_requires=['setuptools-git>=0.4'],
 
     scripts=['bin/ceilometer-agent-compute',
              'bin/ceilometer-agent-central',
@@ -119,8 +117,8 @@ setuptools.setup(
     [ceilometer.poll.central]
     network_floatingip = ceilometer.network.floatingip:FloatingIPPollster
     image = ceilometer.image.glance:ImagePollster
-    image_size = ceilometer.image.glance:ImageSizePollster
     objectstore = ceilometer.objectstore.swift:SwiftPollster
+    kwapi = ceilometer.energy.kwapi:KwapiPollster
 
     [ceilometer.storage]
     log = ceilometer.storage.impl_log:LogStorage
@@ -133,7 +131,13 @@ setuptools.setup(
     [ceilometer.compute.virt]
     libvirt = ceilometer.compute.virt.libvirt.inspector:LibvirtInspector
 
+    [ceilometer.transformer]
+    accumulator = ceilometer.transformer.accumulator:TransformerAccumulator
+
+    [ceilometer.publisher]
+    meter_publisher = ceilometer.publisher.meter_publish:MeterPublisher
+
     [paste.filter_factory]
     swift=ceilometer.objectstore.swift_middleware:filter_factory
     """),
-    )
+)
