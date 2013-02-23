@@ -26,8 +26,6 @@ from ceilometer import policy
 
 OPT_GROUP_NAME = 'keystone_authtoken'
 
-OPT_GROUP_NAME = 'keystone_authtoken'
-
 
 def register_opts(conf):
     """Register keystoneclient middleware options
