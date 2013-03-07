@@ -42,7 +42,7 @@ Build-Depends-Indep: pep8,
  python-setuptools-git,
  python-sphinx,
  python-sqlalchemy (>= 0.7.3),
- python-sqlalchemy (<=0.7.9),
+ python-sqlalchemy (<< 0.8.0~),
  python-stevedore (>= 0.6),
  python-swiftclient,
  python-unittest2,
@@ -75,10 +75,10 @@ Depends: ${python:Depends}, ${misc:Depends},
  python-novaclient (>= 2:2.6.10),
  python-oslo-config,
  python-pecan,
- python-pymongo,
+ python-pymongo (>= 2.2),
  python-requests,
  python-sqlalchemy (>= 0.7.3),
- python-sqlalchemy (<=0.7.9),
+ python-sqlalchemy (<< 0.8.0~),
  python-stevedore (>= 0.6),
  python-swiftclient,
  python-webob (>= 1.2),
@@ -112,7 +112,6 @@ Description: OpenStack efficient metering counters system (common files)
 Package: ceilometer-collector
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Recommends: python-pymongo (>= 2.2), python-sqlalchemy
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
 Description: OpenStack efficient metering counters system  (collector service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
@@ -127,7 +126,6 @@ Description: OpenStack efficient metering counters system  (collector service)
 Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Recommends: python-pymongo (>= 2.2), python-sqlalchemy
 Depends: adduser, debconf, ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
 Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a unique point of contact for billing systems to 
