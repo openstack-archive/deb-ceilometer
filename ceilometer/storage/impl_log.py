@@ -48,6 +48,9 @@ class Connection(base.Connection):
     def upgrade(self, version=None):
         pass
 
+    def clear(self):
+        pass
+
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
 
@@ -64,12 +67,14 @@ class Connection(base.Connection):
 
         :param source: Optional source filter.
         """
+        return []
 
     def get_projects(self, source=None):
         """Return an iterable of project id strings.
 
         :param source: Optional source filter.
         """
+        return []
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
@@ -92,6 +97,7 @@ class Connection(base.Connection):
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
         """
+        return []
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}):
@@ -110,11 +116,13 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         :param metaquery: Optional dict with metadata to match on.
         """
+        return []
 
     def get_raw_events(self, event_filter):
         """Return an iterable of raw event data as created by
         :func:`ceilometer.meter.meter_message_from_counter`.
         """
+        return []
 
     def get_volume_sum(self, event_filter):
         """Return the sum of the volume field for the events

@@ -24,9 +24,11 @@ import logging
 import sys
 
 from oslo.config import cfg
+from stevedore import dispatch
 
 from ceilometer import counter
-from ceilometer import publish
+from ceilometer import pipeline
+from ceilometer import service
 from ceilometer.openstack.common import timeutils
 from ceilometer.openstack.common import context
 
@@ -68,7 +70,7 @@ cfg.CONF.register_cli_opts([
                help='counter metadata'),
 ])
 
-cfg.CONF(sys.argv[1:])
+service.prepare_service(sys.argv)
 
 # Set up logging to use the console
 console = logging.StreamHandler(sys.stderr)
@@ -79,17 +81,21 @@ root_logger = logging.getLogger('')
 root_logger.addHandler(console)
 root_logger.setLevel(logging.DEBUG)
 
-publish.publish_counter(context.get_admin_context(),
-                        counter.Counter(name=cfg.CONF.counter_name,
-                                        type=cfg.CONF.counter_type,
-                                        unit=cfg.CONF.counter_unit,
-                                        volume=cfg.CONF.counter_volume,
-                                        user_id=cfg.CONF.counter_user,
-                                        project_id=cfg.CONF.counter_project,
-                                        resource_id=cfg.CONF.counter_resource,
-                                        timestamp=cfg.CONF.counter_timestamp,
-                                        resource_metadata=cfg.CONF.counter_metadata
-                                        and eval(cfg.CONF.counter_metadata)),
-                        cfg.CONF.metering_topic,
-                        cfg.CONF.metering_secret,
-                        cfg.CONF.counter_source)
+publish_manager = dispatch.NameDispatchExtensionManager(
+    namespace=pipeline.PUBLISHER_NAMESPACE,
+    check_func=lambda x: True,
+    invoke_on_load=True)
+pipeline_manager = pipeline.setup_pipeline(publish_manager)
+
+with pipeline_manager.publisher(context.get_admin_context(),
+                                cfg.CONF.counter_source) as p:
+    p([counter.Counter(name=cfg.CONF.counter_name,
+                                    type=cfg.CONF.counter_type,
+                                    unit=cfg.CONF.counter_unit,
+                                    volume=cfg.CONF.counter_volume,
+                                    user_id=cfg.CONF.counter_user,
+                                    project_id=cfg.CONF.counter_project,
+                                    resource_id=cfg.CONF.counter_resource,
+                                    timestamp=cfg.CONF.counter_timestamp,
+                                    resource_metadata=cfg.CONF.counter_metadata
+                                    and eval(cfg.CONF.counter_metadata))])

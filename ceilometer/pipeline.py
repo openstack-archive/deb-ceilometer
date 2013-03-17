@@ -64,12 +64,15 @@ class TransformerExtensionManager(extension.ExtensionManager):
         return self.by_name[name]
 
 
-class Publisher(object):
+class PublishContext(object):
 
-    def __init__(self, pipelines, context, source):
-        self.pipelines = pipelines
+    def __init__(self, context, source, pipelines=[]):
+        self.pipelines = set(pipelines)
         self.context = context
         self.source = source
+
+    def add_pipelines(self, pipelines):
+        self.pipelines.update(pipelines)
 
     def __enter__(self):
         def p(counters):
@@ -304,7 +307,7 @@ class PipelineManager(object):
     """
 
     def __init__(self, cfg, publisher_manager):
-        """Create the pipeline manager"""
+        """Create the pipeline manager."""
         self._setup_pipelines(cfg, publisher_manager)
 
     def _setup_pipelines(self, cfg, publisher_manager):
@@ -360,7 +363,7 @@ class PipelineManager(object):
         :param context: The context.
         :param source: Counter source.
         """
-        return Publisher(self.pipelines, context, source)
+        return PublishContext(context, source, self.pipelines)
 
 
 def setup_pipeline(publisher_manager):

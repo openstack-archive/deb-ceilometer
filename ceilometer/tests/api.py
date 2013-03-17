@@ -24,14 +24,15 @@ import urllib
 
 import flask
 from oslo.config import cfg
-from pecan import set_config
-from pecan.testing import load_test_app
+import pecan
+import pecan.testing
 
-from ceilometer import storage
+from ceilometer.api import acl
 from ceilometer.api.v1 import app as v1_app
 from ceilometer.api.v1 import blueprint as v1_blueprint
-from ceilometer.tests import db as db_test_base
+from ceilometer import storage
 from ceilometer.tests import base
+from ceilometer.tests import db as db_test_base
 
 
 class TestBase(db_test_base.TestBase):
@@ -40,6 +41,7 @@ class TestBase(db_test_base.TestBase):
 
     def setUp(self):
         super(TestBase, self).setUp()
+        cfg.CONF.set_override("auth_version", "v2.0", group=acl.OPT_GROUP_NAME)
         self.app = v1_app.make_app(cfg.CONF,
                                    enable_acl=False,
                                    attach_storage=False)
@@ -66,14 +68,12 @@ class TestBase(db_test_base.TestBase):
         return rv
 
 
-class FunctionalTest(base.TestCase):
+class FunctionalTest(db_test_base.TestBase):
     """
     Used for functional tests of Pecan controllers where you need to
     test your literal application and its integration with the
     framework.
     """
-
-    DBNAME = 'testdb'
 
     PATH_PREFIX = ''
 
@@ -81,10 +81,7 @@ class FunctionalTest(base.TestCase):
 
     def setUp(self):
         super(FunctionalTest, self).setUp()
-
-        cfg.CONF.database_connection = 'test://localhost/%s' % self.DBNAME
-        self.conn = storage.get_connection(cfg.CONF)
-        self.conn.drop_database(self.DBNAME)
+        cfg.CONF.set_override("auth_version", "v2.0", group=acl.OPT_GROUP_NAME)
         self.app = self._make_app()
 
     def _make_app(self, enable_acl=False):
@@ -129,11 +126,11 @@ class FunctionalTest(base.TestCase):
             },
         }
 
-        return load_test_app(self.config)
+        return pecan.testing.load_test_app(self.config)
 
     def tearDown(self):
         super(FunctionalTest, self).tearDown()
-        set_config({}, overwrite=True)
+        pecan.set_config({}, overwrite=True)
 
     def get_json(self, path, expect_errors=False, headers=None,
                  q=[], **params):

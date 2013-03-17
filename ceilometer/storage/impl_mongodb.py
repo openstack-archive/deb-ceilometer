@@ -20,15 +20,16 @@
 
 import copy
 import datetime
+import operator
+import re
+import urlparse
+
+import bson.code
+import pymongo
 
 from ceilometer.openstack.common import log
 from ceilometer.storage import base
 
-import bson.code
-import pymongo
-import re
-
-from urlparse import urlparse
 
 LOG = log.getLogger(__name__)
 
@@ -201,7 +202,7 @@ class Connection(base.Connection):
              { min : this.counter_volume,
                max : this.counter_volume,
                sum : this.counter_volume,
-               count : 1,
+               count : NumberInt(1),
                duration_start : this.timestamp,
                duration_end : this.timestamp,
                period_start : new Date(period_start),
@@ -232,7 +233,8 @@ class Connection(base.Connection):
     function (key, value) {
         value.avg = value.sum / value.count;
         value.duration = (value.duration_end - value.duration_start) / 1000;
-        value.period = (value.period_end - value.period_start) / 1000;
+        value.period = NumberInt((value.period_end - value.period_start)
+                                  / 1000);
         return value;
     }""")
 
@@ -267,6 +269,9 @@ class Connection(base.Connection):
     def upgrade(self, version=None):
         pass
 
+    def clear(self):
+        self.conn.drop_database(self.db)
+
     def _get_connection(self, opts):
         """Return a connection to the database.
 
@@ -279,7 +284,7 @@ class Connection(base.Connection):
 
     def _parse_connection_url(self, url):
         opts = {}
-        result = urlparse(url)
+        result = urlparse.urlparse(url)
         opts['dbtype'] = result.scheme
         opts['dbname'] = result.path.replace('/', '')
         netloc_match = re.match(r'(?:(\w+:\w+)@)?(.*)', result.netloc)
@@ -456,7 +461,9 @@ class Connection(base.Connection):
                 m = {}
                 m['name'] = r_meter['counter_name']
                 m['type'] = r_meter['counter_type']
-                m['unit'] = r_meter['counter_unit']
+                # Return empty string if 'counter_unit' is not valid for
+                # backward compaitiblity.
+                m['unit'] = r_meter.get('counter_unit', '')
                 m['resource_id'] = r['_id']
                 m['project_id'] = r['project_id']
                 m['user_id'] = r['user_id']
@@ -513,7 +520,8 @@ class Connection(base.Connection):
             query=q,
         )
 
-        return [r['value'] for r in results['results']]
+        return sorted((r['value'] for r in results['results']),
+                      key=operator.itemgetter('period_start'))
 
     def get_volume_sum(self, event_filter):
         """Return the sum of the volume field for the events
