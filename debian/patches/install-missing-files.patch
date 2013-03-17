@@ -2,15 +2,12 @@ Description: Install missing files
 Author: Thomas Goirand <zigo@debian.org>
 Forwarded: no
 
---- ceilometer-2013.1~g3.orig/MANIFEST.in
-+++ ceilometer-2013.1~g3/MANIFEST.in
-@@ -7,4 +7,12 @@ exclude .gitreview
- global-exclude *.pyc
+--- ceilometer.orig/MANIFEST.in	2013-03-18 01:13:43.000000000 +0800
++++ ceilometer/MANIFEST.in	2013-03-18 01:14:06.000000000 +0800
+@@ -10,3 +10,11 @@
  recursive-include public *
  recursive-include ceilometer/locale *
--recursive-include ceilometer *.html
-\ No newline at end of file
-+recursive-include ceilometer *.html
+ recursive-include ceilometer *.html
 +include ceilometer/api/v1/static/bootstrap/css/bootstrap-responsive.css
 +include ceilometer/api/v1/static/bootstrap/css/bootstrap.css
 +include ceilometer/api/v1/static/bootstrap/img/glyphicons-halflings-white.png
