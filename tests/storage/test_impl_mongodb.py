@@ -54,8 +54,7 @@ from tests.storage import base
 
 from ceilometer.collector import meter
 from ceilometer import counter
-from ceilometer.storage.impl_test import TestConnection
-from ceilometer.tests.db import require_map_reduce
+from ceilometer.storage.impl_test import TestConnection, require_map_reduce
 
 
 class MongoDBEngine(base.DBEngineBase):
@@ -226,3 +225,7 @@ class CompatibilityTest(MongoDBEngineTestBase):
     def test_counter_unit(self):
         meters = list(self.conn.get_meters())
         self.assertEqual(len(meters), 1)
+
+
+class CounterDataTypeTest(base.CounterDataTypeTest, MongoDBEngineTestBase):
+    pass

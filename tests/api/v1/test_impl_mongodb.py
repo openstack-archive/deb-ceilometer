@@ -21,7 +21,10 @@ from . import compute_duration_by_resource as cdbr
 from . import list_events
 from . import list_meters
 from . import list_projects
+from . import list_resources
+from . import list_sources
 from . import list_users
+from . import max_project_volume
 
 
 class TestListEvents(list_events.TestListEvents):
@@ -61,4 +64,24 @@ class TestListProjects(list_projects.TestListProjects):
 
 
 class TestComputeDurationByResource(cdbr.TestComputeDurationByResource):
+    database_connection = 'test://'
+
+
+class TestListEmptyResources(list_resources.TestListEmptyResources):
+    database_connection = 'test://'
+
+
+class TestListResources(list_resources.TestListResources):
+    database_connection = 'test://'
+
+
+class TestListResourcesMetaquery(list_resources.TestListResourcesMetaquery):
+    database_connection = 'test://'
+
+
+class TestListSource(list_sources.TestListSource):
+    database_connection = 'test://'
+
+
+class TestMaxProjectVolume(max_project_volume.TestMaxProjectVolume):
     database_connection = 'test://'

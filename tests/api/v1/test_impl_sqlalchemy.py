@@ -21,7 +21,10 @@ import compute_duration_by_resource as cdbr
 import list_events
 import list_meters
 import list_projects
+import list_resources
+import list_sources
 import list_users
+import max_project_volume
 
 
 class TestListEvents(list_events.TestListEvents):
@@ -53,4 +56,20 @@ class TestListProjects(list_projects.TestListProjects):
 
 
 class TestComputeDurationByResource(cdbr.TestComputeDurationByResource):
+    database_connection = 'sqlite://'
+
+
+class TestListEmptyResources(list_resources.TestListEmptyResources):
+    database_connection = 'sqlite://'
+
+
+class TestListResources(list_resources.TestListResources):
+    database_connection = 'sqlite://'
+
+
+class TestListSource(list_sources.TestListSource):
+    database_connection = 'sqlite://'
+
+
+class TestMaxProjectVolume(max_project_volume.TestMaxProjectVolume):
     database_connection = 'sqlite://'
