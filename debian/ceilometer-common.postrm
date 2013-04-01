@@ -6,6 +6,7 @@ if [ "${1}" = "purge" ] ; then
 	rm -f /etc/ceilometer/ceilometer.conf
 	rm -f /etc/ceilometer/policy.json
 	rm -f /etc/ceilometer/sources.json
+	rm -f /etc/ceilometer/pipeline.yaml
 	rmdir --ignore-fail-on-non-empty /etc/ceilometer
 fi
 
