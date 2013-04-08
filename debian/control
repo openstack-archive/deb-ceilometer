@@ -84,11 +84,11 @@ Depends: ${python:Depends}, ${misc:Depends},
  python-swiftclient,
  python-webob (>= 1.2),
  python-yaml
-Description: OpenStack efficient metering counters system (Python libraries)
- Ceilometer aims to deliver a unique point of contact for billing systems to 
- aquire all counters they need to establish customer billing, accross all
- current and future OpenStack components. The delivery of counters must be
- tracable and auditable, the counters must be easily extensible to support new
+Description: OpenStack efficient metering counters system - Python libraries
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accross
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
  .
@@ -100,11 +100,11 @@ Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: python-ceilometer (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
 Provides: ${python:Provides}
-Description: OpenStack efficient metering counters system (common files)
- Ceilometer aims to deliver a unique point of contact for billing systems to 
- aquire all counters they need to establish customer billing, accross all
- current and future OpenStack components. The delivery of counters must be
- tracable and auditable, the counters must be easily extensible to support new
+Description: OpenStack efficient metering counters system - common files
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accross
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
  .
@@ -114,11 +114,11 @@ Package: ceilometer-collector
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: OpenStack efficient metering counters system  (collector service)
- Ceilometer aims to deliver a unique point of contact for billing systems to 
- aquire all counters they need to establish customer billing, accross all
- current and future OpenStack components. The delivery of counters must be
- tracable and auditable, the counters must be easily extensible to support new
+Description: OpenStack efficient metering counters system - collector service
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accross
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
  .
@@ -129,10 +129,10 @@ Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: adduser, debconf, ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
 Description: OpenStack efficient metering counters system (API service)
- Ceilometer aims to deliver a unique point of contact for billing systems to 
- aquire all counters they need to establish customer billing, accross all
- current and future OpenStack components. The delivery of counters must be
- tracable and auditable, the counters must be easily extensible to support new
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accross
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
  .
@@ -142,11 +142,11 @@ Package: ceilometer-agent-compute
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: OpenStack efficient metering counters system (compute agent)
- Ceilometer aims to deliver a unique point of contact for billing systems to 
- aquire all counters they need to establish customer billing, accross all
- current and future OpenStack components. The delivery of counters must be
- tracable and auditable, the counters must be easily extensible to support new
+Description: OpenStack efficient metering counters system - compute agent
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accross
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
  .
@@ -157,11 +157,11 @@ Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends},
  ${misc:Depends}
-Description: OpenStack efficient metering counters system (central agent)
- Ceilometer aims to deliver a unique point of contact for billing systems to 
- aquire all counters they need to establish customer billing, accross all
- current and future OpenStack components. The delivery of counters must be
- tracable and auditable, the counters must be easily extensible to support new
+Description: OpenStack efficient metering counters system - central agent
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accross
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
  .
