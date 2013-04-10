@@ -1,11 +1,5 @@
 ceilometer (2013.1-1) experimental; urgency=low
 
-  * New upstream release.
-
- -- Thomas Goirand <zigo@debian.org>  Tue, 12 Feb 2013 13:48:01 +0000
-
-ceilometer (2013.1~g0.5+dcfb45320a-1) experimental; urgency=low
-
   * Initial release (Closes: #693406).
 
- -- Thomas Goirand <zigo@debian.org>  Wed, 14 Nov 2012 14:41:52 +0000
+ -- Thomas Goirand <zigo@debian.org>  Wed, 10 Apr 2013 13:19:50 +0800
