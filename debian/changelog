@@ -1,3 +1,9 @@
+ceilometer (2013.1-2) unstable; urgency=low
+
+  * Uploading to unstable.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 16 May 2013 07:44:07 +0000
+
 ceilometer (2013.1-1) experimental; urgency=low
 
   * Initial release (Closes: #693406).
