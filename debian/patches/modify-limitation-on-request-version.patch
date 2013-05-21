@@ -1,0 +1,16 @@
+Description: Modify limitation on request version
+Author: Julien Danjou <julien@danjou.info>
+Origin: upstream, https://review.openstack.org/#/c/29885/
+Last-Update: 2013-05-21
+
+--- ceilometer-2013.1.orig/tools/pip-requires
++++ ceilometer-2013.1/tools/pip-requires
+@@ -15,7 +15,7 @@ python-novaclient>=2.6.10
+ python-keystoneclient>=0.2.3
+ python-swiftclient
+ lxml
+-requests<1.0
++requests>=1.1
+ extras
+ wsme>=0.5b1
+ pyyaml
