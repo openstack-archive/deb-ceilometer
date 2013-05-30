@@ -6,8 +6,14 @@ set -e
 
 # We need to do that for ceilometer-agent-compute
 libvirt_user_group () {
+	if dpkg-vendor --derives-from ubuntu ; then
+		LIBVIRT_GROUP=libvirtd
+	else
+		LIBVIRT_GROUP=libvirt
+	fi
+
 	if ! getent group libvirt >/dev/null; then
-		addgroup --system libvirt
+		addgroup --system ${LIBVIRT_GROUP}
 	fi
 
 	# user and group libvirt runs qemu/kvm instances with
