@@ -29,7 +29,7 @@ libvirt_user_group () {
 }
 
 if [ "$1" = "configure" ]; then
-	pkgos_var_user_group nova
+	pkgos_adduser nova
 	pkgos_var_user_group ceilometer
 	libvirt_user_group
 	adduser ceilometer nova || true
