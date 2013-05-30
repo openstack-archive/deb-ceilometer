@@ -1,2 +1,2 @@
-tools/show_data.py usr/share/doc/ceilometer
 /usr/bin/ceilometer-dbsync
+tools/show_data.py usr/share/doc/ceilometer

@@ -2,6 +2,7 @@ ceilometer (2013.1-4) unstable; urgency=low
 
   * rmdir --ignore-fail-on-non-empty of few folders owned by nova after purge.
     Thanks to Andreas Beckmann for reporting (Closes: #709876).
+  * Ran wrap-and-sort to clean debian/control.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 27 May 2013 11:07:59 +0800
 

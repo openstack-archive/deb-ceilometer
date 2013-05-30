@@ -8,47 +8,47 @@ Uploaders: Loic Dachary (OuoU) <loic@debian.org>,
            Ghe Rivero <ghe.rivero@stackops.com>,
            Mehdi Abaakouk <sileht@sileht.net>
 Build-Depends: debhelper (>= 9),
- po-debconf,
- python-all (>= 2.6.6-3~),
- openstack-pkg-tools
+               openstack-pkg-tools,
+               po-debconf,
+               python-all (>= 2.6.6-3~)
 Build-Depends-Indep: pep8,
- python-argparse,
- python-anyjson (>= 0.2.4),
- python-babel,
- python-coverage,
- python-docutils,
- python-eventlet,
- python-extras,
- python-flask (>= 0.9),
- python-glance (>= 2013.1~),
- python-glanceclient (>= 1:0.6),
- python-iso8601,
- python-keystoneclient (>= 1:0.2.3),
- python-kombu,  
- python-lockfile,
- python-lxml,
- python-ming,
- python-mock,
- python-mox,   
- python-netaddr,
- python-netifaces,
- python-nose,
- python-nova (>= 2013.1~),
- python-novaclient (>= 2:2.6.10),
- python-oslo.config,
- python-pecan (>= 0.2.1),
- python-pymongo,
- python-requests,
- python-setuptools-git,
- python-sphinx,
- python-sqlalchemy (>= 0.7.3),
- python-sqlalchemy (<< 0.8.0~),
- python-stevedore (>= 0.6),
- python-swiftclient,
- python-unittest2,
- python-webob (>= 1.2),
- python-wsme,
- python-yaml
+                     python-anyjson (>= 0.2.4),
+                     python-argparse,
+                     python-babel,
+                     python-coverage,
+                     python-docutils,
+                     python-eventlet,
+                     python-extras,
+                     python-flask (>= 0.9),
+                     python-glance (>= 2013.1~),
+                     python-glanceclient (>= 1:0.6),
+                     python-iso8601,
+                     python-keystoneclient (>= 1:0.2.3),
+                     python-kombu,
+                     python-lockfile,
+                     python-lxml,
+                     python-ming,
+                     python-mock,
+                     python-mox,
+                     python-netaddr,
+                     python-netifaces,
+                     python-nose,
+                     python-nova (>= 2013.1~),
+                     python-novaclient (>= 2:2.6.10),
+                     python-oslo.config,
+                     python-pecan (>= 0.2.1),
+                     python-pymongo,
+                     python-requests,
+                     python-setuptools-git,
+                     python-sphinx,
+                     python-sqlalchemy (<< 0.8.0~),
+                     python-sqlalchemy (>= 0.7.3),
+                     python-stevedore (>= 0.6),
+                     python-swiftclient,
+                     python-unittest2,
+                     python-webob (>= 1.2),
+                     python-wsme,
+                     python-yaml
 Standards-Version: 3.9.3
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=openstack/ceilometer.git;a=summary
 Vcs-Git: git://anonscm.debian.org/openstack/ceilometer.git
@@ -58,32 +58,33 @@ Package: python-ceilometer
 Section: python
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ${python:Depends}, ${misc:Depends},
- libjs-jquery,
- python-argparse,
- python-anyjson (>= 0.2.4),
- python-eventlet,
- python-extras,
- python-flask (>= 0.9),
- python-glanceclient (>= 1:0.6),
- python-greenlet (>= 0.4),
- python-keystoneclient (>= 1:0.2.3),
- python-iso8601,
- python-kombu,
- python-lockfile,
- python-lxml,
- python-netaddr,
- python-novaclient (>= 2:2.6.10),
- python-oslo.config,
- python-pecan (>= 0.2.1),
- python-pymongo (>= 2.2),
- python-requests,
- python-sqlalchemy (>= 0.7.3),
- python-sqlalchemy (<< 0.8.0~),
- python-stevedore (>= 0.6),
- python-swiftclient,
- python-webob (>= 1.2),
- python-yaml
+Depends: libjs-jquery,
+         python-anyjson (>= 0.2.4),
+         python-argparse,
+         python-eventlet,
+         python-extras,
+         python-flask (>= 0.9),
+         python-glanceclient (>= 1:0.6),
+         python-greenlet (>= 0.4),
+         python-iso8601,
+         python-keystoneclient (>= 1:0.2.3),
+         python-kombu,
+         python-lockfile,
+         python-lxml,
+         python-netaddr,
+         python-novaclient (>= 2:2.6.10),
+         python-oslo.config,
+         python-pecan (>= 0.2.1),
+         python-pymongo (>= 2.2),
+         python-requests,
+         python-sqlalchemy (<< 0.8.0~),
+         python-sqlalchemy (>= 0.7.3),
+         python-stevedore (>= 0.6),
+         python-swiftclient,
+         python-webob (>= 1.2),
+         python-yaml,
+         ${misc:Depends},
+         ${python:Depends}
 Description: OpenStack efficient metering counters system - Python libraries
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, accross
@@ -98,7 +99,10 @@ Description: OpenStack efficient metering counters system - Python libraries
 Package: ceilometer-common
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: python-ceilometer (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
+Depends: adduser,
+         python-ceilometer (= ${binary:Version}),
+         ${misc:Depends},
+         ${python:Depends}
 Provides: ${python:Provides}
 Description: OpenStack efficient metering counters system - common files
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
@@ -113,7 +117,10 @@ Description: OpenStack efficient metering counters system - common files
 Package: ceilometer-collector
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends}
 Description: OpenStack efficient metering counters system - collector service
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, accross
@@ -127,7 +134,12 @@ Description: OpenStack efficient metering counters system - collector service
 Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: adduser, debconf, ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: adduser,
+         ceilometer-common (= ${binary:Version}),
+         debconf,
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends}
 Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, accross
@@ -141,7 +153,10 @@ Description: OpenStack efficient metering counters system (API service)
 Package: ceilometer-agent-compute
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends}
 Description: OpenStack efficient metering counters system - compute agent
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, accross
@@ -155,8 +170,10 @@ Description: OpenStack efficient metering counters system - compute agent
 Package: ceilometer-agent-central
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ${ostack-lsb-base}, ceilometer-common (= ${binary:Version}), ${python:Depends},
- ${misc:Depends}
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends}
 Description: OpenStack efficient metering counters system - central agent
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, accross

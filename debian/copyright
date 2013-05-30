@@ -1,6 +1,6 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: ceilometer
-Upstream-Contact: Julien Danjou <acid@debian.org>, 
+Upstream-Contact: Julien Danjou <acid@debian.org>,
 Source: https://github.com/stackforge/ceilometer
 
 Files: debian/*
@@ -9,9 +9,9 @@ License: Apache-2
 
 Files: *
 Copyright: 2012 New Dream Network, LLC (DreamHost)
-           2012 eNovance 
+           2012 eNovance
            2012 Red Hat Inc.
-           2010 United States Government 
+           2010 United States Government
            2011 Cloudscaling Group, Inc
            2011 OpenStack LLC.
            2012 Nicolas Barcet for Canonical
