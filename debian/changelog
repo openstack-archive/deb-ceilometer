@@ -1,5 +1,6 @@
-ceilometer (2013.1-4) unstable; urgency=low
+ceilometer (2013.1.1-1) unstable; urgency=low
 
+  * New upstream release.
   * rmdir --ignore-fail-on-non-empty of few folders owned by nova after purge.
     Thanks to Andreas Beckmann for reporting (Closes: #709876).
   * Ran wrap-and-sort to clean debian/control.
