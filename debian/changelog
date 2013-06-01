@@ -7,6 +7,7 @@ ceilometer (2013.1.1-1) unstable; urgency=low
   * Replaced pkgos_var_user_group nova by pkgos_adduser, as we don't want to
     create the log / lib dirs of nova (Closes: #709876).
   * Creates the correct libvirt group if the package is installed in Ubuntu.
+  * Bumped Standard-Version to 3.9.4.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 27 May 2013 11:07:59 +0800
 
