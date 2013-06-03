@@ -23,6 +23,8 @@ DAEMON_GROUP=${SYS_NAME}
 LOCK_DIR=/var/lock/${SYS_NAME}
 PID_DIR=/var/run/${SYS_NAME}
 PID_FILE=${PID_DIR}/${NAME}.pid
+LOGFILE=/var/log/${SYS_NAME}/${NAME}.log
+DAEMON_ARGS="--config-file=/etc/${SYSNAME}/ceilometer.conf --log-file=$LOGFILE"
 
 [ -x $DAEMON ] || exit 0
 
