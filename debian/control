@@ -49,7 +49,7 @@ Build-Depends-Indep: pep8,
                      python-webob (>= 1.2),
                      python-wsme,
                      python-yaml
-Standards-Version: 3.9.3
+Standards-Version: 3.9.4
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=openstack/ceilometer.git;a=summary
 Vcs-Git: git://anonscm.debian.org/openstack/ceilometer.git
 Homepage: http://wiki.openstack.org/Ceilometer
