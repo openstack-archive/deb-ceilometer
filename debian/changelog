@@ -4,6 +4,8 @@ ceilometer (2013.1.2-1) unstable; urgency=low
   * Added configuration to each init scripts so that they log in their own log
     file, added the corresponding purge postrm and logrotate.
   * Removed applied upstream patch: modify-limitation-on-request-version.patch
+  * Build-depends on python-happybase.
+  * Now runs the unit tests at build time.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 03 Jun 2013 16:26:14 +0800
 
