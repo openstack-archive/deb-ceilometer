@@ -1,5 +1,6 @@
-ceilometer (2013.1.1-2) UNRELEASED; urgency=low
+ceilometer (2013.1.2-1) unstable; urgency=low
 
+  * New upstream release.
   * Added configuration to each init scripts so that they log in their own log
     file, added the corresponding purge postrm and logrotate.
 
