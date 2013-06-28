@@ -85,6 +85,11 @@ network.outgoing.packets  Cumulative   packets  iface ID  pollster      number o
 
 ========================  ==========  ========  ========  ============  =======================================================
 
+At present, most of the Nova meters will only work with libvirt front-end
+hypervisors while test coverage was mostly done based on KVM. Contributors
+are welcome to implement other virtualization backends’ meters or complete
+the existing ones.
+
 Network (Quantum)
 =================
 
@@ -152,7 +157,7 @@ Energy (Kwapi)
 
 ==========================  ==========  ==========  ========  ========= ==============================================
 Name                        Type        Volume      Resource  Origin    Note
-+==========================  ==========  ==========  ========  ========= ==============================================
+==========================  ==========  ==========  ========  ========= ==============================================
 energy                      Cumulative         kWh  probe ID  pollster  Amount of energy
 power                       Gauge                W  probe ID  pollster  Power consumption
 ==========================  ==========  ==========  ========  ========= ==============================================

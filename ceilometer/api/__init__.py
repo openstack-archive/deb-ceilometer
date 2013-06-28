@@ -16,21 +16,24 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import flask.helpers
 from oslo.config import cfg
-
-from ceilometer.openstack.common import jsonutils
-
-# Replace the json module used by flask with the one from
-# openstack.common so we can take advantage of the fact that it knows
-# how to serialize more complex objects.
-flask.helpers.json = jsonutils
 
 # Register options for the service
 API_SERVICE_OPTS = [
-    cfg.IntOpt('metering_api_port',
+    cfg.IntOpt('port',
                default=8777,
+               deprecated_name='metering_api_port',
+               deprecated_group='DEFAULT',
                help='The port for the ceilometer API server',
                ),
+    cfg.StrOpt('host',
+               default='0.0.0.0',
+               help='The listen IP for the ceilometer API server',
+               ),
 ]
-cfg.CONF.register_opts(API_SERVICE_OPTS)
+
+CONF = cfg.CONF
+opt_group = cfg.OptGroup(name='api',
+                         title='Options for the ceilometer-api service')
+CONF.register_group(opt_group)
+CONF.register_opts(API_SERVICE_OPTS, opt_group)

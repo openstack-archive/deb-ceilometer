@@ -16,48 +16,24 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""Openstack Ceilometer HBase storage backend
-
-.. note::
-  This driver is designed to enable Ceilometer store its data in HBase.
-  The implementation is using HBase Thrift interface so it's necessary to have
-  the HBase Thrift server installed and started:
-  (https://ccp.cloudera.com/display/CDHDOC/HBase+Installation)
-
-  This driver has been tested against HBase 0.92.1/CDH 4.1.1,
-  HBase 0.94.4/HDP 1.2 and HBase 0.94.5/Apache.
-  Versions earlier than 0.92.1 are not supported due to feature
-  incompatibility.
-
-  Due to limitations of HBase the driver implements its own data aggregations
-  which may harm its performance. It is likely that the performance could be
-  improved if co-processors were used, however at the moment the co-processor
-  support is not exposed through Thrift API.
-
-  The following four tables are expected to exist in HBase:
-    create 'project', {NAME=>'f'}
-    create 'user', {NAME=>'f'}
-    create 'resource', {NAME=>'f'}
-    create 'meter', {NAME=>'f'}
-
-  The driver is using HappyBase which is a wrapper library used to interact
-  with HBase via Thrift protocol:
-  http://happybase.readthedocs.org/en/latest/index.html#
-
+"""HBase storage backend
 """
-
+from sets import Set
 from urlparse import urlparse
 import json
 import hashlib
 import copy
 import datetime
 import happybase
+import os
+import re
 from collections import defaultdict
 
 from oslo.config import cfg
 
 from ceilometer.openstack.common import log, timeutils
 from ceilometer.storage import base
+from ceilometer.storage import models
 
 LOG = log.getLogger(__name__)
 
@@ -117,18 +93,53 @@ class Connection(base.Connection):
         '''
         opts = self._parse_connection_url(conf.database_connection)
         opts['table_prefix'] = conf.table_prefix
+
+        if opts['host'] == '__test__':
+            url = os.environ.get('CEILOMETER_TEST_HBASE_URL')
+            if url:
+                # Reparse URL, but from the env variable now
+                opts = self._parse_connection_url(url)
+            else:
+                # This is a in-memory usage for unit tests
+                self.conn = MConnection()
+                self.project = self.conn.table(self.PROJECT_TABLE)
+                self.user = self.conn.table(self.USER_TABLE)
+                self.resource = self.conn.table(self.RESOURCE_TABLE)
+                self.meter = self.conn.table(self.METER_TABLE)
+                return
+
         self.conn = self._get_connection(opts)
         self.conn.open()
-        self.project = self.conn.table('project')
-        self.user = self.conn.table('user')
-        self.resource = self.conn.table('resource')
-        self.meter = self.conn.table('meter')
+        self.project = self.conn.table(self.PROJECT_TABLE)
+        self.user = self.conn.table(self.USER_TABLE)
+        self.resource = self.conn.table(self.RESOURCE_TABLE)
+        self.meter = self.conn.table(self.METER_TABLE)
+
+    PROJECT_TABLE = "project"
+    USER_TABLE = "user"
+    RESOURCE_TABLE = "resource"
+    METER_TABLE = "meter"
 
     def upgrade(self, version=None):
-        pass
+        self.conn.create_table(self.PROJECT_TABLE, {'f': dict()})
+        self.conn.create_table(self.USER_TABLE, {'f': dict()})
+        self.conn.create_table(self.RESOURCE_TABLE, {'f': dict()})
+        self.conn.create_table(self.METER_TABLE, {'f': dict()})
 
     def clear(self):
-        pass
+        LOG.debug('Dropping HBase schema...')
+        for table in [self.PROJECT_TABLE,
+                      self.USER_TABLE,
+                      self.RESOURCE_TABLE,
+                      self.METER_TABLE]:
+            try:
+                self.conn.disable_table(table)
+            except:
+                LOG.debug('Cannot disable table but ignoring error')
+            try:
+                self.conn.delete_table(table)
+            except:
+                LOG.debug('Cannot delete table but ignoring error')
 
     @staticmethod
     def _get_connection(conf):
@@ -185,8 +196,7 @@ class Connection(base.Connection):
             project['f:s_%s' % data['source']] = "1"
             self.project.put(data['project_id'], project)
 
-        # Record the updated resource metadata.
-        received_timestamp = timeutils.utcnow()
+        rts = reverse_timestamp(data['timestamp'])
 
         resource = self.resource.row(data['resource_id'])
         new_meter = "%s!%s!%s" % (
@@ -194,10 +204,16 @@ class Connection(base.Connection):
         new_resource = {'f:resource_id': data['resource_id'],
                         'f:project_id': data['project_id'],
                         'f:user_id': data['user_id'],
-                        'f:metadata': json.dumps(data['resource_metadata']),
                         'f:source': data["source"],
-                        'f:m_%s' % new_meter: "1",
+                        # store meters with prefix "m_"
+                        'f:m_%s' % new_meter: "1"
                         }
+        # store metadata fields with prefix "r_"
+        resource_metadata = dict(('f:r_%s' % k, v)
+                                 for (k, v)
+                                 in data['resource_metadata'].iteritems())
+        new_resource.update(resource_metadata)
+
         # Update if resource has new information
         if new_resource != resource:
             meters = _load_hbase_list(resource, 'm')
@@ -214,7 +230,6 @@ class Connection(base.Connection):
 
         # We use reverse timestamps in rowkeys as they are sorted
         # alphabetically.
-        rts = reverse_timestamp(data['timestamp'])
         row = "%s_%d_%s" % (data['counter_name'], rts, m.hexdigest())
 
         # Convert timestamp to string as json.dumps won't
@@ -235,10 +250,10 @@ class Connection(base.Connection):
                   # add in reversed_ts here for time range scan
                   'f:rts': str(rts)
                   }
-        # Don't want to be changing the original data object
+        # Don't want to be changing the original data object.
         data = copy.copy(data)
         data['timestamp'] = ts
-        # Save original event
+        # Save original meter.
         record['f:message'] = json.dumps(data)
         self.meter.put(row, record)
 
@@ -267,71 +282,68 @@ class Connection(base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
                       metaquery={}):
-        """Return an iterable of dictionaries containing resource information.
-
-        :type end_timestamp: object
-        { 'resource_id': UUID of the resource,
-          'project_id': UUID of project owning the resource,
-          'user_id': UUID of user owning the resource,
-          'timestamp': UTC datetime of last update to the resource,
-          'metadata': most current metadata for the resource,
-          'meter': list of the meters reporting data for the resource,
-          }
+        """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
         :param end_timestamp: Optional modified timestamp end range.
+        :param metaquery: Optional dict with metadata to match on.
         """
-        q, start_row, end_row = make_query(user=user,
-                                           project=project,
-                                           source=source,
-                                           start=start_timestamp,
-                                           end=end_timestamp,
-                                           require_meter=False)
-        LOG.debug("q: %s" % q)
-        # TODO implement metaquery support
+        def make_resource(data):
+            """ transform HBase fields to Resource model
+            """
+            # convert HBase metadata e.g. f:r_display_name to display_name
+            data['f:metadata'] = dict((k[4:], v)
+                                      for k, v in data.iteritems()
+                                      if k.startswith('f:r_'))
+
+            return models.Resource(
+                resource_id=data['f:resource_id'],
+                project_id=data['f:project_id'],
+                source=data['f:source'],
+                user_id=data['f:user_id'],
+                metadata=data['f:metadata'],
+                meter=[
+                    models.ResourceMeter(*(m[4:].split("!")))
+                    for m in data
+                    if m.startswith('f:m_')
+                ],
+            )
+
+        q, start_row, stop_row = make_query(user=user,
+                                            project=project,
+                                            source=source,
+                                            start=start_timestamp,
+                                            end=end_timestamp,
+                                            require_meter=False,
+                                            query_only=False)
+        LOG.debug("Query Meter table: %s" % q)
+        gen = self.meter.scan(filter=q, row_start=start_row, row_stop=stop_row)
+
+        # put all the resource_ids in a Set
+        resource_ids = Set()
+        for ignored, data in gen:
+            resource_ids.add(data['f:resource_id'])
+
+        # handle metaquery
         if len(metaquery) > 0:
-            raise NotImplementedError('metaquery not implemented')
-
-        resource_ids = {}
-        g = self.meter.scan(filter=q, row_start=start_row,
-                            row_stop=end_row)
-        for ignored, data in g:
-            resource_ids[data['f:resource_id']] = data['f:resource_id']
-
-        q = make_query(user=user, project=project, source=source,
-                       query_only=True, require_meter=False)
-        LOG.debug("q: %s" % q)
-        for resource_id, data in self.resource.rows(resource_ids):
-            r = {'resource_id': resource_id,
-                 'metadata': json.loads(data['f:metadata']),
-                 'project_id': data['f:project_id'],
-                 'source': data['f:source'],
-                 'user_id': data['f:user_id'],
-                 'meter': []}
-
-            for m in data:
-                if m.startswith('f:m_'):
-                    name, type, unit = m[4:].split("!")
-                    r['meter'].append({"counter_name": name,
-                                       "counter_type": type,
-                                       "counter_unit": unit})
-
-            yield r
+            for ignored, data in self.resource.rows(resource_ids):
+                for k, v in metaquery.iteritems():
+                    # if metaquery matches, yield the resource model
+                    # e.g. metaquery: metadata.display_name
+                    #      equals
+                    #      HBase: f:r_display_name
+                    if data['f:r_' + k.split('.', 1)[1]] == v:
+                        yield make_resource(data)
+        else:
+            for ignored, data in self.resource.rows(resource_ids):
+                yield make_resource(data)
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}):
-        """Return an iterable of dictionaries containing meter information.
-
-        { 'name': name of the meter,
-          'type': type of the meter (guage, counter),
-          'unit': unit of the meter,
-          'resource_id': UUID of the resource,
-          'project_id': UUID of project owning the resource,
-          'user_id': UUID of user owning the resource,
-          }
+        """Return an iterable of models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -339,13 +351,23 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         :param metaquery: Optional dict with metadata to match on.
         """
-        q, ignored, ignored = make_query(user=user, project=project,
-                                         resource=resource, source=source,
-                                         require_meter=False)
-        LOG.debug("q: %s" % q)
-        # TODO implement metaquery support
+        q = make_query(user=user, project=project, resource=resource,
+                       source=source, require_meter=False, query_only=True)
+        LOG.debug("Query Resource table: %s" % q)
+
+        # handle metaquery
         if len(metaquery) > 0:
-            raise NotImplementedError('metaquery not implemented')
+            meta_q = []
+            for k, v in metaquery.iteritems():
+                meta_q.append(
+                    "SingleColumnValueFilter ('f', '%s', =, 'binary:%s')"
+                    % ('r_' + k.split('.', 1)[1], v))
+            meta_q = " AND ".join(meta_q)
+            # join query and metaquery
+            if q is not None:
+                q += " AND " + meta_q
+            else:
+                q = meta_q   # metaquery only
 
         gen = self.resource.scan(filter=q)
 
@@ -361,30 +383,49 @@ class Connection(base.Connection):
             if meter is None:
                 continue
             name, type, unit = meter[4:].split("!")
-            m = {'name': name,
-                 'type': type,
-                 'unit': unit,
-                 'resource_id': data['f:resource_id'],
-                 'project_id': data['f:project_id'],
-                 'user_id': data['f:user_id'],
-                 }
-            yield m
+            yield models.Meter(
+                name=name,
+                type=type,
+                unit=unit,
+                resource_id=data['f:resource_id'],
+                project_id=data['f:project_id'],
+                source=data['f:source'],
+                user_id=data['f:user_id'],
+            )
 
-    def get_samples(self, event_filter):
-        """Return an iterable of samples as created by
-        :func:`ceilometer.meter.meter_message_from_counter`.
+    def get_samples(self, sample_filter):
+        """Return an iterable of models.Sample instances
         """
-        q, start, stop = make_query_from_filter(event_filter,
+        def make_sample(data):
+            """ transform HBase fields to Sample model
+            """
+            data = json.loads(data['f:message'])
+            data['timestamp'] = timeutils.parse_strtime(data['timestamp'])
+            return models.Sample(**data)
+
+        q, start, stop = make_query_from_filter(sample_filter,
                                                 require_meter=False)
-        LOG.debug("q: %s" % q)
+        LOG.debug("Query Meter Table: %s" % q)
 
         gen = self.meter.scan(filter=q, row_start=start, row_stop=stop)
-        meters = []
+
         for ignored, meter in gen:
-            meter = json.loads(meter['f:message'])
-            meter['timestamp'] = timeutils.parse_strtime(meter['timestamp'])
-            meters.append(meter)
-        return meters
+            # TODO (shengjie) put this implementation here because it's failing
+            # the test. bp hbase-meter-table-enhancement will address this
+            # properly.
+            # handle metaquery
+            metaquery = sample_filter.metaquery
+            if len(metaquery) > 0:
+                # metaquery checks resource table
+                resource = self.resource.row(meter['f:resource_id'])
+
+                for k, v in metaquery.iteritems():
+                    if resource['f:r_' + k.split('.', 1)[1]] != v:
+                        break   # if one metaquery doesn't match, break
+                else:
+                    yield make_sample(meter)
+            else:
+                yield make_sample(meter)
 
     def _update_meter_stats(self, stat, meter):
         """Do the stats calculation on a requested time bucket in stats dict
@@ -397,43 +438,31 @@ class Connection(base.Connection):
         """
         vol = int(meter['f:counter_volume'])
         ts = timeutils.parse_strtime(meter['f:timestamp'])
-        stat['min'] = min(vol, stat['min'] or vol)
-        stat['max'] = max(vol, stat['max'])
-        stat['sum'] = vol + (stat['sum'] or 0)
-        stat['count'] += 1
-        stat['avg'] = (stat['sum'] / float(stat['count']))
-        stat['duration_start'] = min(ts, stat['duration_start'] or ts)
-        stat['duration_end'] = max(ts, stat['duration_end'] or ts)
-        stat['duration'] = \
-            timeutils.delta_seconds(stat['duration_start'],
-                                    stat['duration_end'])
+        stat.min = min(vol, stat.min or vol)
+        stat.max = max(vol, stat.max)
+        stat.sum = vol + (stat.sum or 0)
+        stat.count += 1
+        stat.avg = (stat.sum / float(stat.count))
+        stat.duration_start = min(ts, stat.duration_start or ts)
+        stat.duration_end = max(ts, stat.duration_end or ts)
+        stat.duration = \
+            timeutils.delta_seconds(stat.duration_start,
+                                    stat.duration_end)
 
-    def get_meter_statistics(self, event_filter, period=None):
-        """Return a dictionary containing meter statistics.
-        described by the query parameters.
+    def get_meter_statistics(self, sample_filter, period=None):
+        """Return an iterable of models.Statistics instances containing meter
+        statistics described by the query parameters.
 
         The filter must have a meter value set.
 
-        { 'min':
-          'max':
-          'avg':
-          'sum':
-          'count':
-          'period':
-          'period_start':
-          'period_end':
-          'duration':
-          'duration_start':
-          'duration_end':
-          }
-
         .. note::
 
-        Due to HBase limitations the aggregations are implemented
-        in the driver itself, therefore this method will be quite slow
-        because of all the Thrift traffic it is going to create.
+           Due to HBase limitations the aggregations are implemented
+           in the driver itself, therefore this method will be quite slow
+           because of all the Thrift traffic it is going to create.
+
         """
-        q, start, stop = make_query_from_filter(event_filter)
+        q, start, stop = make_query_from_filter(sample_filter)
 
         meters = list(meter for (ignored, meter) in
                       self.meter.scan(filter=q,
@@ -441,10 +470,19 @@ class Connection(base.Connection):
                                       row_stop=stop)
                       )
 
-        start_time = event_filter.start \
-            or timeutils.parse_strtime(meters[-1]['f:timestamp'])
-        end_time = event_filter.end \
-            or timeutils.parse_strtime(meters[0]['f:timestamp'])
+        if sample_filter.start:
+            start_time = sample_filter.start
+        elif meters:
+            start_time = timeutils.parse_strtime(meters[-1]['f:timestamp'])
+        else:
+            start_time = None
+
+        if sample_filter.end:
+            end_time = sample_filter.end
+        elif meters:
+            end_time = timeutils.parse_strtime(meters[0]['f:timestamp'])
+        else:
+            end_time = None
 
         results = []
 
@@ -462,82 +500,171 @@ class Connection(base.Connection):
                     start_time, ts) / period) * period
                 period_start = start_time + datetime.timedelta(0, offset)
 
-            if not len(results) or not results[-1]['period_start'] == \
+            if not len(results) or not results[-1].period_start == \
                     period_start:
                 if period:
                     period_end = period_start + datetime.timedelta(
                         0, period)
-                results.append({'count': 0,
-                                'min': 0,
-                                'max': 0,
-                                'avg': 0,
-                                'sum': 0,
-                                'period': period,
-                                'period_start': period_start,
-                                'period_end': period_end,
-                                'duration': None,
-                                'duration_start': None,
-                                'duration_end': None,
-                                })
+                results.append(
+                    models.Statistics(count=0,
+                                      min=0,
+                                      max=0,
+                                      avg=0,
+                                      sum=0,
+                                      period=period,
+                                      period_start=period_start,
+                                      period_end=period_end,
+                                      duration=None,
+                                      duration_start=None,
+                                      duration_end=None)
+                )
             self._update_meter_stats(results[-1], meter)
-        return list(results)
+        return results
 
-    def get_volume_sum(self, event_filter):
-        """Return the sum of the volume field for the samples
-        described by the query parameters.
+    def get_alarms(self, name=None, user=None,
+                   project=None, enabled=True, alarm_id=None):
+        """Yields a lists of alarms that match filters
+            raise NotImplementedError('metaquery not implemented')
         """
-        q, start, stop = make_query_from_filter(event_filter)
-        LOG.debug("q: %s" % q)
-        gen = self.meter.scan(filter=q, row_start=start, row_stop=stop)
-        results = defaultdict(int)
-        for ignored, meter in gen:
-            results[meter['f:resource_id']] \
-                += int(meter['f:counter_volume'])
+        raise NotImplementedError('Alarms not implemented')
 
-        return ({'resource_id': k, 'value': v}
-                for (k, v) in results.iteritems())
-
-    def get_volume_max(self, event_filter):
-        """Return the maximum of the volume field for the samples
-        described by the query parameters.
+    def update_alarm(self, alarm):
+        """update alarm
         """
+        raise NotImplementedError('Alarms not implemented')
 
-        q, start, stop = make_query_from_filter(event_filter)
-        LOG.debug("q: %s" % q)
-        gen = self.meter.scan(filter=q, row_start=start, row_stop=stop)
-        results = defaultdict(int)
-        for ignored, meter in gen:
-            results[meter['f:resource_id']] = \
-                max(results[meter['f:resource_id']],
-                    int(meter['f:counter_volume']))
-        return ({'resource_id': k, 'value': v}
-                for (k, v) in results.iteritems())
-
-    def get_event_interval(self, event_filter):
-        """Return the min and max timestamps from samples,
-        using the event_filter to limit the samples seen.
-
-        ( datetime.datetime(), datetime.datetime() )
+    def delete_alarm(self, alarm_id):
+        """Delete a alarm
         """
-        q, start, stop = make_query_from_filter(event_filter)
-        LOG.debug("q: %s" % q)
-        gen = self.meter.scan(filter=q, row_start=start, row_stop=stop)
-        a_min = None
-        a_max = None
-        for ignored, meter in gen:
-            timestamp = timeutils.parse_strtime(meter['f:timestamp'])
-            if a_min is None:
-                a_min = timestamp
+        raise NotImplementedError('Alarms not implemented')
+
+    def record_events(self, events):
+        """Write the events.
+
+        :param events: a list of model.Event objects.
+        """
+        raise NotImplementedError('Events not implemented.')
+
+    def get_events(self, event_filter):
+        """Return an iterable of model.Event objects.
+
+        :param event_filter: EventFilter instance
+        """
+        raise NotImplementedError('Events not implemented.')
+
+
+###############
+# This is a very crude version of "in-memory HBase", which implements just
+# enough functionality of HappyBase API to support testing of our driver.
+#
+class MTable(object):
+    """HappyBase.Table mock
+    """
+    def __init__(self, name, families):
+        self.name = name
+        self.families = families
+        self._rows = {}
+
+    def row(self, key):
+        return self._rows.get(key, {})
+
+    def rows(self, keys):
+        return ((k, self.row(k)) for k in keys)
+
+    def put(self, key, data):
+        self._rows[key] = data
+
+    def scan(self, filter=None, columns=[], row_start=None, row_stop=None):
+        sorted_keys = sorted(self._rows)
+        # copy data between row_start and row_stop into a dict
+        rows = {}
+        for row in sorted_keys:
+            if row_start and row < row_start:
+                continue
+            if row_stop and row > row_stop:
+                break
+            rows[row] = copy.copy(self._rows[row])
+        if columns:
+            ret = {}
+            for row in rows.keys():
+                data = rows[row]
+                for key in data:
+                    if key in columns:
+                        ret[row] = data
+            rows = ret
+        elif filter:
+            # TODO: we should really parse this properly, but at the moment we
+            # are only going to support AND here
+            filters = filter.split('AND')
+            for f in filters:
+                # Extract filter name and its arguments
+                g = re.search("(.*)\((.*),?\)", f)
+                fname = g.group(1).strip()
+                fargs = [s.strip().replace('\'', '').replace('\"', '')
+                         for s in g.group(2).split(',')]
+                m = getattr(self, fname)
+                if callable(m):
+                    # overwrite rows for filtering to take effect
+                    # in case of multiple filters
+                    rows = m(fargs, rows)
+                else:
+                    raise NotImplementedError("%s filter is not implemented, "
+                                              "you may want to add it!")
+        for k in sorted(rows):
+            yield k, rows[k]
+
+    def SingleColumnValueFilter(self, args, rows):
+        """This method is called from scan() when 'SingleColumnValueFilter'
+        is found in the 'filter' argument
+        """
+        op = args[2]
+        column = "%s:%s" % (args[0], args[1])
+        value = args[3]
+        if value.startswith('binary:'):
+            value = value[7:]
+        r = {}
+        for row in rows:
+            data = rows[row]
+
+            if op == '=':
+                if column in data and data[column] == value:
+                    r[row] = data
+            elif op == '<=':
+                if column in data and data[column] <= value:
+                    r[row] = data
+            elif op == '>=':
+                if column in data and data[column] >= value:
+                    r[row] = data
             else:
-                if timestamp < a_min:
-                    a_min = timestamp
-            if a_max is None:
-                a_max = timestamp
-            else:
-                if timestamp > a_max:
-                    a_max = timestamp
+                raise NotImplementedError("In-memory "
+                                          "SingleColumnValueFilter "
+                                          "doesn't support the %s operation "
+                                          "yet" % op)
+        return r
 
-        return a_min, a_max
+
+class MConnection(object):
+    """HappyBase.Connection mock
+    """
+    def __init__(self):
+        self.tables = {}
+
+    def open(self):
+        LOG.debug("Opening in-memory HBase connection")
+        return
+
+    def create_table(self, n, families={}):
+        if n in self.tables:
+            return self.tables[n]
+        t = MTable(n, families)
+        self.tables[n] = t
+        return t
+
+    def delete_table(self, name, use_prefix=True):
+        self.tables.remove(self.tables[name])
+
+    def table(self, name):
+        return self.create_table(name)
 
 
 #################################################
@@ -561,7 +688,8 @@ def reverse_timestamp(dt):
 def make_query(user=None, project=None, meter=None,
                resource=None, source=None, start=None, end=None,
                require_meter=True, query_only=False):
-    """Return a filter query based on the selected parameters.
+    """Return a filter query string based on the selected parameters.
+
     :param user: Optional user-id
     :param project: Optional project-id
     :param meter: Optional counter-name
@@ -588,23 +716,19 @@ def make_query(user=None, project=None, meter=None,
     if source:
         q.append("SingleColumnValueFilter "
                  "('f', 'source', =, 'binary:%s')" % source)
-    # when start_time and end_time is provided,
-    #    if it's filtered by meter,
-    #         rowkey will be used in the query;
-    #    if it's non meter filter query(eg. project_id, user_id etc),
-    #         SingleColumnValueFilter against rts will be appended to the query
-    #    query other tables should have no start and end passed in
-    stopRow, startRow = "", ""
+
+    start_row, end_row = "", ""
     rts_start = str(reverse_timestamp(start) + 1) if start else ""
     rts_end = str(reverse_timestamp(end) + 1) if end else ""
 
+    # when start_time and end_time is provided,
+    #    if it's filtered by meter,
+    #         rowkey will be used in the query;
+    #    else it's non meter filter query(e.g. project_id, user_id etc),
+    #         SingleColumnValueFilter against rts will be appended to the query
+    #    query other tables should have no start and end passed in
     if meter:
-        # if it's meter filter without start and end,
-        # startRow = meter while stopRow = meter + MAX_BYTE
-        if not rts_start:
-            rts_start = chr(127)
-        stopRow = "%s_%s" % (meter, rts_start)
-        startRow = "%s_%s" % (meter, rts_end)
+        start_row, end_row = _make_rowkey_scan(meter, rts_start, rts_end)
     elif require_meter:
         raise RuntimeError('Missing required meter specifier')
     else:
@@ -615,29 +739,39 @@ def make_query(user=None, project=None, meter=None,
             q.append("SingleColumnValueFilter ('f', 'rts', >=, 'binary:%s')" %
                      rts_end)
 
-    query_filter = None
+    sample_filter = None
     if len(q):
-        query_filter = " AND ".join(q)
+        sample_filter = " AND ".join(q)
+
     if query_only:
-        return query_filter
+        return sample_filter
     else:
-        return query_filter, startRow, stopRow
+        return sample_filter, start_row, end_row
 
 
-def make_query_from_filter(event_filter, require_meter=True):
+def make_query_from_filter(sample_filter, require_meter=True):
     """Return a query dictionary based on the settings in the filter.
 
-    :param filter: EventFilter instance
+    :param sample_filter: SampleFilter instance
     :param require_meter: If true and the filter does not have a meter,
                           raise an error.
     """
-    if event_filter.metaquery is not None and len(event_filter.metaquery) > 0:
-        raise NotImplementedError('metaquery not implemented')
+    return make_query(sample_filter.user, sample_filter.project,
+                      sample_filter.meter, sample_filter.resource,
+                      sample_filter.source, sample_filter.start,
+                      sample_filter.end, require_meter)
 
-    return make_query(event_filter.user, event_filter.project,
-                      event_filter.meter, event_filter.resource,
-                      event_filter.source, event_filter.start,
-                      event_filter.end, require_meter)
+
+def _make_rowkey_scan(meter, rts_start=None, rts_end=None):
+    """ if it's meter filter without start and end,
+        start_row = meter while end_row = meter + MAX_BYTE
+    """
+    if not rts_start:
+        rts_start = chr(127)
+    end_row = "%s_%s" % (meter, rts_start)
+    start_row = "%s_%s" % (meter, rts_end)
+
+    return start_row, end_row
 
 
 def _load_hbase_list(d, prefix):

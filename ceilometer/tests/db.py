@@ -20,7 +20,6 @@
 
 """Base classes for API tests."""
 
-from nose.plugins import skip
 from oslo.config import cfg
 
 from ceilometer import storage
@@ -33,8 +32,10 @@ class BaseException(Exception):
 
 class TestBase(test_base.TestCase):
 
-    # Default tests use test:// (MIM)
-    database_connection = 'test://'
+    # Default tests use mongodb://__test__ (MIM)
+    # TODO(jd) remove it, so we're sure we run test on the backend we want,
+    # not this default one by mistake
+    database_connection = 'mongodb://__test__'
 
     def setUp(self):
         super(TestBase, self).setUp()

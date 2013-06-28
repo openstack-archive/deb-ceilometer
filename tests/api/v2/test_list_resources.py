@@ -23,7 +23,7 @@ import logging
 
 from oslo.config import cfg
 
-from ceilometer.collector import meter
+from ceilometer.publisher import meter
 from ceilometer import counter
 
 from .base import FunctionalTest
@@ -51,10 +51,11 @@ class TestListResources(FunctionalTest):
             timestamp=datetime.datetime(2012, 7, 2, 10, 40),
             resource_metadata=None
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test',
+        )
         self.conn.record_metering_data(msg)
 
         data = self.get_json('/resources')
@@ -74,10 +75,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter',
                                }
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test',
+        )
         self.conn.record_metering_data(msg)
 
         counter2 = counter.Counter(
@@ -93,10 +95,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter2',
                                }
         )
-        msg2 = meter.meter_message_from_counter(counter2,
-                                                cfg.CONF.metering_secret,
-                                                'test',
-                                                )
+        msg2 = meter.meter_message_from_counter(
+            counter2,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test',
+        )
         self.conn.record_metering_data(msg2)
 
         data = self.get_json('/resources')
@@ -116,10 +119,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter',
                                }
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test',
+        )
         self.conn.record_metering_data(msg)
 
         counter2 = counter.Counter(
@@ -135,10 +139,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter2',
                                }
         )
-        msg2 = meter.meter_message_from_counter(counter2,
-                                                cfg.CONF.metering_secret,
-                                                'test',
-                                                )
+        msg2 = meter.meter_message_from_counter(
+            counter2,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test',
+        )
         self.conn.record_metering_data(msg2)
 
         data = self.get_json('/resources/resource-id')
@@ -158,10 +163,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter',
                                }
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test_list_resources',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test_list_resources',
+        )
         self.conn.record_metering_data(msg)
 
         counter2 = counter.Counter(
@@ -177,10 +183,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter2',
                                }
         )
-        msg2 = meter.meter_message_from_counter(counter2,
-                                                cfg.CONF.metering_secret,
-                                                'not-test',
-                                                )
+        msg2 = meter.meter_message_from_counter(
+            counter2,
+            cfg.CONF.publisher_meter.metering_secret,
+            'not-test',
+        )
         self.conn.record_metering_data(msg2)
 
         data = self.get_json('/resources', q=[{'field': 'source',
@@ -203,10 +210,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter',
                                }
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test_list_resources',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test_list_resources',
+        )
         self.conn.record_metering_data(msg)
 
         counter2 = counter.Counter(
@@ -222,10 +230,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter2',
                                }
         )
-        msg2 = meter.meter_message_from_counter(counter2,
-                                                cfg.CONF.metering_secret,
-                                                'not-test',
-                                                )
+        msg2 = meter.meter_message_from_counter(
+            counter2,
+            cfg.CONF.publisher_meter.metering_secret,
+            'not-test',
+        )
         self.conn.record_metering_data(msg2)
 
         data = self.get_json('/resources', q=[{'field': 'user_id',
@@ -248,10 +257,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter',
                                }
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test_list_resources',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test_list_resources',
+        )
         self.conn.record_metering_data(msg)
 
         counter2 = counter.Counter(
@@ -267,10 +277,11 @@ class TestListResources(FunctionalTest):
                                'tag': 'self.counter2',
                                }
         )
-        msg2 = meter.meter_message_from_counter(counter2,
-                                                cfg.CONF.metering_secret,
-                                                'not-test',
-                                                )
+        msg2 = meter.meter_message_from_counter(
+            counter2,
+            cfg.CONF.publisher_meter.metering_secret,
+            'not-test',
+        )
         self.conn.record_metering_data(msg2)
 
         data = self.get_json('/resources', q=[{'field': 'project_id',
@@ -278,6 +289,60 @@ class TestListResources(FunctionalTest):
                                                }])
         ids = [r['resource_id'] for r in data]
         self.assertEquals(['resource-id'], ids)
+
+    def test_with_user_non_admin(self):
+        counter1 = counter.Counter(
+            'instance',
+            'cumulative',
+            '',
+            1,
+            'user-id2',
+            'project-id2',
+            'resource-id-alternate',
+            timestamp=datetime.datetime(2012, 7, 2, 10, 41),
+            resource_metadata={'display_name': 'test-server',
+                               'tag': 'self.counter1',
+                               }
+        )
+        msg2 = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'not-test',
+        )
+        self.conn.record_metering_data(msg2)
+
+        data = self.get_json('/resources',
+                             headers={"X-Roles": "Member",
+                                      "X-Tenant-Id": "project-id2"})
+        ids = set(r['resource_id'] for r in data)
+        self.assertEquals(set(['resource-id-alternate']), ids)
+
+    def test_with_user_wrong_tenant(self):
+        counter1 = counter.Counter(
+            'instance',
+            'cumulative',
+            '',
+            1,
+            'user-id2',
+            'project-id2',
+            'resource-id-alternate',
+            timestamp=datetime.datetime(2012, 7, 2, 10, 41),
+            resource_metadata={'display_name': 'test-server',
+                               'tag': 'self.counter1',
+                               }
+        )
+        msg2 = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'not-test',
+        )
+        self.conn.record_metering_data(msg2)
+
+        data = self.get_json('/resources',
+                             headers={"X-Roles": "Member",
+                                      "X-Tenant-Id": "project-wrong"})
+        ids = set(r['resource_id'] for r in data)
+        self.assertEquals(set(), ids)
 
     def test_metadata(self):
         counter1 = counter.Counter(
@@ -295,10 +360,11 @@ class TestListResources(FunctionalTest):
                                'ignored_list': ['not-returned'],
                                }
         )
-        msg = meter.meter_message_from_counter(counter1,
-                                               cfg.CONF.metering_secret,
-                                               'test',
-                                               )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test',
+        )
         self.conn.record_metering_data(msg)
 
         data = self.get_json('/resources')
@@ -308,3 +374,35 @@ class TestListResources(FunctionalTest):
             [('display_name', 'test-server'),
              ('tag', 'self.counter'),
              ])
+
+    def test_resource_meter_links(self):
+        counter1 = counter.Counter(
+            'instance',
+            'cumulative',
+            '',
+            1,
+            'user-id',
+            'project-id',
+            'resource-id',
+            timestamp=datetime.datetime(2012, 7, 2, 10, 40),
+            resource_metadata={'display_name': 'test-server',
+                               'tag': 'self.counter',
+                               }
+        )
+        msg = meter.meter_message_from_counter(
+            counter1,
+            cfg.CONF.publisher_meter.metering_secret,
+            'test_list_resources',
+        )
+        self.conn.record_metering_data(msg)
+
+        data = self.get_json('/resources')
+        links = data[0]['links']
+        self.assertEqual(len(links), 2)
+        self.assertEqual(links[0]['rel'], 'self')
+        self.assertTrue((self.PATH_PREFIX + '/resources/resource-id')
+                        in links[0]['href'])
+        self.assertEqual(links[1]['rel'], 'instance')
+        self.assertTrue((self.PATH_PREFIX + '/meters/instance?'
+                         'q.field=resource_id&q.value=resource-id')
+                        in links[1]['href'])

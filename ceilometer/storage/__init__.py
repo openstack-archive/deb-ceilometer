@@ -19,14 +19,13 @@
 """
 
 
-import datetime
 import urlparse
 
 from oslo.config import cfg
 from stevedore import driver
 
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
+from ceilometer import utils
 
 
 LOG = log.getLogger(__name__)
@@ -35,6 +34,7 @@ STORAGE_ENGINE_NAMESPACE = 'ceilometer.storage'
 
 STORAGE_OPTS = [
     cfg.StrOpt('database_connection',
+               secret=True,
                default='mongodb://localhost:27017/ceilometer',
                help='Database connection string',
                ),
@@ -69,13 +69,13 @@ def get_connection(conf):
     return db
 
 
-class EventFilter(object):
-    """Holds the properties for building a query to filter events.
+class SampleFilter(object):
+    """Holds the properties for building a query from a meter/sample filter.
 
-    :param user: The event owner.
-    :param project: The event owner.
+    :param user: The sample owner.
+    :param project: The sample project.
     :param start: Earliest timestamp to include.
-    :param end: Only include events with timestamp less than this.
+    :param end: Only include samples with timestamp less than this.
     :param resource: Optional filter for resource id.
     :param meter: Optional filter for meter type using the meter name.
     :param source: Optional source filter.
@@ -85,17 +85,31 @@ class EventFilter(object):
                  resource=None, meter=None, source=None, metaquery={}):
         self.user = user
         self.project = project
-        self.start = self._sanitize_timestamp(start)
-        self.end = self._sanitize_timestamp(end)
+        self.start = utils.sanitize_timestamp(start)
+        self.end = utils.sanitize_timestamp(end)
         self.resource = resource
         self.meter = meter
         self.source = source
         self.metaquery = metaquery
 
-    def _sanitize_timestamp(self, timestamp):
-        """Return a naive utc datetime object."""
-        if not timestamp:
-            return timestamp
-        if not isinstance(timestamp, datetime.datetime):
-            timestamp = timeutils.parse_isotime(timestamp)
-        return timeutils.normalize_time(timestamp)
+
+class EventFilter(object):
+    """Properties for building an Event query.
+
+    :param start: UTC start datetime (mandatory)
+    :param end: UTC end datetime (mandatory)
+    :param event_name: the name of the event. None for all.
+    :param traits: the trait filter dict, all of which are optional
+                    {'key': <key>,
+                    't_string': <value>,
+                    't_int': <value>,
+                    't_datetime': <value>
+                    't_float': <value>}
+                   currently, only one trait dict is supported.
+    """
+
+    def __init__(self, start, end, event_name=None, traits={}):
+        self.start = utils.sanitize_timestamp(start)
+        self.end = utils.sanitize_timestamp(end)
+        self.event_name = event_name
+        self.traits = traits

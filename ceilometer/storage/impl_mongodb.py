@@ -1,8 +1,10 @@
 # -*- encoding: utf-8 -*-
 #
 # Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright © 2013 eNovance
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+#         Julien Danjou <julien@danjou.info>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -21,14 +23,18 @@
 import copy
 import datetime
 import operator
+import os
 import re
 import urlparse
+import uuid
 
 import bson.code
+import bson.objectid
 import pymongo
 
 from ceilometer.openstack.common import log
 from ceilometer.storage import base
+from ceilometer.storage import models
 
 
 LOG = log.getLogger(__name__)
@@ -87,38 +93,38 @@ def make_timestamp_range(start, end):
     return ts_range
 
 
-def make_query_from_filter(event_filter, require_meter=True):
+def make_query_from_filter(sample_filter, require_meter=True):
     """Return a query dictionary based on the settings in the filter.
 
-    :param filter: EventFilter instance
+    :param filter: SampleFilter instance
     :param require_meter: If true and the filter does not have a meter,
                           raise an error.
     """
     q = {}
 
-    if event_filter.user:
-        q['user_id'] = event_filter.user
-    if event_filter.project:
-        q['project_id'] = event_filter.project
+    if sample_filter.user:
+        q['user_id'] = sample_filter.user
+    if sample_filter.project:
+        q['project_id'] = sample_filter.project
 
-    if event_filter.meter:
-        q['counter_name'] = event_filter.meter
+    if sample_filter.meter:
+        q['counter_name'] = sample_filter.meter
     elif require_meter:
         raise RuntimeError('Missing required meter specifier')
 
-    ts_range = make_timestamp_range(event_filter.start, event_filter.end)
+    ts_range = make_timestamp_range(sample_filter.start, sample_filter.end)
     if ts_range:
         q['timestamp'] = ts_range
 
-    if event_filter.resource:
-        q['resource_id'] = event_filter.resource
-    if event_filter.source:
-        q['source'] = event_filter.source
+    if sample_filter.resource:
+        q['resource_id'] = sample_filter.resource
+    if sample_filter.source:
+        q['source'] = sample_filter.source
 
     # so the samples call metadata resource_metadata, so we convert
     # to that.
     q.update(dict(('resource_%s' % k, v)
-                  for (k, v) in event_filter.metaquery.iteritems()))
+                  for (k, v) in sample_filter.metaquery.iteritems()))
     return q
 
 
@@ -126,55 +132,7 @@ class Connection(base.Connection):
     """MongoDB connection.
     """
 
-    # JavaScript function for doing map-reduce to get a counter volume
-    # total.
-    MAP_COUNTER_VOLUME = bson.code.Code("""
-        function() {
-            emit(this.resource_id, this.counter_volume);
-        }
-        """)
-
-    # JavaScript function for doing map-reduce to get a maximum value
-    # from a range.  (from
-    # http://cookbook.mongodb.org/patterns/finding_max_and_min/)
-    REDUCE_MAX = bson.code.Code("""
-        function (key, values) {
-            return Math.max.apply(Math, values);
-        }
-        """)
-
-    # JavaScript function for doing map-reduce to get a sum.
-    REDUCE_SUM = bson.code.Code("""
-        function (key, values) {
-            var total = 0;
-            for (var i = 0; i < values.length; i++) {
-                total += values[i];
-            }
-            return total;
-        }
-        """)
-
-    # MAP_TIMESTAMP and REDUCE_MIN_MAX are based on the recipe
-    # http://cookbook.mongodb.org/patterns/finding_max_and_min_values_for_a_key
-    MAP_TIMESTAMP = bson.code.Code("""
-    function () {
-        emit('timestamp', { min : this.timestamp,
-                            max : this.timestamp } )
-    }
-    """)
-
-    REDUCE_MIN_MAX = bson.code.Code("""
-    function (key, values) {
-        var res = values[0];
-        for ( var i=1; i<values.length; i++ ) {
-            if ( values[i].min < res.min )
-               res.min = values[i].min;
-            if ( values[i].max > res.max )
-               res.max = values[i].max;
-        }
-        return res;
-    }
-    """)
+    _mim_instance = None
 
     MAP_STATS = bson.code.Code("""
     function () {
@@ -240,7 +198,32 @@ class Connection(base.Connection):
     def __init__(self, conf):
         opts = self._parse_connection_url(conf.database_connection)
         LOG.info('connecting to MongoDB on %s:%s', opts['host'], opts['port'])
-        self.conn = self._get_connection(opts)
+
+        if opts['host'] == '__test__':
+            url = os.environ.get('CEILOMETER_TEST_MONGODB_URL')
+            if url:
+                opts = self._parse_connection_url(url)
+                self.conn = pymongo.Connection(opts['host'],
+                                               opts['port'],
+                                               safe=True)
+            else:
+                # MIM will die if we have too many connections, so use a
+                # Singleton
+                if Connection._mim_instance is None:
+                    try:
+                        from ming import mim
+                    except ImportError:
+                        import testtools
+                        raise testtools.testcase.TestSkipped('requires mim')
+                    LOG.debug('Creating a new MIM Connection object')
+                    Connection._mim_instance = mim.Connection()
+                self.conn = Connection._mim_instance
+                LOG.debug('Using MIM for test connection')
+        else:
+            self.conn = pymongo.Connection(opts['host'],
+                                           opts['port'],
+                                           safe=True)
+
         self.db = getattr(self.conn, opts['dbname'])
         if 'username' in opts:
             self.db.authenticate(opts['username'], opts['password'])
@@ -269,17 +252,13 @@ class Connection(base.Connection):
         pass
 
     def clear(self):
-        self.conn.drop_database(self.db)
-
-    def _get_connection(self, opts):
-        """Return a connection to the database.
-
-        .. note::
-
-          The tests use a subclass to override this and return an
-          in-memory connection.
-        """
-        return pymongo.Connection(opts['host'], opts['port'], safe=True)
+        if self._mim_instance is not None:
+            # Don't want to use drop_database() because
+            # may end up running out of spidermonkey instances.
+            # http://davisp.lighthouseapp.com/projects/26898/tickets/22
+            self.db.clear()
+        else:
+            self.conn.drop_database(self.db)
 
     def _parse_connection_url(self, url):
         opts = {}
@@ -338,7 +317,7 @@ class Connection(base.Connection):
             upsert=True,
         )
 
-        # Record the raw data for the event. Use a copy so we do not
+        # Record the raw data for the meter. Use a copy so we do not
         # modify a data structure owned by our caller (the driver adds
         # a new key '_id').
         record = copy.copy(data)
@@ -368,15 +347,7 @@ class Connection(base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
                       metaquery={}, resource=None):
-        """Return an iterable of dictionaries containing resource information.
-
-        { 'resource_id': UUID of the resource,
-          'project_id': UUID of project owning the resource,
-          'user_id': UUID of user owning the resource,
-          'timestamp': UTC datetime of last update to the resource,
-          'metadata': most current metadata for the resource,
-          'meter': list of the meters reporting data for the resource,
-          }
+        """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -418,25 +389,25 @@ class Connection(base.Connection):
         resource_ids = self.db.meter.find(q).distinct('resource_id')
         q = {'_id': {'$in': resource_ids}}
         for resource in self.db.resource.find(q):
-            r = {}
-            r.update(resource)
-            # Replace the '_id' key with 'resource_id' to meet the
-            # caller's expectations.
-            r['resource_id'] = r['_id']
-            del r['_id']
-            yield r
+            yield models.Resource(
+                resource_id=resource['_id'],
+                project_id=resource['project_id'],
+                source=resource['source'],
+                user_id=resource['user_id'],
+                metadata=resource['metadata'],
+                meter=[
+                    models.ResourceMeter(
+                        counter_name=meter['counter_name'],
+                        counter_type=meter['counter_type'],
+                        counter_unit=meter['counter_unit'],
+                    )
+                    for meter in resource['meter']
+                ],
+            )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}):
-        """Return an iterable of dictionaries containing meter information.
-
-        { 'name': name of the meter,
-          'type': type of the meter (guage, counter),
-          'unit': unit of the meter,
-          'resource_id': UUID of the resource,
-          'project_id': UUID of project owning the resource,
-          'user_id': UUID of user owning the resource,
-          }
+        """Return an iterable of models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -457,57 +428,45 @@ class Connection(base.Connection):
 
         for r in self.db.resource.find(q):
             for r_meter in r['meter']:
-                m = {}
-                m['name'] = r_meter['counter_name']
-                m['type'] = r_meter['counter_type']
-                # Return empty string if 'counter_unit' is not valid for
-                # backward compaitiblity.
-                m['unit'] = r_meter.get('counter_unit', '')
-                m['resource_id'] = r['_id']
-                m['project_id'] = r['project_id']
-                m['user_id'] = r['user_id']
-                yield m
+                yield models.Meter(
+                    name=r_meter['counter_name'],
+                    type=r_meter['counter_type'],
+                    # Return empty string if 'counter_unit' is not valid for
+                    # backward compaitiblity.
+                    unit=r_meter.get('counter_unit', ''),
+                    resource_id=r['_id'],
+                    project_id=r['project_id'],
+                    source=r['source'],
+                    user_id=r['user_id'],
+                )
 
-    def get_samples(self, event_filter):
+    def get_samples(self, sample_filter):
         """Return an iterable of samples as created by
         :func:`ceilometer.meter.meter_message_from_counter`.
         """
-        q = make_query_from_filter(event_filter, require_meter=False)
+        q = make_query_from_filter(sample_filter, require_meter=False)
         samples = self.db.meter.find(q)
         for s in samples:
             # Remove the ObjectId generated by the database when
-            # the event was inserted. It is an implementation
+            # the sample was inserted. It is an implementation
             # detail that should not leak outside of the driver.
             del s['_id']
-            yield s
+            yield models.Sample(**s)
 
-    def get_meter_statistics(self, event_filter, period=None):
-        """Return a dictionary containing meter statistics.
-        described by the query parameters.
+    def get_meter_statistics(self, sample_filter, period=None):
+        """Return an iterable of models.Statistics instance containing meter
+        statistics described by the query parameters.
 
         The filter must have a meter value set.
 
-        { 'min':
-          'max':
-          'avg':
-          'sum':
-          'count':
-          'period':
-          'period_start':
-          'period_end':
-          'duration':
-          'duration_start':
-          'duration_end':
-          }
-
         """
-        q = make_query_from_filter(event_filter)
+        q = make_query_from_filter(sample_filter)
 
         if period:
             map_stats = self.MAP_STATS_PERIOD % \
                 (period,
-                 int(event_filter.start.strftime('%s'))
-                 if event_filter.start else 0)
+                 int(sample_filter.start.strftime('%s'))
+                 if sample_filter.start else 0)
         else:
             map_stats = self.MAP_STATS
 
@@ -519,34 +478,9 @@ class Connection(base.Connection):
             query=q,
         )
 
-        return sorted((r['value'] for r in results['results']),
-                      key=operator.itemgetter('period_start'))
-
-    def get_volume_sum(self, event_filter):
-        """Return the sum of the volume field for the samples
-        described by the query parameters.
-        """
-        q = make_query_from_filter(event_filter)
-        results = self.db.meter.map_reduce(self.MAP_COUNTER_VOLUME,
-                                           self.REDUCE_SUM,
-                                           {'inline': 1},
-                                           query=q,
-                                           )
-        return ({'resource_id': r['_id'], 'value': r['value']}
-                for r in results['results'])
-
-    def get_volume_max(self, event_filter):
-        """Return the maximum of the volume field for the samples
-        described by the query parameters.
-        """
-        q = make_query_from_filter(event_filter)
-        results = self.db.meter.map_reduce(self.MAP_COUNTER_VOLUME,
-                                           self.REDUCE_MAX,
-                                           {'inline': 1},
-                                           query=q,
-                                           )
-        return ({'resource_id': r['_id'], 'value': r['value']}
-                for r in results['results'])
+        return sorted((models.Statistics(**(r['value']))
+                       for r in results['results']),
+                      key=operator.attrgetter('period_start'))
 
     def _fix_interval_min_max(self, a_min, a_max):
         if hasattr(a_min, 'valueOf') and a_min.valueOf is not None:
@@ -576,19 +510,78 @@ class Connection(base.Connection):
                 a_max.valueOf() // 1000)
         return (a_min, a_max)
 
-    def get_event_interval(self, event_filter):
-        """Return the min and max timestamps from samples,
-        using the event_filter to limit the samples seen.
-
-        ( datetime.datetime(), datetime.datetime() )
+    def get_alarms(self, name=None, user=None,
+                   project=None, enabled=True, alarm_id=None):
+        """Yields a lists of alarms that match filters
         """
-        q = make_query_from_filter(event_filter)
-        results = self.db.meter.map_reduce(self.MAP_TIMESTAMP,
-                                           self.REDUCE_MIN_MAX,
-                                           {'inline': 1},
-                                           query=q,
-                                           )
-        if results['results']:
-            answer = results['results'][0]['value']
-            return self._fix_interval_min_max(answer['min'], answer['max'])
-        return (None, None)
+        q = {}
+        if user is not None:
+            q['user_id'] = user
+        if project is not None:
+            q['project_id'] = project
+        if name is not None:
+            q['name'] = name
+        if enabled is not None:
+            q['enabled'] = enabled
+        if alarm_id is not None:
+            q['alarm_id'] = alarm_id
+
+        for alarm in self.db.alarm.find(q):
+            a = {}
+            a.update(alarm)
+            del a['_id']
+            yield models.Alarm(**a)
+
+    def update_alarm(self, alarm):
+        """update alarm
+        """
+        if alarm.alarm_id is None:
+            # This is an insert, generate an id
+            alarm.alarm_id = str(uuid.uuid1())
+        data = alarm.as_dict()
+        self.db.alarm.update(
+            {'alarm_id': alarm.alarm_id},
+            {'$set': data},
+            upsert=True)
+
+        stored_alarm = self.db.alarm.find({'alarm_id': alarm.alarm_id})[0]
+        del stored_alarm['_id']
+        return models.Alarm(**stored_alarm)
+
+    def delete_alarm(self, alarm_id):
+        """Delete a alarm
+        """
+        self.db.alarm.remove({'alarm_id': alarm_id})
+
+    def record_events(self, events):
+        """Write the events.
+
+        :param events: a list of model.Event objects.
+        """
+        raise NotImplementedError('Events not implemented.')
+
+    def get_events(self, event_filter):
+        """Return an iterable of model.Event objects.
+
+        :param event_filter: EventFilter instance
+        """
+        raise NotImplementedError('Events not implemented.')
+
+
+def require_map_reduce(conn):
+    """Raises SkipTest if the connection is using mim.
+    """
+    # NOTE(dhellmann): mim requires spidermonkey to implement the
+    # map-reduce functions, so if we can't import it then just
+    # skip these tests unless we aren't using mim.
+    try:
+        import spidermonkey
+    except BaseException:
+        try:
+            from ming import mim
+            if hasattr(conn, "conn") and isinstance(conn.conn, mim.Connection):
+                import testtools
+                raise testtools.testcase.TestSkipped('requires spidermonkey')
+        except ImportError:
+            import testtools
+            raise testtools.testcase.TestSkipped('requires mim')

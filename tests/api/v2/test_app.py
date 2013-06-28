@@ -18,34 +18,41 @@
 """Test basic ceilometer-api app
 """
 import os
-import tempfile
-import unittest
 
 from oslo.config import cfg
 
 from ceilometer.api import app
 from ceilometer.api import acl
 from ceilometer import service
+from ceilometer.tests import base
 from .base import FunctionalTest
 
 
-class TestApp(unittest.TestCase):
+class TestApp(base.TestCase):
 
     def tearDown(self):
+        super(TestApp, self).tearDown()
         cfg.CONF.reset()
 
     def test_keystone_middleware_conf(self):
+        service.prepare_service()
         cfg.CONF.set_override("auth_protocol", "foottp",
                               group=acl.OPT_GROUP_NAME)
         cfg.CONF.set_override("auth_version", "v2.0", group=acl.OPT_GROUP_NAME)
+        cfg.CONF.set_override("pipeline_cfg_file",
+                              self.path_get("etc/ceilometer/pipeline.yaml"))
         api_app = app.setup_app()
         self.assertEqual(api_app.auth_protocol, 'foottp')
 
     def test_keystone_middleware_parse_conffile(self):
-        tmpfile = tempfile.mktemp()
+        tmpfile = self.temp_config_file_path()
         with open(tmpfile, "w") as f:
-            f.write("[%s]\nauth_protocol = barttp" % acl.OPT_GROUP_NAME)
-            f.write("\nauth_version = v2.0")
+            f.write("[DEFAULT]\n")
+            f.write("pipeline_cfg_file = %s\n" %
+                    self.path_get("etc/ceilometer/pipeline.yaml"))
+            f.write("[%s]\n" % acl.OPT_GROUP_NAME)
+            f.write("auth_protocol = barttp\n")
+            f.write("auth_version = v2.0\n")
         service.prepare_service(['ceilometer-api',
                                  '--config-file=%s' % tmpfile])
         api_app = app.setup_app()

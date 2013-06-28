@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 Julien Danjou
+# Copyright © 2012-2013 Julien Danjou
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -26,9 +26,14 @@ import sys
 from oslo.config import cfg
 from stevedore import dispatch
 
+from ceilometer.openstack.common import gettextutils
+gettextutils.install('ceilometer')
+
 from ceilometer import counter
 from ceilometer import pipeline
+from ceilometer import publisher
 from ceilometer import service
+from ceilometer import transformer
 from ceilometer.openstack.common import timeutils
 from ceilometer.openstack.common import context
 
@@ -81,21 +86,25 @@ root_logger = logging.getLogger('')
 root_logger.addHandler(console)
 root_logger.setLevel(logging.DEBUG)
 
-publish_manager = dispatch.NameDispatchExtensionManager(
-    namespace=pipeline.PUBLISHER_NAMESPACE,
-    check_func=lambda x: True,
-    invoke_on_load=True)
-pipeline_manager = pipeline.setup_pipeline(publish_manager)
+pipeline_manager = pipeline.setup_pipeline(
+    transformer.TransformerExtensionManager(
+        'ceilometer.transformer',
+    ),
+    publisher.PublisherExtensionManager(
+        'ceilometer.publisher',
+    ),
+)
 
 with pipeline_manager.publisher(context.get_admin_context(),
                                 cfg.CONF.counter_source) as p:
-    p([counter.Counter(name=cfg.CONF.counter_name,
-                                    type=cfg.CONF.counter_type,
-                                    unit=cfg.CONF.counter_unit,
-                                    volume=cfg.CONF.counter_volume,
-                                    user_id=cfg.CONF.counter_user,
-                                    project_id=cfg.CONF.counter_project,
-                                    resource_id=cfg.CONF.counter_resource,
-                                    timestamp=cfg.CONF.counter_timestamp,
-                                    resource_metadata=cfg.CONF.counter_metadata
-                                    and eval(cfg.CONF.counter_metadata))])
+    p([counter.Counter(
+        name=cfg.CONF.counter_name,
+        type=cfg.CONF.counter_type,
+        unit=cfg.CONF.counter_unit,
+        volume=cfg.CONF.counter_volume,
+        user_id=cfg.CONF.counter_user,
+        project_id=cfg.CONF.counter_project,
+        resource_id=cfg.CONF.counter_resource,
+        timestamp=cfg.CONF.counter_timestamp,
+        resource_metadata=cfg.CONF.counter_metadata and eval(
+            cfg.CONF.counter_metadata))])

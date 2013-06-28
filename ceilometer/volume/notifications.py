@@ -36,7 +36,7 @@ cfg.CONF.register_opts(OPTS)
 
 
 class _Base(plugin.NotificationBase):
-    """Convert compute.instance.* notifications into Counters
+    """Convert volume notifications into Counters
     """
 
     metadata_keys = [
@@ -88,7 +88,7 @@ class VolumeSize(_Base):
         return [
             counter.Counter(name='volume.size',
                             type=counter.TYPE_GAUGE,
-                            unit='B',
+                            unit='GB',
                             volume=message['payload']['size'],
                             user_id=message['payload']['user_id'],
                             project_id=message['payload']['tenant_id'],

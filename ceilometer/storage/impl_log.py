@@ -118,28 +118,13 @@ class Connection(base.Connection):
         """
         return []
 
-    def get_samples(self, event_filter):
+    def get_samples(self, sample_filter):
         """Return an iterable of samples as created by
         :func:`ceilometer.meter.meter_message_from_counter`.
         """
         return []
 
-    def get_volume_sum(self, event_filter):
-        """Return the sum of the volume field for the samples
-        described by the query parameters.
-        """
-
-    def get_volume_max(self, event_filter):
-        """Return the maximum of the volume field for the samples
-        described by the query parameters.
-        """
-
-    def get_event_interval(self, event_filter):
-        """Return the min and max timestamp for samples
-        matching the event_filter.
-        """
-
-    def get_meter_statistics(self, event_filter, period=None):
+    def get_meter_statistics(self, sample_filter, period=None):
         """Return a dictionary containing meter statistics.
         described by the query parameters.
 
@@ -159,3 +144,33 @@ class Connection(base.Connection):
           }
 
         """
+        return []
+
+    def get_alarms(self, name=None, user=None,
+                   project=None, enabled=True, alarm_id=None):
+        """Yields a lists of alarms that match filters
+        """
+        return []
+
+    def update_alarm(self, alarm):
+        """update alarm
+        """
+        return alarm
+
+    def delete_alarm(self, alarm_id):
+        """Delete a alarm
+        """
+
+    def record_events(self, events):
+        """Write the events.
+
+        :param events: a list of model.Event objects.
+        """
+        raise NotImplementedError('Events not implemented.')
+
+    def get_events(self, event_filter):
+        """Return an iterable of model.Event objects.
+
+        :param event_filter: EventFilter instance
+        """
+        raise NotImplementedError('Events not implemented.')

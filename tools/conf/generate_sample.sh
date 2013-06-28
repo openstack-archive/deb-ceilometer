@@ -21,5 +21,5 @@ FILES=$(find ceilometer -type f -name "*.py" ! -path "ceilometer/tests/*" -exec 
     grep -l "Opt(" {} \; | sort -u)
 
 PYTHONPATH=./:${PYTHONPATH} \
-    python $(dirname "$0")/extract_opts.py ${FILES} > \
+    python $(dirname "$0")/../../ceilometer/openstack/common/config/generator.py ${FILES} > \
     etc/ceilometer/ceilometer.conf.sample

@@ -22,10 +22,10 @@ import datetime
 
 from oslo.config import cfg
 
-from ceilometer.collector import meter
+from ceilometer.publisher import meter
 from ceilometer import counter
 
-from ceilometer.storage.impl_test import require_map_reduce
+from ceilometer.storage.impl_mongodb import require_map_reduce
 
 from .base import FunctionalTest
 
@@ -54,10 +54,11 @@ class TestMaxProjectVolume(FunctionalTest):
                                    }
             )
             self.counters.append(c)
-            msg = meter.meter_message_from_counter(c,
-                                                   cfg.CONF.metering_secret,
-                                                   'source1',
-                                                   )
+            msg = meter.meter_message_from_counter(
+                c,
+                cfg.CONF.publisher_meter.metering_secret,
+                'source1',
+            )
             self.conn.record_metering_data(msg)
 
     def test_no_time_bounds(self):

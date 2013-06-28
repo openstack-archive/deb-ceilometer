@@ -100,15 +100,8 @@ class Connection(object):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, end_timestamp=None,
                       metaquery={}, resource=None):
-        """Return an iterable of dictionaries containing resource information.
-
-        { 'resource_id': UUID of the resource,
-          'project_id': UUID of project owning the resource,
-          'user_id': UUID of user owning the resource,
-          'timestamp': UTC datetime of last update to the resource,
-          'metadata': most current metadata for the resource,
-          'meter': list of the meters reporting data for the resource,
-          }
+        """Return an iterable of models.Resource instances containing
+        resource information.
 
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -122,15 +115,8 @@ class Connection(object):
     @abc.abstractmethod
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}):
-        """Return an iterable of dictionaries containing meter information.
-
-        { 'name': name of the meter,
-          'type': type of the meter (guage, counter),
-          'unit': unit of the meter,
-          'resource_id': UUID of the resource,
-          'project_id': UUID of project owning the resource,
-          'user_id': UUID of user owning the resource,
-          }
+        """Return an iterable of model.Meter instances containing meter
+        information.
 
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -140,65 +126,45 @@ class Connection(object):
         """
 
     @abc.abstractmethod
-    def get_samples(self, event_filter):
-        """Return an iterable of samples as created by
-        :func:`ceilometer.meter.meter_message_from_counter`.
+    def get_samples(self, sample_filter):
+        """Return an iterable of model.Sample instances
         """
 
     @abc.abstractmethod
-    def get_volume_sum(self, event_filter):
-        """Return the sum of the volume field for the samples
-        described by the query parameters.
+    def get_meter_statistics(self, sample_filter, period=None):
+        """Return an iterable of model.Statistics instances.
 
         The filter must have a meter value set.
-
-        { 'resource_id': UUID string for the resource,
-          'value': The sum for the volume.
-          }
         """
 
     @abc.abstractmethod
-    def get_volume_max(self, event_filter):
-        """Return the maximum of the volume field for the samples
-        described by the query parameters.
-
-        The filter must have a meter value set.
-
-        { 'resource_id': UUID string for the resource,
-          'value': The max for the volume.
-          }
+    def get_alarms(self, name=None, user=None,
+                   project=None, enabled=True, alarm_id=None):
+        """Yields a lists of alarms that match filters
         """
 
     @abc.abstractmethod
-    def get_event_interval(self, event_filter):
-        """Return the min and max timestamps from samples,
-        using the event_filter to limit the samples seen.
-
-        ( datetime.datetime(), datetime.datetime() )
+    def update_alarm(self, alarm):
+        """update alarm
         """
 
     @abc.abstractmethod
-    def get_meter_statistics(self, event_filter, period=None):
-        """Return a dictionary containing meter statistics.
-        described by the query parameters.
-
-        The filter must have a meter value set.
-
-        { 'min':
-          'max':
-          'avg':
-          'sum':
-          'count':
-          'period':
-          'period_start':
-          'period_end':
-          'duration':
-          'duration_start':
-          'duration_end':
-          }
-
+    def delete_alarm(self, alarm_id):
+        """Delete a alarm
         """
 
     @abc.abstractmethod
     def clear(self):
         """Clear database."""
+
+    @abc.abstractmethod
+    def record_events(self, events):
+        """Write the events to the backend storage system.
+
+        :param events: a list of model.Event objects.
+        """
+
+    @abc.abstractmethod
+    def get_events(self, event_filter):
+        """Return an iterable of model.Event objects.
+        """

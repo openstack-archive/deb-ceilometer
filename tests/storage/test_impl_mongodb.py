@@ -42,63 +42,32 @@
     pip install python-spidermonkey
 
   To run the tests *without* mim, set the environment variable
-  CEILOMETER_TEST_LIVE=1 before running tox.
+  CEILOMETER_TEST_MONGODB_URL to a MongoDB URL before running tox.
 
 """
 
 import copy
 import datetime
-import mox
 
 from tests.storage import base
 
-from ceilometer.collector import meter
+from ceilometer.publisher import meter
 from ceilometer import counter
-from ceilometer.storage.impl_test import TestConnection, require_map_reduce
-
-
-class MongoDBEngine(base.DBEngineBase):
-
-    DBNAME = 'testdb'
-
-    def tearDown(self):
-        self.conn.drop_database(self.DBNAME)
-        super(MongoDBEngine, self).tearDown()
-
-    def get_connection(self):
-        conf = mox.Mox().CreateMockAnything()
-        conf.database_connection = 'mongodb://localhost/%s' % self.DBNAME
-        self.conn = TestConnection(conf)
-        self.db = self.conn.conn[self.DBNAME]
-        return self.conn
-
-    def clean_up(self):
-        self.conn.clear()
-
-    def get_sources_by_project_id(self, id):
-        project = self.db.project.find_one({'_id': id})
-        return list(project['source'])
-
-    def get_sources_by_user_id(self, id):
-        user = self.db.user.find_one({'_id': id})
-        return list(user['source'])
+from ceilometer.storage.impl_mongodb import require_map_reduce
 
 
 class MongoDBEngineTestBase(base.DBTestBase):
-
-    def get_engine(cls):
-        return MongoDBEngine()
+    database_connection = 'mongodb://__test__'
 
 
 class IndexTest(MongoDBEngineTestBase):
 
     def test_indexes_exist(self):
         # ensure_index returns none if index already exists
-        assert self.engine is not None
-        assert not self.engine.db.resource.ensure_index('foo',
-                                                        name='resource_idx')
-        assert not self.engine.db.meter.ensure_index('foo',
-                                                     name='meter_idx')
+        assert not self.conn.db.resource.ensure_index('foo',
+                                                      name='resource_idx')
+        assert not self.conn.db.meter.ensure_index('foo',
+                                                   name='meter_idx')
 
 
 class UserTest(base.UserTest, MongoDBEngineTestBase):
@@ -117,36 +86,8 @@ class MeterTest(base.MeterTest, MongoDBEngineTestBase):
     pass
 
 
-class RawEventTest(base.RawEventTest, MongoDBEngineTestBase):
+class RawSampleTest(base.RawSampleTest, MongoDBEngineTestBase):
     pass
-
-
-class SumTest(base.SumTest, MongoDBEngineTestBase):
-
-    def setUp(self):
-        super(SumTest, self).setUp()
-        require_map_reduce(self.conn)
-
-
-class TestGetEventInterval(base.TestGetEventInterval, MongoDBEngineTestBase):
-
-    def setUp(self):
-        super(TestGetEventInterval, self).setUp()
-        require_map_reduce(self.conn)
-
-
-class MaxProjectTest(base.MaxProjectTest, MongoDBEngineTestBase):
-
-    def setUp(self):
-        super(MaxProjectTest, self).setUp()
-        require_map_reduce(self.conn)
-
-
-class MaxResourceTest(base.MaxResourceTest, MongoDBEngineTestBase):
-
-    def setUp(self):
-        super(MaxResourceTest, self).setUp()
-        require_map_reduce(self.conn)
 
 
 class StatisticsTest(base.StatisticsTest, MongoDBEngineTestBase):
@@ -154,6 +95,10 @@ class StatisticsTest(base.StatisticsTest, MongoDBEngineTestBase):
     def setUp(self):
         super(StatisticsTest, self).setUp()
         require_map_reduce(self.conn)
+
+
+class AlarmTest(base.AlarmTest, MongoDBEngineTestBase):
+    pass
 
 
 class CompatibilityTest(MongoDBEngineTestBase):
@@ -217,9 +162,10 @@ class CompatibilityTest(MongoDBEngineTestBase):
                                }
         )
         self.counters.append(c)
-        msg = meter.meter_message_from_counter(c,
-                                               secret='not-so-secret',
-                                               source='test')
+        msg = meter.meter_message_from_counter(
+            c,
+            secret='not-so-secret',
+            source='test')
         self.conn.record_metering_data(self.conn, msg)
 
     def test_counter_unit(self):

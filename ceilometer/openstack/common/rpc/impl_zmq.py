@@ -180,7 +180,7 @@ class ZmqSocket(object):
             return
 
         # We must unsubscribe, or we'll leak descriptors.
-        if len(self.subscriptions) > 0:
+        if self.subscriptions:
             for f in self.subscriptions:
                 try:
                     self.sock.setsockopt(zmq.UNSUBSCRIBE, f)
@@ -221,7 +221,7 @@ class ZmqClient(object):
     def cast(self, msg_id, topic, data, envelope=False):
         msg_id = msg_id or 0
 
-        if not (envelope or rpc_common._SEND_RPC_ENVELOPE):
+        if not envelope:
             self.outq.send(map(bytes,
                            (msg_id, topic, 'cast', _serialize(data))))
             return
@@ -276,12 +276,13 @@ class InternalContext(object):
 
         try:
             result = proxy.dispatch(
-                ctx, data['version'], data['method'], **data['args'])
+                ctx, data['version'], data['method'],
+                data.get('namespace'), **data['args'])
             return ConsumerBase.normalize_reply(result, ctx.replies)
         except greenlet.GreenletExit:
             # ignore these since they are just from shutdowns
             pass
-        except rpc_common.ClientException, e:
+        except rpc_common.ClientException as e:
             LOG.debug(_("Expected exception during message handling (%s)") %
                       e._exc_info[1])
             return {'exc':
@@ -295,11 +296,16 @@ class InternalContext(object):
     def reply(self, ctx, proxy,
               msg_id=None, context=None, topic=None, msg=None):
         """Reply to a casted call."""
-        # Our real method is curried into msg['args']
+        # NOTE(ewindisch): context kwarg exists for Grizzly compat.
+        #                  this may be able to be removed earlier than
+        #                  'I' if ConsumerBase.process were refactored.
+        if type(msg) is list:
+            payload = msg[-1]
+        else:
+            payload = msg
 
-        child_ctx = RpcContext.unmarshal(msg[0])
         response = ConsumerBase.normalize_reply(
-            self._get_response(child_ctx, proxy, topic, msg[1]),
+            self._get_response(ctx, proxy, topic, payload),
             ctx.replies)
 
         LOG.debug(_("Sending reply"))
@@ -346,7 +352,7 @@ class ConsumerBase(object):
             return
 
         proxy.dispatch(ctx, data['version'],
-                       data['method'], **data['args'])
+                       data['method'], data.get('namespace'), **data['args'])
 
 
 class ZmqBaseReactor(ConsumerBase):
@@ -685,8 +691,8 @@ def _call(addr, context, topic, msg, timeout=None,
         'method': '-reply',
         'args': {
             'msg_id': msg_id,
-            'context': mcontext,
             'topic': reply_topic,
+            # TODO(ewindisch): safe to remove mcontext in I.
             'msg': [mcontext, msg]
         }
     }
@@ -757,7 +763,7 @@ def _multi_send(method, context, topic, msg, timeout=None,
     LOG.debug(_("Sending message(s) to: %s"), queues)
 
     # Don't stack if we have no matchmaker results
-    if len(queues) == 0:
+    if not queues:
         LOG.warn(_("No matchmaker results. Not casting."))
         # While not strictly a timeout, callers know how to handle
         # this exception and a timeout isn't too big a lie.
@@ -840,6 +846,11 @@ def _get_ctxt():
 def _get_matchmaker(*args, **kwargs):
     global matchmaker
     if not matchmaker:
-        matchmaker = importutils.import_object(
-            CONF.rpc_zmq_matchmaker, *args, **kwargs)
+        mm = CONF.rpc_zmq_matchmaker
+        if mm.endswith('matchmaker.MatchMakerRing'):
+            mm.replace('matchmaker', 'matchmaker_ring')
+            LOG.warn(_('rpc_zmq_matchmaker = %(orig)s is deprecated; use'
+                       ' %(new)s instead') % dict(
+                     orig=CONF.rpc_zmq_matchmaker, new=mm))
+        matchmaker = importutils.import_object(mm, *args, **kwargs)
     return matchmaker
