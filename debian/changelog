@@ -1,6 +1,7 @@
 ceilometer (2013.1.2-3) unstable; urgency=low
 
   * Added debian-l10n-english review (Closes #708747).
+  * Do not fail on directory removal on purge (Closes: #710910).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 10 Jul 2013 14:17:03 +0800
 
