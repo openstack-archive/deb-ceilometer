@@ -1,3 +1,9 @@
+ceilometer (2013.1.2-3) unstable; urgency=low
+
+  * Added English review, thanks to the debian-l10n-english team.
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 10 Jul 2013 14:17:03 +0800
+
 ceilometer (2013.1.2-2) unstable; urgency=low
 
   * Added some Should-Start / Should-Stop so that Ceilometer starts after Mongo
