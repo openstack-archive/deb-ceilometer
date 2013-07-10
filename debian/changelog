@@ -1,6 +1,6 @@
 ceilometer (2013.1.2-3) unstable; urgency=low
 
-  * Added English review, thanks to the debian-l10n-english team.
+  * Added debian-l10n-english review (Closes #708747).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 10 Jul 2013 14:17:03 +0800
 
