@@ -1,1 +1,2 @@
 install-missing-files.patch
+fix-tools-pip-requires.patch

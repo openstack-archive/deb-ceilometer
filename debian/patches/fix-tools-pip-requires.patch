@@ -1,0 +1,22 @@
+Description: Fixes sqlalchemy and flask requires
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Last-Update: 2013-07-10
+
+--- ceilometer-2013.1.2.orig/tools/pip-requires
++++ ceilometer-2013.1.2/tools/pip-requires
+@@ -2,12 +2,12 @@ WebOb>=1.2
+ kombu
+ iso8601
+ argparse
+-SQLAlchemy>=0.7,<=0.7.99
++SQLAlchemy>=0.7
+ sqlalchemy-migrate>=0.7.2
+ pymongo>=2.2
+ eventlet
+ anyjson>=0.2.4
+-Flask==0.9
++Flask>=0.9
+ pecan>=0.2.0
+ stevedore>=0.7
+ python-glanceclient
