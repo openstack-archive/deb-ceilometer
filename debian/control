@@ -101,7 +101,7 @@ Depends: libjs-jquery,
          ${python:Depends}
 Description: OpenStack efficient metering counters system - Python libraries
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, accross
+ providing all the counters they need to establish customer billing, accros
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
@@ -120,7 +120,7 @@ Depends: adduser,
 Provides: ${python:Provides}
 Description: OpenStack efficient metering counters system - common files
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, accross
+ providing all the counters they need to establish customer billing, accros
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
@@ -137,7 +137,7 @@ Depends: ceilometer-common (= ${binary:Version}),
          ${python:Depends}
 Description: OpenStack efficient metering counters system - collector service
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, accross
+ providing all the counters they need to establish customer billing, accros
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
@@ -156,7 +156,7 @@ Depends: adduser,
          ${python:Depends}
 Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, accross
+ providing all the counters they need to establish customer billing, accros
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
@@ -173,7 +173,7 @@ Depends: ceilometer-common (= ${binary:Version}),
          ${python:Depends}
 Description: OpenStack efficient metering counters system - compute agent
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, accross
+ providing all the counters they need to establish customer billing, accros
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
@@ -190,7 +190,7 @@ Depends: ceilometer-common (= ${binary:Version}),
          ${python:Depends}
 Description: OpenStack efficient metering counters system - central agent
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, accross
+ providing all the counters they need to establish customer billing, accros
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
