@@ -22,11 +22,7 @@
   the tests.
 
 """
-
-from oslo.config import cfg
-
 from ceilometer.storage.sqlalchemy.models import table_args
-
 from tests.storage import base
 
 
@@ -80,13 +76,15 @@ class UniqueNameTest(base.EventTest, EventTestBase):
         u1 = self.conn._get_or_create_unique_name("foo")
         self.assertTrue(u1.id >= 0)
         u2 = self.conn._get_or_create_unique_name("foo")
-        self.assertEqual(u1, u2)
+        self.assertEqual(u1.id, u2.id)
+        self.assertEqual(u1.key, u2.key)
 
     def test_new_unique(self):
         u1 = self.conn._get_or_create_unique_name("foo")
         self.assertTrue(u1.id >= 0)
         u2 = self.conn._get_or_create_unique_name("blah")
-        self.assertNotEqual(u1, u2)
+        self.assertNotEqual(u1.id, u2.id)
+        self.assertNotEqual(u1.key, u2.key)
 
 
 class EventTest(base.EventTest, EventTestBase):
@@ -97,6 +95,8 @@ class GetEventTest(base.GetEventTest, EventTestBase):
     pass
 
 
-def test_model_table_args():
-    cfg.CONF.database_connection = 'mysql://localhost'
-    assert table_args()
+class ModelTest(SQLAlchemyEngineTestBase):
+    database_connection = 'mysql://localhost'
+
+    def test_model_table_args(self):
+        self.assertIsNotNone(table_args())

@@ -129,8 +129,7 @@ class Query(_Base):
 
 
 def _sanitize_query(q):
-    '''
-    Check the query to see if:
+    '''Check the query to see if:
     1) the request is comming from admin - then allow full visibility
     2) non-admin - make sure that the query includes the requester's
     project.
@@ -172,16 +171,12 @@ def _query_to_kwargs(query, db_func):
     metaquery = {}
     for i in query:
         if i.field == 'timestamp':
-            # FIXME(dhellmann): This logic is not consistent with the
-            # way the timestamps are treated inside the mongo driver
-            # (the end timestamp is always tested using $lt). We
-            # should just pass a single timestamp through to the
-            # storage layer with the operator and let the storage
-            # layer use that operator.
             if i.op in ('lt', 'le'):
                 stamp['end_timestamp'] = i.value
+                stamp['end_timestamp_op'] = i.op
             elif i.op in ('gt', 'ge'):
                 stamp['start_timestamp'] = i.value
+                stamp['start_timestamp_op'] = i.op
             else:
                 LOG.warn('_query_to_kwargs ignoring %r unexpected op %r"' %
                          (i.field, i.op))
@@ -210,12 +205,15 @@ def _query_to_kwargs(query, db_func):
         else:
             raise wsme.exc.UnknownArgument('timestamp',
                                            "not valid for this resource")
+        if 'start_timestamp_op' in stamp:
+            kwargs['start_timestamp_op'] = stamp['start_timestamp_op']
+        if 'end_timestamp_op' in stamp:
+            kwargs['end_timestamp_op'] = stamp['end_timestamp_op']
 
     if trans:
         for k in trans:
             if k not in valid_keys:
-                raise wsme.exc.UnknownArgument(i.field,
-                                               "unrecognized query field")
+                raise wsme.exc.UnknownArgument(k, "unrecognized query field")
             kwargs[k] = trans[k]
 
     return kwargs
@@ -383,7 +381,7 @@ class Statistics(_Base):
     "The number of samples seen"
 
     duration = float
-    "The difference, in minutes, between the oldest and newest timestamp"
+    "The difference, in seconds, between the oldest and newest timestamp"
 
     duration_start = datetime.datetime
     "UTC date and time of the earliest timestamp, or the query start time"
@@ -418,7 +416,7 @@ class Statistics(_Base):
             self.duration_end = end_timestamp
             LOG.debug('clamping max timestamp to range')
 
-        # If we got valid timestamps back, compute a duration in minutes.
+        # If we got valid timestamps back, compute a duration in seconds.
         #
         # If the min > max after clamping then we know the
         # timestamps on the samples fell outside of the time
@@ -462,17 +460,20 @@ class MeterController(rest.RestController):
         pecan.request.context['meter_id'] = meter_id
         self._id = meter_id
 
-    @wsme_pecan.wsexpose([Sample], [Query])
-    def get_all(self, q=[]):
+    @wsme_pecan.wsexpose([Sample], [Query], int)
+    def get_all(self, q=[], limit=None):
         """Return samples for the meter.
 
         :param q: Filter rules for the data to be returned.
+        :param limit: Maximum number of samples to return.
         """
+        if limit and limit < 0:
+            raise ValueError("Limit must be positive")
         kwargs = _query_to_kwargs(q, storage.SampleFilter.__init__)
         kwargs['meter'] = self._id
         f = storage.SampleFilter(**kwargs)
         return [Sample.from_db_model(e)
-                for e in pecan.request.storage_conn.get_samples(f)
+                for e in pecan.request.storage_conn.get_samples(f, limit=limit)
                 ]
 
     @wsme.validate([Sample])
@@ -513,6 +514,11 @@ class MeterController(rest.RestController):
             if self._id != s.counter_name:
                 raise wsme.exc.InvalidInput('counter_name', s.counter_name,
                                             'should be %s' % self._id)
+
+            s.user_id = (s.user_id or
+                         pecan.request.headers.get('X-User-Id'))
+            s.project_id = (s.project_id or
+                            pecan.request.headers.get('X-Project-Id'))
             if auth_project and auth_project != s.project_id:
                 # non admin user trying to cross post to another project_id
                 auth_msg = 'can not post samples to other projects'
@@ -690,9 +696,15 @@ class ResourcesController(rest.RestController):
         :param resource_id: The UUID of the resource.
         """
         authorized_project = acl.get_limited_to_project(pecan.request.headers)
-        r = list(pecan.request.storage_conn.get_resources(
-                 resource=resource_id, project=authorized_project))[0]
-        return Resource.from_db_and_links(r,
+        resources = list(pecan.request.storage_conn.get_resources(
+            resource=resource_id, project=authorized_project))
+        # FIXME (flwang): Need to change this to return a 404 error code when
+        # we get a release of WSME that supports it.
+        if not resources:
+            raise wsme.exc.InvalidInput("resource_id",
+                                        resource_id,
+                                        _("Unknown resource"))
+        return Resource.from_db_and_links(resources[0],
                                           self._resource_links(resource_id))
 
     @wsme_pecan.wsexpose([Resource], [Query])
@@ -746,7 +758,7 @@ class Alarm(_Base):
     evaluation_periods = int
     "The number of periods to evaluate the threshold"
 
-    period = float
+    period = int
     "The time range in seconds over which to evaluate the threshold"
 
     timestamp = datetime.datetime
@@ -804,7 +816,7 @@ class AlarmsController(rest.RestController):
     @wsme.validate(Alarm)
     @wsme_pecan.wsexpose(Alarm, body=Alarm, status_code=201)
     def post(self, data):
-        """Create a new alarm"""
+        """Create a new alarm."""
         conn = pecan.request.storage_conn
 
         data.user_id = pecan.request.headers.get('X-User-Id')
@@ -832,15 +844,14 @@ class AlarmsController(rest.RestController):
     @wsme.validate(Alarm)
     @wsme_pecan.wsexpose(Alarm, wtypes.text, body=Alarm)
     def put(self, alarm_id, data):
-        """Modify an alarm"""
+        """Modify an alarm."""
         conn = pecan.request.storage_conn
         data.state_timestamp = wsme.Unset
         data.alarm_id = alarm_id
-        data.user_id = pecan.request.headers.get('X-User-Id')
-        data.project_id = pecan.request.headers.get('X-Project-Id')
+        auth_project = acl.get_limited_to_project(pecan.request.headers)
 
         alarms = list(conn.get_alarms(alarm_id=alarm_id,
-                                      project=data.project_id))
+                                      project=auth_project))
         if len(alarms) < 1:
             raise wsme.exc.ClientSideError(_("Unknown alarm"))
 
@@ -858,7 +869,7 @@ class AlarmsController(rest.RestController):
 
     @wsme_pecan.wsexpose(None, wtypes.text, status_code=204)
     def delete(self, alarm_id):
-        """Delete an alarm"""
+        """Delete an alarm."""
         conn = pecan.request.storage_conn
         auth_project = acl.get_limited_to_project(pecan.request.headers)
         alarms = list(conn.get_alarms(alarm_id=alarm_id,
@@ -870,11 +881,13 @@ class AlarmsController(rest.RestController):
 
     @wsme_pecan.wsexpose(Alarm, wtypes.text)
     def get_one(self, alarm_id):
-        """Return one alarm"""
+        """Return one alarm."""
         conn = pecan.request.storage_conn
         auth_project = acl.get_limited_to_project(pecan.request.headers)
         alarms = list(conn.get_alarms(alarm_id=alarm_id,
                                       project=auth_project))
+        # FIXME (flwang): Need to change this to return a 404 error code when
+        # we get a release of WSME that supports it.
         if len(alarms) < 1:
             raise wsme.exc.ClientSideError(_("Unknown alarm"))
 

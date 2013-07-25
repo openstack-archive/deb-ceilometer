@@ -24,15 +24,16 @@ from oslo.config import cfg
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 from ceilometer import pipeline
-from ceilometer import publisher
 from ceilometer import transformer
 
 LOG = log.getLogger(__name__)
 
 
 class PollingTask(object):
-    """Polling task for polling counters and inject into pipeline
-    A polling task can be invoked periodically or only once"""
+    """Polling task for polling counters and inject into pipeline.
+    A polling task can be invoked periodically or only once.
+
+    """
 
     def __init__(self, agent_manager):
         self.manager = agent_manager
@@ -57,9 +58,6 @@ class AgentManager(object):
             transformer.TransformerExtensionManager(
                 'ceilometer.transformer',
             ),
-            publisher.PublisherExtensionManager(
-                'ceilometer.publisher',
-            ),
         )
 
         self.pollster_manager = extension_manager
@@ -75,14 +73,12 @@ class AgentManager(object):
         for pipeline, pollster in itertools.product(
                 self.pipeline_manager.pipelines,
                 self.pollster_manager.extensions):
-            for counter in pollster.obj.get_counter_names():
-                if pipeline.support_counter(counter):
-                    polling_task = polling_tasks.get(pipeline.interval, None)
-                    if not polling_task:
-                        polling_task = self.create_polling_task()
-                        polling_tasks[pipeline.interval] = polling_task
-                    polling_task.add(pollster, [pipeline])
-                    break
+            if pipeline.support_counter(pollster.name):
+                polling_task = polling_tasks.get(pipeline.interval, None)
+                if not polling_task:
+                    polling_task = self.create_polling_task()
+                    polling_tasks[pipeline.interval] = polling_task
+                polling_task.add(pollster, [pipeline])
 
         return polling_tasks
 
@@ -93,5 +89,6 @@ class AgentManager(object):
                                       self.interval_task,
                                       task=task)
 
-    def interval_task(self, task):
+    @staticmethod
+    def interval_task(task):
         task.poll_and_publish()

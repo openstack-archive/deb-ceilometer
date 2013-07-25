@@ -19,23 +19,28 @@
 # under the License.
 
 import abc
-from stevedore import dispatch
+from stevedore import driver
+from ceilometer.openstack.common import network_utils
 
 
-class PublisherExtensionManager(dispatch.NameDispatchExtensionManager):
+def get_publisher(url, namespace='ceilometer.publisher'):
+    """Get publisher driver and load it.
 
-    def __init__(self, namespace):
-        super(PublisherExtensionManager, self).__init__(
-            namespace=namespace,
-            check_func=lambda x: True,
-            invoke_on_load=True,
-        )
+    :param URL: URL for the publisher
+    :param namespace: Namespace to use to look for drivers.
+    """
+    parse_result = network_utils.urlsplit(url)
+    loaded_driver = driver.DriverManager(namespace, parse_result.scheme)
+    return loaded_driver.driver(parse_result)
 
 
 class PublisherBase(object):
     """Base class for plugins that publish the sampler."""
 
     __metaclass__ = abc.ABCMeta
+
+    def __init__(self, parsed_url):
+        pass
 
     @abc.abstractmethod
     def publish_counters(self, context, counters, source):

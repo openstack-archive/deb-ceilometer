@@ -26,22 +26,36 @@ from stevedore import driver
 
 from ceilometer.openstack.common import log
 from ceilometer import utils
+from ceilometer import service
 
 
 LOG = log.getLogger(__name__)
 
 STORAGE_ENGINE_NAMESPACE = 'ceilometer.storage'
 
-STORAGE_OPTS = [
+OLD_STORAGE_OPTS = [
     cfg.StrOpt('database_connection',
                secret=True,
-               default='mongodb://localhost:27017/ceilometer',
-               help='Database connection string',
+               default=None,
+               help='DEPRECATED - Database connection string',
                ),
 ]
 
+cfg.CONF.register_opts(OLD_STORAGE_OPTS)
 
-cfg.CONF.register_opts(STORAGE_OPTS)
+
+STORAGE_OPTS = [
+    cfg.IntOpt('time_to_live',
+               default=-1,
+               help="""number of seconds that samples are kept
+in the database for (<= 0 means forever)"""),
+]
+
+cfg.CONF.register_opts(STORAGE_OPTS, group='database')
+
+cfg.CONF.import_opt('connection',
+                    'ceilometer.openstack.common.db.sqlalchemy.session',
+                    group='database')
 
 
 def register_opts(conf):
@@ -52,7 +66,10 @@ def register_opts(conf):
 
 def get_engine(conf):
     """Load the configured engine and return an instance."""
-    engine_name = urlparse.urlparse(conf.database_connection).scheme
+    if conf.database_connection:
+        conf.set_override('connection', conf.database_connection,
+                          group='database')
+    engine_name = urlparse.urlparse(conf.database.connection).scheme
     LOG.debug('looking for %r driver in %r',
               engine_name, STORAGE_ENGINE_NAMESPACE)
     mgr = driver.DriverManager(STORAGE_ENGINE_NAMESPACE,
@@ -74,19 +91,26 @@ class SampleFilter(object):
 
     :param user: The sample owner.
     :param project: The sample project.
-    :param start: Earliest timestamp to include.
-    :param end: Only include samples with timestamp less than this.
+    :param start: Earliest time point in the request.
+    :param start_timestamp_op: Earliest timestamp operation in the request.
+    :param end: Latest time point in the request.
+    :param end_timestamp_op: Latest timestamp operation in the request.
     :param resource: Optional filter for resource id.
     :param meter: Optional filter for meter type using the meter name.
     :param source: Optional source filter.
     :param metaquery: Optional filter on the metadata
     """
-    def __init__(self, user=None, project=None, start=None, end=None,
-                 resource=None, meter=None, source=None, metaquery={}):
+    def __init__(self, user=None, project=None,
+                 start=None, start_timestamp_op=None,
+                 end=None, end_timestamp_op=None,
+                 resource=None, meter=None,
+                 source=None, metaquery={}):
         self.user = user
         self.project = project
         self.start = utils.sanitize_timestamp(start)
+        self.start_timestamp_op = start_timestamp_op
         self.end = utils.sanitize_timestamp(end)
+        self.end_timestamp_op = end_timestamp_op
         self.resource = resource
         self.meter = meter
         self.source = source
@@ -113,3 +137,16 @@ class EventFilter(object):
         self.end = utils.sanitize_timestamp(end)
         self.event_name = event_name
         self.traits = traits
+
+
+def dbsync():
+    service.prepare_service()
+    get_connection(cfg.CONF).upgrade()
+
+
+def expirer():
+    service.prepare_service()
+    LOG.debug("Clearing expired metering data")
+    storage_conn = get_connection(cfg.CONF)
+    storage_conn.clear_expired_metering_data(
+        cfg.CONF.database.time_to_live)

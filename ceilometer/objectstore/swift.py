@@ -20,16 +20,17 @@
 
 from __future__ import absolute_import
 
-import abc
-
 from oslo.config import cfg
 from swiftclient import client as swift
 from keystoneclient import exceptions
 
 from ceilometer import counter
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import plugin
+
+from urlparse import urljoin
 
 
 LOG = log.getLogger(__name__)
@@ -46,15 +47,50 @@ cfg.CONF.register_opts(OPTS)
 
 class _Base(plugin.PollsterBase):
 
-    __metaclass__ = abc.ABCMeta
+    CACHE_KEY_TENANT = 'tenants'
+    CACHE_KEY_HEAD = 'swift.head_account'
+
+    def _iter_accounts(self, ksclient, cache):
+        if self.CACHE_KEY_TENANT not in cache:
+            cache[self.CACHE_KEY_TENANT] = ksclient.tenants.list()
+        if self.CACHE_KEY_HEAD not in cache:
+            cache[self.CACHE_KEY_HEAD] = list(self._get_account_info(ksclient,
+                                                                     cache))
+        return iter(cache['swift.head_account'])
+
+    def _get_account_info(self, ksclient, cache):
+        try:
+            endpoint = ksclient.service_catalog.url_for(
+                service_type='object-store',
+                endpoint_type='adminURL')
+        except exceptions.EndpointNotFound:
+            LOG.debug(_("Swift endpoint not found"))
+            raise StopIteration()
+
+        for t in cache['tenants']:
+            yield (t.id, swift.head_account(self._neaten_url(endpoint, t.id),
+                                            ksclient.auth_token))
 
     @staticmethod
-    @abc.abstractmethod
-    def iter_accounts(ksclient):
-        """Iterate over all accounts, yielding (tenant_id, stats) tuples."""
+    def _neaten_url(endpoint, tenant_id):
+        """Transform the registered url to standard and valid format.
+        """
 
-    def get_counters(self, manager):
-        for tenant, account in self.iter_accounts(manager.keystone):
+        path = 'v1/' + cfg.CONF.reseller_prefix + tenant_id
+
+        # remove the tail '/' of the endpoint.
+        if endpoint.endswith('/'):
+            endpoint = endpoint[:-1]
+
+        return urljoin(endpoint, path)
+
+
+class ObjectsPollster(_Base):
+    """Iterate over all accounts, using keystone.
+    """
+
+    def get_counters(self, manager, cache):
+        for tenant, account in self._iter_accounts(manager.keystone, cache):
             yield counter.Counter(
                 name='storage.objects',
                 type=counter.TYPE_GAUGE,
@@ -66,6 +102,14 @@ class _Base(plugin.PollsterBase):
                 timestamp=timeutils.isotime(),
                 resource_metadata=None,
             )
+
+
+class ObjectsSizePollster(_Base):
+    """Iterate over all accounts, using keystone.
+    """
+
+    def get_counters(self, manager, cache):
+        for tenant, account in self._iter_accounts(manager.keystone, cache):
             yield counter.Counter(
                 name='storage.objects.size',
                 type=counter.TYPE_GAUGE,
@@ -77,6 +121,14 @@ class _Base(plugin.PollsterBase):
                 timestamp=timeutils.isotime(),
                 resource_metadata=None,
             )
+
+
+class ObjectsContainersPollster(_Base):
+    """Iterate over all accounts, using keystone.
+    """
+
+    def get_counters(self, manager, cache):
+        for tenant, account in self._iter_accounts(manager.keystone, cache):
             yield counter.Counter(
                 name='storage.objects.containers',
                 type=counter.TYPE_GAUGE,
@@ -88,29 +140,3 @@ class _Base(plugin.PollsterBase):
                 timestamp=timeutils.isotime(),
                 resource_metadata=None,
             )
-
-
-class SwiftPollster(_Base):
-    """Iterate over all accounts, using keystone.
-    """
-
-    @staticmethod
-    def get_counter_names():
-        return ['storage.objects',
-                'storage.objects.size',
-                'storage.objects.containers']
-
-    @staticmethod
-    def iter_accounts(ksclient):
-        try:
-            endpoint = ksclient.service_catalog.url_for(
-                service_type='object-store',
-                endpoint_type='adminURL')
-        except exceptions.EndpointNotFound:
-            LOG.debug(_("Swift endpoint not found"))
-            return
-
-        base_url = '%s/v1/%s' % (endpoint, cfg.CONF.reseller_prefix)
-        for t in ksclient.tenants.list():
-            yield (t.id, swift.head_account('%s%s' % (base_url, t.id),
-                                            ksclient.auth_token))

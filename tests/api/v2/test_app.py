@@ -35,7 +35,6 @@ class TestApp(base.TestCase):
         cfg.CONF.reset()
 
     def test_keystone_middleware_conf(self):
-        service.prepare_service()
         cfg.CONF.set_override("auth_protocol", "foottp",
                               group=acl.OPT_GROUP_NAME)
         cfg.CONF.set_override("auth_version", "v2.0", group=acl.OPT_GROUP_NAME)
@@ -61,6 +60,9 @@ class TestApp(base.TestCase):
 
 
 class TestApiMiddleware(FunctionalTest):
+
+    # This doesn't really matter
+    database_connection = 'mongodb://__test__'
 
     def test_json_parsable_error_middleware_404(self):
         response = self.get_json('/invalid_path',

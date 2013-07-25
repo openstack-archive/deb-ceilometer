@@ -30,18 +30,15 @@ an instance) and the owner, including tenant and user IDs. The metrics
 are then reported to the collector via the message bus. More detailed
 information follows.
 
-The compute agent is implemented in ``bin/ceilometer-agent-compute``
-and ``ceilometer/compute/manager.py``. As you will see in the manager,
-the computeagent loads all plugins defined in the namespace
-``ceilometer.poll.compute``, then periodically calls their
+The compute agent is implemented in ``ceilometer/compute/manager.py``. As
+you will see in the manager, the computeagent loads all plugins defined in
+the namespace ``ceilometer.poll.compute``, then periodically calls their
 :func:`get_counters` method.
 
-The central agent polls other types of resources from a management
-server.  The central agent is defined in
-``bin/ceilometer-agent-central`` and
-``ceilometer/central/manager.py``. It loads plugins from the
-``ceilometer.poll.central`` namespace and polls them by calling their
-:func:`get_counters` method.
+The central agent polls other types of resources from a management server.
+The central agent is defined in ``ceilometer/central/manager.py``. It loads
+plugins from the ``ceilometer.poll.central`` namespace and polls them by
+calling their :func:`get_counters` method.
 
 Plugins
 =======

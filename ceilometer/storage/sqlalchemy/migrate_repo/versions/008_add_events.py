@@ -12,7 +12,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from sqlalchemy import *
+from sqlalchemy import Column
+from sqlalchemy import Float
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import MetaData
+from sqlalchemy import String
+from sqlalchemy import Table
+
 
 meta = MetaData()
 
@@ -51,11 +58,11 @@ tables = [unique_name, event, trait]
 
 def upgrade(migrate_engine):
     meta.bind = migrate_engine
-    for i in sorted(tables):
+    for i in tables:
         i.create()
 
 
 def downgrade(migrate_engine):
     meta.bind = migrate_engine
-    for i in sorted(tables, reverse=True):
+    for i in reversed(tables):
         i.drop()

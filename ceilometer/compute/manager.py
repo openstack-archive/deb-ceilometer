@@ -17,13 +17,15 @@
 # under the License.
 
 from oslo.config import cfg
+from stevedore import extension
 
 from ceilometer import agent
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer import extension_manager
 from ceilometer import nova_client
 from ceilometer.openstack.common import log
-
+from ceilometer.openstack.common import service as os_service
+from ceilometer.openstack.common.rpc import service as rpc_service
+from ceilometer import service
 
 LOG = log.getLogger(__name__)
 
@@ -32,19 +34,22 @@ class PollingTask(agent.PollingTask):
     def poll_and_publish_instances(self, instances):
         with self.publish_context as publisher:
             for instance in instances:
-                if getattr(instance, 'OS-EXT-STS:vm_state', None) != 'error':
-                    # TODO(yjiang5) passing counters to get_counters to avoid
-                    # polling all counters one by one
-                    for pollster in self.pollsters:
-                        try:
-                            LOG.info("Polling pollster %s", pollster.name)
-                            publisher(list(pollster.obj.get_counters(
-                                self.manager,
-                                instance)))
-                        except Exception as err:
-                            LOG.warning('Continue after error from %s: %s',
-                                        pollster.name, err)
-                            LOG.exception(err)
+                if getattr(instance, 'OS-EXT-STS:vm_state', None) == 'error':
+                    continue
+                cache = {}
+                for pollster in self.pollsters:
+                    try:
+                        LOG.info("Polling pollster %s", pollster.name)
+                        counters = list(pollster.obj.get_counters(
+                            self.manager,
+                            cache,
+                            instance,
+                        ))
+                        publisher(counters)
+                    except Exception as err:
+                        LOG.warning('Continue after error from %s: %s',
+                                    pollster.name, err)
+                        LOG.exception(err)
 
     def poll_and_publish(self):
         self.poll_and_publish_instances(
@@ -55,9 +60,9 @@ class AgentManager(agent.AgentManager):
 
     def __init__(self):
         super(AgentManager, self).__init__(
-            extension_manager.ActivatedExtensionManager(
+            extension.ExtensionManager(
                 namespace='ceilometer.poll.compute',
-                disabled_names=cfg.CONF.disabled_compute_pollsters,
+                invoke_on_load=True,
             ),
         )
         self._inspector = virt_inspector.get_hypervisor_inspector()
@@ -82,3 +87,10 @@ class AgentManager(agent.AgentManager):
     @property
     def inspector(self):
         return self._inspector
+
+
+def agent_compute():
+    service.prepare_service()
+    os_service.launch(rpc_service.Service(cfg.CONF.host,
+                                          'ceilometer.agent.compute',
+                                          AgentManager())).wait()

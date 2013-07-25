@@ -32,10 +32,16 @@ import bson.code
 import bson.objectid
 import pymongo
 
+from oslo.config import cfg
+
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
+from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
 
+cfg.CONF.import_opt('time_to_live', 'ceilometer.storage',
+                    group="database")
 
 LOG = log.getLogger(__name__)
 
@@ -66,12 +72,21 @@ class MongoDBStorage(base.StorageEngine):
             }
     """
 
-    OPTIONS = []
+    OPTIONS = [
+        cfg.StrOpt('replica_set_name',
+                   default='',
+                   help='Used to identify the replication set name',
+                   ),
+    ]
+
+    OPTION_GROUP = cfg.OptGroup(name='storage_mongodb',
+                                title='Options for the mongodb storage')
 
     def register_opts(self, conf):
         """Register any configuration options used by this engine.
         """
-        conf.register_opts(self.OPTIONS)
+        conf.register_group(self.OPTION_GROUP)
+        conf.register_opts(self.OPTIONS, self.OPTION_GROUP)
 
     def get_connection(self, conf):
         """Return a Connection instance based on the configuration settings.
@@ -79,17 +94,28 @@ class MongoDBStorage(base.StorageEngine):
         return Connection(conf)
 
 
-def make_timestamp_range(start, end):
-    """Given two possible datetimes, create the query
-    document to find timestamps within that range
-    using $gte for the lower bound and $lt for the
+def make_timestamp_range(start, end,
+                         start_timestamp_op=None, end_timestamp_op=None):
+    """Given two possible datetimes and their operations, create the query
+    document to find timestamps within that range.
+    By default, using $gte for the lower bound and $lt for the
     upper bound.
     """
     ts_range = {}
+
     if start:
-        ts_range['$gte'] = start
+        if start_timestamp_op == 'gt':
+            start_timestamp_op = '$gt'
+        else:
+            start_timestamp_op = '$gte'
+        ts_range[start_timestamp_op] = start
+
     if end:
-        ts_range['$lt'] = end
+        if end_timestamp_op == 'le':
+            end_timestamp_op = '$lte'
+        else:
+            end_timestamp_op = '$lt'
+        ts_range[end_timestamp_op] = end
     return ts_range
 
 
@@ -112,7 +138,9 @@ def make_query_from_filter(sample_filter, require_meter=True):
     elif require_meter:
         raise RuntimeError('Missing required meter specifier')
 
-    ts_range = make_timestamp_range(sample_filter.start, sample_filter.end)
+    ts_range = make_timestamp_range(sample_filter.start, sample_filter.end,
+                                    sample_filter.start_timestamp_op,
+                                    sample_filter.end_timestamp_op)
     if ts_range:
         q['timestamp'] = ts_range
 
@@ -128,11 +156,43 @@ def make_query_from_filter(sample_filter, require_meter=True):
     return q
 
 
+class ConnectionPool(object):
+
+    def __init__(self):
+        self._pool = {}
+
+    def connect(self, opts):
+        # opts is a dict, dict are unhashable, convert to tuple
+        connection_pool_key = tuple(sorted(opts.items()))
+
+        if connection_pool_key not in self._pool:
+            LOG.info('connecting to MongoDB replicaset "%s" on %s',
+                     opts['replica_set'],
+                     opts['netloc'])
+            self._pool[connection_pool_key] = pymongo.Connection(
+                opts['netloc'],
+                replicaSet=opts['replica_set'],
+                safe=True)
+
+        return self._pool.get(connection_pool_key)
+
+
 class Connection(base.Connection):
     """MongoDB connection.
     """
 
-    _mim_instance = None
+    CONNECTION_POOL = ConnectionPool()
+
+    REDUCE_GROUP_CLEAN = bson.code.Code("""
+    function ( curr, result ) {
+        if (result.resources.indexOf(curr.resource_id) < 0)
+            result.resources.push(curr.resource_id);
+        if (result.users.indexOf(curr.user_id) < 0)
+            result.users.push(curr.user_id);
+        if (result.projects.indexOf(curr.project_id) < 0)
+            result.projects.push(curr.project_id);
+    }
+    """)
 
     MAP_STATS = bson.code.Code("""
     function () {
@@ -169,13 +229,20 @@ class Connection(base.Connection):
 
     REDUCE_STATS = bson.code.Code("""
     function (key, values) {
-        var res = values[0];
+        var res = { min: values[0].min,
+                    max: values[0].max,
+                    count: values[0].count,
+                    sum: values[0].sum,
+                    period_start: values[0].period_start,
+                    period_end: values[0].period_end,
+                    duration_start: values[0].duration_start,
+                    duration_end: values[0].duration_end };
         for ( var i=1; i<values.length; i++ ) {
             if ( values[i].min < res.min )
                res.min = values[i].min;
             if ( values[i].max > res.max )
                res.max = values[i].max;
-            res.count += values[i].count;
+            res.count = NumberInt(res.count + values[i].count);
             res.sum += values[i].sum;
             if ( values[i].duration_start < res.duration_start )
                res.duration_start = values[i].duration_start;
@@ -196,33 +263,24 @@ class Connection(base.Connection):
     }""")
 
     def __init__(self, conf):
-        opts = self._parse_connection_url(conf.database_connection)
-        LOG.info('connecting to MongoDB on %s:%s', opts['host'], opts['port'])
+        opts = self._parse_connection_url(conf.database.connection)
 
-        if opts['host'] == '__test__':
+        if opts['netloc'] == '__test__':
             url = os.environ.get('CEILOMETER_TEST_MONGODB_URL')
-            if url:
-                opts = self._parse_connection_url(url)
-                self.conn = pymongo.Connection(opts['host'],
-                                               opts['port'],
-                                               safe=True)
-            else:
-                # MIM will die if we have too many connections, so use a
-                # Singleton
-                if Connection._mim_instance is None:
-                    try:
-                        from ming import mim
-                    except ImportError:
-                        import testtools
-                        raise testtools.testcase.TestSkipped('requires mim')
-                    LOG.debug('Creating a new MIM Connection object')
-                    Connection._mim_instance = mim.Connection()
-                self.conn = Connection._mim_instance
-                LOG.debug('Using MIM for test connection')
-        else:
-            self.conn = pymongo.Connection(opts['host'],
-                                           opts['port'],
-                                           safe=True)
+            if not url:
+                raise RuntimeError(
+                    "No MongoDB test URL set,"
+                    "export CEILOMETER_TEST_MONGODB_URL environment variable")
+            opts = self._parse_connection_url(url)
+
+        # FIXME(jd) This should be a parameter in the database URL, not global
+        opts['replica_set'] = conf.storage_mongodb.replica_set_name
+
+        # NOTE(jd) Use our own connection pooling on top of the Pymongo one.
+        # We need that otherwise we overflow the MongoDB instance with new
+        # connection since we instanciate a Pymongo client each time someone
+        # requires a new storage connection.
+        self.conn = self.CONNECTION_POOL.connect(opts)
 
         self.db = getattr(self.conn, opts['dbname'])
         if 'username' in opts:
@@ -247,35 +305,60 @@ class Connection(base.Connection):
                 ('timestamp', pymongo.ASCENDING),
                 ('source', pymongo.ASCENDING),
             ], name='meter_idx')
+        self.db.meter.ensure_index([('timestamp', pymongo.DESCENDING)],
+                                   name='timestamp_idx')
 
-    def upgrade(self, version=None):
+        # Since mongodb 2.2 support db-ttl natively
+        if self._is_natively_ttl_supported():
+            self._ensure_meter_ttl_index()
+
+    def _ensure_meter_ttl_index(self):
+        indexes = self.db.meter.index_information()
+
+        ttl = cfg.CONF.database.time_to_live
+
+        if ttl <= 0:
+            if 'meter_ttl' in indexes:
+                self.db.meter.drop_index('meter_ttl')
+            return
+
+        if 'meter_ttl' in indexes:
+            # NOTE(sileht): manually check expireAfterSeconds because
+            # ensure_index doesn't update index options if the index already
+            # exists
+            if ttl == indexes['meter_ttl'].get('expireAfterSeconds', -1):
+                return
+
+            self.db.meter.drop_index('meter_ttl')
+
+        self.db.meter.create_index(
+            [('timestamp', pymongo.ASCENDING)],
+            expireAfterSeconds=ttl,
+            name='meter_ttl'
+        )
+
+    def _is_natively_ttl_supported(self):
+        # Assume is not supported if we can get the version
+        return self.conn.server_info().get('versionArray', []) >= [2, 2]
+
+    @staticmethod
+    def upgrade(version=None):
         pass
 
     def clear(self):
-        if self._mim_instance is not None:
-            # Don't want to use drop_database() because
-            # may end up running out of spidermonkey instances.
-            # http://davisp.lighthouseapp.com/projects/26898/tickets/22
-            self.db.clear()
-        else:
-            self.conn.drop_database(self.db)
+        self.conn.drop_database(self.db)
 
-    def _parse_connection_url(self, url):
+    @staticmethod
+    def _parse_connection_url(url):
         opts = {}
         result = urlparse.urlparse(url)
         opts['dbtype'] = result.scheme
         opts['dbname'] = result.path.replace('/', '')
         netloc_match = re.match(r'(?:(\w+:\w+)@)?(.*)', result.netloc)
         auth = netloc_match.group(1)
-        netloc = netloc_match.group(2)
+        opts['netloc'] = netloc_match.group(2)
         if auth:
             opts['username'], opts['password'] = auth.split(':')
-        if ':' in netloc:
-            opts['host'], port = netloc.split(':')
-        else:
-            opts['host'] = netloc
-            port = 27017
-        opts['port'] = port and int(port) or 27017
         return opts
 
     def record_metering_data(self, data):
@@ -322,7 +405,35 @@ class Connection(base.Connection):
         # a new key '_id').
         record = copy.copy(data)
         self.db.meter.insert(record)
-        return
+
+    def clear_expired_metering_data(self, ttl):
+        """Clear expired data from the backend storage system according to the
+        time-to-live.
+
+        :param ttl: Number of seconds to keep records for.
+
+        """
+        # Before mongodb 2.2 we need to clear expired data manually
+        if not self._is_natively_ttl_supported():
+            end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
+            f = storage.SampleFilter(end=end)
+            q = make_query_from_filter(f, require_meter=False)
+            self.db.meter.remove(q)
+
+        results = self.db.meter.group(
+            key={},
+            condition={},
+            reduce=self.REDUCE_GROUP_CLEAN,
+            initial={
+                'resources': [],
+                'users': [],
+                'projects': [],
+            }
+        )[0]
+
+        self.db.user.remove({'_id': {'$nin': results['users']}})
+        self.db.project.remove({'_id': {'$nin': results['projects']}})
+        self.db.resource.remove({'_id': {'$nin': results['resources']}})
 
     def get_users(self, source=None):
         """Return an iterable of user id strings.
@@ -345,7 +456,8 @@ class Connection(base.Connection):
         return sorted(self.db.project.find(q).distinct('_id'))
 
     def get_resources(self, user=None, project=None, source=None,
-                      start_timestamp=None, end_timestamp=None,
+                      start_timestamp=None, start_timestamp_op=None,
+                      end_timestamp=None, end_timestamp_op=None,
                       metaquery={}, resource=None):
         """Return an iterable of models.Resource instances
 
@@ -353,7 +465,9 @@ class Connection(base.Connection):
         :param project: Optional ID for project that owns the resource.
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
+        :param start_timestamp_op: Optional start time operator, like gt, ge.
         :param end_timestamp: Optional modified timestamp end range.
+        :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
         """
@@ -378,7 +492,9 @@ class Connection(base.Connection):
             # Look for resources matching the above criteria and with
             # samples in the time range we care about, then change the
             # resource query to return just those resources by id.
-            ts_range = make_timestamp_range(start_timestamp, end_timestamp)
+            ts_range = make_timestamp_range(start_timestamp, end_timestamp,
+                                            start_timestamp_op,
+                                            end_timestamp_op)
             if ts_range:
                 q['timestamp'] = ts_range
 
@@ -399,7 +515,7 @@ class Connection(base.Connection):
                     models.ResourceMeter(
                         counter_name=meter['counter_name'],
                         counter_type=meter['counter_type'],
-                        counter_unit=meter['counter_unit'],
+                        counter_unit=meter.get('counter_unit', ''),
                     )
                     for meter in resource['meter']
                 ],
@@ -432,7 +548,7 @@ class Connection(base.Connection):
                     name=r_meter['counter_name'],
                     type=r_meter['counter_type'],
                     # Return empty string if 'counter_unit' is not valid for
-                    # backward compaitiblity.
+                    # backward compatibility.
                     unit=r_meter.get('counter_unit', ''),
                     resource_id=r['_id'],
                     project_id=r['project_id'],
@@ -440,17 +556,29 @@ class Connection(base.Connection):
                     user_id=r['user_id'],
                 )
 
-    def get_samples(self, sample_filter):
-        """Return an iterable of samples as created by
-        :func:`ceilometer.meter.meter_message_from_counter`.
+    def get_samples(self, sample_filter, limit=None):
+        """Return an iterable of model.Sample instances.
+
+        :param sample_filter: Filter.
+        :param limit: Maximum number of results to return.
         """
+        if limit == 0:
+            return
         q = make_query_from_filter(sample_filter, require_meter=False)
-        samples = self.db.meter.find(q)
+        if limit:
+            samples = self.db.meter.find(
+                q, limit=limit, sort=[("timestamp", pymongo.DESCENDING)])
+        else:
+            samples = self.db.meter.find(
+                q, sort=[("timestamp", pymongo.DESCENDING)])
+
         for s in samples:
             # Remove the ObjectId generated by the database when
             # the sample was inserted. It is an implementation
             # detail that should not leak outside of the driver.
             del s['_id']
+            # Backward compatibility for samples without units
+            s['counter_unit'] = s.get('counter_unit', '')
             yield models.Sample(**s)
 
     def get_meter_statistics(self, sample_filter, period=None):
@@ -463,10 +591,14 @@ class Connection(base.Connection):
         q = make_query_from_filter(sample_filter)
 
         if period:
-            map_stats = self.MAP_STATS_PERIOD % \
-                (period,
-                 int(sample_filter.start.strftime('%s'))
-                 if sample_filter.start else 0)
+            if sample_filter.start:
+                period_start = sample_filter.start
+            else:
+                period_start = self.db.meter.find(
+                    limit=1, sort=[('timestamp',
+                                    pymongo.ASCENDING)])[0]['timestamp']
+            period_start = int(period_start.strftime('%s'))
+            map_stats = self.MAP_STATS_PERIOD % (period, period_start)
         else:
             map_stats = self.MAP_STATS
 
@@ -481,34 +613,6 @@ class Connection(base.Connection):
         return sorted((models.Statistics(**(r['value']))
                        for r in results['results']),
                       key=operator.attrgetter('period_start'))
-
-    def _fix_interval_min_max(self, a_min, a_max):
-        if hasattr(a_min, 'valueOf') and a_min.valueOf is not None:
-            # NOTE (dhellmann): HACK ALERT
-            #
-            # The real MongoDB server can handle Date objects and
-            # the driver converts them to datetime instances
-            # correctly but the in-memory implementation in MIM
-            # (used by the tests) returns a spidermonkey.Object
-            # representing the "value" dictionary and there
-            # doesn't seem to be a way to recursively introspect
-            # that object safely to convert the min and max values
-            # back to datetime objects. In this method, we know
-            # what type the min and max values are expected to be,
-            # so it is safe to do the conversion
-            # here. JavaScript's time representation uses
-            # different units than Python's, so we divide to
-            # convert to the right units and then create the
-            # datetime instances to return.
-            #
-            # The issue with MIM is documented at
-            # https://sourceforge.net/p/merciless/bugs/3/
-            #
-            a_min = datetime.datetime.fromtimestamp(
-                a_min.valueOf() // 1000)
-            a_max = datetime.datetime.fromtimestamp(
-                a_max.valueOf() // 1000)
-        return (a_min, a_max)
 
     def get_alarms(self, name=None, user=None,
                    project=None, enabled=True, alarm_id=None):
@@ -553,35 +657,18 @@ class Connection(base.Connection):
         """
         self.db.alarm.remove({'alarm_id': alarm_id})
 
-    def record_events(self, events):
+    @staticmethod
+    def record_events(events):
         """Write the events.
 
         :param events: a list of model.Event objects.
         """
         raise NotImplementedError('Events not implemented.')
 
-    def get_events(self, event_filter):
+    @staticmethod
+    def get_events(event_filter):
         """Return an iterable of model.Event objects.
 
         :param event_filter: EventFilter instance
         """
         raise NotImplementedError('Events not implemented.')
-
-
-def require_map_reduce(conn):
-    """Raises SkipTest if the connection is using mim.
-    """
-    # NOTE(dhellmann): mim requires spidermonkey to implement the
-    # map-reduce functions, so if we can't import it then just
-    # skip these tests unless we aren't using mim.
-    try:
-        import spidermonkey
-    except BaseException:
-        try:
-            from ming import mim
-            if hasattr(conn, "conn") and isinstance(conn.conn, mim.Connection):
-                import testtools
-                raise testtools.testcase.TestSkipped('requires spidermonkey')
-        except ImportError:
-            import testtools
-            raise testtools.testcase.TestSkipped('requires mim')

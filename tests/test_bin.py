@@ -27,16 +27,21 @@ import time
 from ceilometer.tests import base
 
 
-class BinDbsyncTestCase(base.TestCase):
+class BinTestCase(base.TestCase):
     def setUp(self):
-        super(BinDbsyncTestCase, self).setUp()
+        super(BinTestCase, self).setUp()
         self.tempfile = self.temp_config_file_path()
         with open(self.tempfile, 'w') as tmp:
-            tmp.write("[DEFAULT]\n")
-            tmp.write("database_connection=log://localhost\n")
+            tmp.write("[database]\n")
+            tmp.write("connection=log://localhost\n")
 
     def test_dbsync_run(self):
-        subp = subprocess.Popen([self.path_get('bin/ceilometer-dbsync'),
+        subp = subprocess.Popen(['ceilometer-dbsync',
+                                 "--config-file=%s" % self.tempfile])
+        self.assertEqual(subp.wait(), 0)
+
+    def test_run_expirer(self):
+        subp = subprocess.Popen(['ceilometer-expirer',
                                  "--config-file=%s" % self.tempfile])
         self.assertEqual(subp.wait(), 0)
 
@@ -74,7 +79,6 @@ class BinApiTestCase(base.TestCase):
             tmp.write("[DEFAULT]\n")
             tmp.write(
                 "rpc_backend=ceilometer.openstack.common.rpc.impl_fake\n")
-            tmp.write("database_connection=log://localhost\n")
             tmp.write(
                 "auth_strategy=noauth\n")
             tmp.write(
@@ -86,7 +90,9 @@ class BinApiTestCase(base.TestCase):
             tmp.write("[api]\n")
             tmp.write(
                 "port=%s\n" % self.api_port)
-        self.subp = subprocess.Popen([self.path_get('bin/ceilometer-api'),
+            tmp.write("[database]\n")
+            tmp.write("connection=log://localhost\n")
+        self.subp = subprocess.Popen(['ceilometer-api',
                                       "--config-file=%s" % self.tempfile])
 
     def tearDown(self):

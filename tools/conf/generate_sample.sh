@@ -17,9 +17,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
+OS_VARS=$(set | sed -n '/^OS_/s/=[^=*]*$//gp' | xargs)
+[ "$OS_VARS" ] && eval "unset \$OS_VARS"
+
 FILES=$(find ceilometer -type f -name "*.py" ! -path "ceilometer/tests/*" -exec \
     grep -l "Opt(" {} \; | sort -u)
 
+DEST=${1:-etc/ceilometer/ceilometer.conf.sample}
+
 PYTHONPATH=./:${PYTHONPATH} \
-    python $(dirname "$0")/../../ceilometer/openstack/common/config/generator.py ${FILES} > \
-    etc/ceilometer/ceilometer.conf.sample
+    python $(dirname "$0")/../../ceilometer/openstack/common/config/generator.py ${FILES} > $DEST

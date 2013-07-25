@@ -115,7 +115,7 @@ Installing the Collector
 
    ::
 
-     $ ./bin/ceilometer-collector
+     $ ceilometer-collector
 
    .. note:: 
 
@@ -143,6 +143,8 @@ Installing the Compute Agent
       # nova-compute configuration for ceilometer
       instance_usage_audit=True
       instance_usage_audit_period=hour
+      notify_on_state_change=vm_and_task_state
+      notify_on_any_change=True
       notification_driver=nova.openstack.common.notifier.rpc_notifier
       notification_driver=ceilometer.compute.nova_notifier
 
@@ -200,7 +202,7 @@ Installing the Compute Agent
 
    ::
 
-     $ ./bin/ceilometer-agent-compute
+     $ ceilometer-agent-compute
 
    .. note::
 
@@ -274,7 +276,7 @@ Installing the Central Agent
 
    ::
 
-    $ ./bin/ceilometer-agent-central
+    $ ceilometer-agent-central
 
 
 Installing the API Server
@@ -334,7 +336,7 @@ Installing the API Server
 
    ::
 
-    $ ./bin/ceilometer-api
+    $ ceilometer-api
 
 .. note::
 

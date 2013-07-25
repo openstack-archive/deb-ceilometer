@@ -18,56 +18,86 @@
 """Tests for ceilometer/storage/impl_mongodb.py
 
 .. note::
-
-  (dhellmann) These tests have some dependencies which cannot be
-  installed in the CI environment right now.
-
-  Ming is necessary to provide the Mongo-in-memory implementation for
-  of MongoDB. The original source for Ming is at
-  http://sourceforge.net/project/merciless but there does not seem to
-  be a way to point to a "zipball" of the latest HEAD there, and we
-  need features present only in that version. I forked the project to
-  github to make it easier to install, and put the URL into the
-  test-requires file. Then I ended up making some changes to it so it
-  would be compatible with PyMongo's API.
-
-    https://github.com/dreamhost/Ming/zipball/master#egg=Ming
-
-  In order to run the tests that use map-reduce with MIM, some
-  additional system-level packages are required::
-
-    apt-get install nspr-config
-    apt-get install libnspr4-dev
-    apt-get install pkg-config
-    pip install python-spidermonkey
-
-  To run the tests *without* mim, set the environment variable
-  CEILOMETER_TEST_MONGODB_URL to a MongoDB URL before running tox.
+  In order to run the tests against another MongoDB server set the
+  environment variable CEILOMETER_TEST_MONGODB_URL to point to a MongoDB
+  server before running the tests.
 
 """
 
 import copy
 import datetime
+from oslo.config import cfg
 
 from tests.storage import base
 
-from ceilometer.publisher import meter
+from ceilometer.publisher import rpc
 from ceilometer import counter
-from ceilometer.storage.impl_mongodb import require_map_reduce
+from ceilometer.storage import impl_mongodb
 
 
 class MongoDBEngineTestBase(base.DBTestBase):
     database_connection = 'mongodb://__test__'
 
 
-class IndexTest(MongoDBEngineTestBase):
+class MongoDBConnection(MongoDBEngineTestBase):
+    def test_connection_pooling(self):
+        self.assertEqual(self.conn.conn,
+                         impl_mongodb.Connection(cfg.CONF).conn)
 
-    def test_indexes_exist(self):
-        # ensure_index returns none if index already exists
-        assert not self.conn.db.resource.ensure_index('foo',
-                                                      name='resource_idx')
-        assert not self.conn.db.meter.ensure_index('foo',
-                                                   name='meter_idx')
+
+class IndexTest(MongoDBEngineTestBase):
+    def test_meter_ttl_index_absent(self):
+        # create a fake index and check it is deleted
+        self.conn.db.meter.ensure_index('foo', name='meter_ttl')
+        cfg.CONF.set_override('time_to_live', -1, group='database')
+
+        self.conn._ensure_meter_ttl_index()
+        self.assertTrue(self.conn.db.meter.ensure_index('foo',
+                                                        name='meter_ttl'))
+        cfg.CONF.set_override('time_to_live', 456789, group='database')
+        self.conn._ensure_meter_ttl_index()
+        self.assertFalse(self.conn.db.meter.ensure_index('foo',
+                                                         name='meter_ttl'))
+
+    def test_meter_ttl_index_present(self):
+        cfg.CONF.set_override('time_to_live', 456789, group='database')
+        self.conn._ensure_meter_ttl_index()
+        self.assertFalse(self.conn.db.meter.ensure_index('foo',
+                                                         name='meter_ttl'))
+        self.assertEqual(self.conn.db.meter.index_information()[
+            'meter_ttl']['expireAfterSeconds'], 456789)
+
+        cfg.CONF.set_override('time_to_live', -1, group='database')
+        self.conn._ensure_meter_ttl_index()
+        self.assertTrue(self.conn.db.meter.ensure_index('foo',
+                                                        name='meter_ttl'))
+
+    def test_ttl_index_is_supported(self):
+        self.mox.StubOutWithMock(self.conn.conn, "server_info")
+        self.conn.conn.server_info().AndReturn({'versionArray': [2, 4, 5, 0]})
+
+        self.mox.ReplayAll()
+        self.assertTrue(self.conn._is_natively_ttl_supported())
+        self.mox.UnsetStubs()
+        self.mox.VerifyAll()
+
+    def test_ttl_index_is_not_supported(self):
+        self.mox.StubOutWithMock(self.conn.conn, "server_info")
+        self.conn.conn.server_info().AndReturn({'versionArray': [2, 0, 1, 0]})
+
+        self.mox.ReplayAll()
+        self.assertFalse(self.conn._is_natively_ttl_supported())
+        self.mox.UnsetStubs()
+        self.mox.VerifyAll()
+
+    def test_ttl_index_is_unkown(self):
+        self.mox.StubOutWithMock(self.conn.conn, "server_info")
+        self.conn.conn.server_info().AndReturn({})
+
+        self.mox.ReplayAll()
+        self.assertFalse(self.conn._is_natively_ttl_supported())
+        self.mox.UnsetStubs()
+        self.mox.VerifyAll()
 
 
 class UserTest(base.UserTest, MongoDBEngineTestBase):
@@ -87,14 +117,29 @@ class MeterTest(base.MeterTest, MongoDBEngineTestBase):
 
 
 class RawSampleTest(base.RawSampleTest, MongoDBEngineTestBase):
-    pass
+    def test_clear_metering_data(self):
+        # NOTE(sileht): ensure this tests is played for any version of mongo
+        self.mox.StubOutWithMock(self.conn, "_is_natively_ttl_supported")
+        self.conn._is_natively_ttl_supported().AndReturn(False)
+
+        self.mox.ReplayAll()
+        super(RawSampleTest, self).test_clear_metering_data()
+        self.mox.UnsetStubs()
+        self.mox.VerifyAll()
+
+    def test_clear_metering_data_no_data_to_remove(self):
+        # NOTE(sileht): ensure this tests is played for any version of mongo
+        self.mox.StubOutWithMock(self.conn, "_is_natively_ttl_supported")
+        self.conn._is_natively_ttl_supported().AndReturn(False)
+
+        self.mox.ReplayAll()
+        super(RawSampleTest, self).test_clear_metering_data_no_data_to_remove()
+        self.mox.UnsetStubs()
+        self.mox.VerifyAll()
 
 
 class StatisticsTest(base.StatisticsTest, MongoDBEngineTestBase):
-
-    def setUp(self):
-        super(StatisticsTest, self).setUp()
-        require_map_reduce(self.conn)
+    pass
 
 
 class AlarmTest(base.AlarmTest, MongoDBEngineTestBase):
@@ -162,7 +207,7 @@ class CompatibilityTest(MongoDBEngineTestBase):
                                }
         )
         self.counters.append(c)
-        msg = meter.meter_message_from_counter(
+        msg = rpc.meter_message_from_counter(
             c,
             secret='not-so-secret',
             source='test')

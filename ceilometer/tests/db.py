@@ -26,20 +26,11 @@ from ceilometer import storage
 from ceilometer.tests import base as test_base
 
 
-class BaseException(Exception):
-    """A base exception for avoiding false positives."""
-
-
 class TestBase(test_base.TestCase):
-
-    # Default tests use mongodb://__test__ (MIM)
-    # TODO(jd) remove it, so we're sure we run test on the backend we want,
-    # not this default one by mistake
-    database_connection = 'mongodb://__test__'
-
     def setUp(self):
         super(TestBase, self).setUp()
-        cfg.CONF.database_connection = self.database_connection
+        cfg.CONF.set_override('connection', self.database_connection,
+                              group='database')
         self.conn = storage.get_connection(cfg.CONF)
         self.conn.upgrade()
         self.conn.clear()

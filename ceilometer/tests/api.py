@@ -18,7 +18,6 @@
 """Base classes for API tests.
 """
 
-import os
 import urllib
 
 import flask
@@ -26,11 +25,11 @@ from oslo.config import cfg
 import pecan
 import pecan.testing
 
-from ceilometer import service
 from ceilometer.openstack.common import jsonutils
 from ceilometer.api import acl
 from ceilometer.api.v1 import app as v1_app
 from ceilometer.api.v1 import blueprint as v1_blueprint
+from ceilometer import service
 from ceilometer.tests import db as db_test_base
 
 
@@ -40,6 +39,7 @@ class TestBase(db_test_base.TestBase):
 
     def setUp(self):
         super(TestBase, self).setUp()
+        service.prepare_service([])
         cfg.CONF.set_override("auth_version", "v2.0", group=acl.OPT_GROUP_NAME)
         cfg.CONF.set_override("policy_file",
                               self.path_get('tests/policy.json'))
@@ -72,8 +72,7 @@ class TestBase(db_test_base.TestBase):
 
 
 class FunctionalTest(db_test_base.TestBase):
-    """
-    Used for functional tests of Pecan controllers where you need to
+    """Used for functional tests of Pecan controllers where you need to
     test your literal application and its integration with the
     framework.
     """
@@ -84,7 +83,6 @@ class FunctionalTest(db_test_base.TestBase):
 
     def setUp(self):
         super(FunctionalTest, self).setUp()
-        service.prepare_service()
         cfg.CONF.set_override("auth_version", "v2.0", group=acl.OPT_GROUP_NAME)
         cfg.CONF.set_override("policy_file",
                               self.path_get('tests/policy.json'))

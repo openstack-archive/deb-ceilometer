@@ -60,15 +60,12 @@ from ceilometer import counter
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common import timeutils
 from ceilometer import pipeline
-from ceilometer import publisher
 from ceilometer import service
 from ceilometer import transformer
 
 
 class CeilometerMiddleware(object):
-    """
-    Ceilometer middleware used for counting requests.
-    """
+    """Ceilometer middleware used for counting requests."""
 
     def __init__(self, app, conf):
         self.app = app
@@ -78,14 +75,11 @@ class CeilometerMiddleware(object):
                                      "metadata_headers",
                                      "").split(",") if h.strip()]
 
-        service.prepare_service()
+        service.prepare_service([])
 
         self.pipeline_manager = pipeline.setup_pipeline(
             transformer.TransformerExtensionManager(
                 'ceilometer.transformer',
-            ),
-            publisher.PublisherExtensionManager(
-                'ceilometer.publisher',
             ),
         )
 

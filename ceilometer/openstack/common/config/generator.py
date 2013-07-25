@@ -56,7 +56,8 @@ OPTION_REGEX = re.compile(r"(%s)" % "|".join([STROPT, BOOLOPT, INTOPT,
                                               MULTISTROPT]))
 
 PY_EXT = ".py"
-BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                       "../../../../"))
 WORDWRAP_WIDTH = 60
 
 
@@ -193,7 +194,7 @@ def _sanitize_default(s):
         return s.replace(BASEDIR, '')
     elif s == _get_my_ip():
         return '10.0.0.1'
-    elif s == socket.getfqdn():
+    elif s == socket.gethostname():
         return 'ceilometer'
     elif s.strip() != s:
         return '"%s"' % s
@@ -204,10 +205,11 @@ def _print_opt(opt):
     opt_name, opt_default, opt_help = opt.dest, opt.default, opt.help
     if not opt_help:
         sys.stderr.write('WARNING: "%s" is missing help string.\n' % opt_name)
+        opt_help = ""
     opt_type = None
     try:
         opt_type = OPTION_REGEX.search(str(type(opt))).group(0)
-    except (ValueError, AttributeError), err:
+    except (ValueError, AttributeError) as err:
         sys.stderr.write("%s\n" % str(err))
         sys.exit(1)
     opt_help += ' (' + OPT_TYPES[opt_type] + ')'

@@ -16,38 +16,28 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import eventlet
-from oslo.config import cfg
 import msgpack
+from oslo.config import cfg
 import socket
-import sys
+from stevedore import extension
 
-from ceilometer.publisher import meter as publisher_meter
-from ceilometer import extension_manager
+from ceilometer.publisher import rpc as publisher_rpc
 from ceilometer.service import prepare_service
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common import gettextutils
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 from ceilometer.openstack.common.rpc import dispatcher as rpc_dispatcher
+from ceilometer.openstack.common.rpc import service as rpc_service
 
-# Import rpc_notifier to register `notification_topics` flag so that
-# plugins can use it
-# FIXME(dhellmann): Use option importing feature of oslo.config instead.
-import ceilometer.openstack.common.notifier.rpc_notifier
 
 from ceilometer.openstack.common import timeutils
 from ceilometer import pipeline
-from ceilometer import publisher
-from ceilometer import service
 from ceilometer import storage
+from ceilometer.storage import models
 from ceilometer import transformer
 
 OPTS = [
-    cfg.ListOpt('disabled_notification_listeners',
-                default=[],
-                help='list of listener plugins to disable',
-                deprecated_group="DEFAULT"),
     cfg.StrOpt('udp_address',
                default='0.0.0.0',
                help='address to bind the UDP socket to'
@@ -55,6 +45,12 @@ OPTS = [
     cfg.IntOpt('udp_port',
                default=4952,
                help='port to bind the UDP socket to'),
+    cfg.BoolOpt('ack_on_event_error',
+                default=True,
+                help='Acknowledge message when event persistence fails'),
+    cfg.BoolOpt('store_events',
+                default=False,
+                help='Save event details'),
 ]
 
 cfg.CONF.register_opts(OPTS, group="collector")
@@ -62,18 +58,12 @@ cfg.CONF.register_opts(OPTS, group="collector")
 LOG = log.getLogger(__name__)
 
 
-def get_storage_connection(conf):
-    storage.register_opts(conf)
-    storage_engine = storage.get_engine(conf)
-    return storage_engine.get_connection(conf)
-
-
 class UDPCollectorService(os_service.Service):
     """UDP listener for the collector service."""
 
     def __init__(self):
         super(UDPCollectorService, self).__init__()
-        self.storage_conn = get_storage_connection(cfg.CONF)
+        self.storage_conn = storage.get_connection(cfg.CONF)
 
     def start(self):
         """Bind the UDP socket and handle incoming data."""
@@ -91,7 +81,7 @@ class UDPCollectorService(os_service.Service):
             data, source = udp.recvfrom(64 * 1024)
             try:
                 counter = msgpack.loads(data)
-            except:
+            except Exception:
                 LOG.warn(_("UDP: Cannot decode data sent by %s"), str(source))
             else:
                 try:
@@ -111,20 +101,22 @@ class UDPCollectorService(os_service.Service):
 
 
 def udp_collector():
-    # TODO(jd) move into prepare_service gettextutils and eventlet?
-    eventlet.monkey_patch()
-    gettextutils.install('ceilometer')
-    prepare_service(sys.argv)
+    prepare_service()
     os_service.launch(UDPCollectorService()).wait()
 
 
-class CollectorService(service.PeriodicService):
+class CollectorService(rpc_service.Service):
 
     COLLECTOR_NAMESPACE = 'ceilometer.collector'
 
     def __init__(self, host, topic, manager=None):
         super(CollectorService, self).__init__(host, topic, manager)
-        self.storage_conn = get_storage_connection(cfg.CONF)
+        self.storage_conn = storage.get_connection(cfg.CONF)
+
+    def start(self):
+        super(CollectorService, self).start()
+        # Add a dummy thread to have wait() working
+        self.tg.add_timer(604800, lambda: None)
 
     def initialize_service_hook(self, service):
         '''Consumers must be declared before consume_thread start.'''
@@ -133,18 +125,14 @@ class CollectorService(service.PeriodicService):
             transformer.TransformerExtensionManager(
                 'ceilometer.transformer',
             ),
-            publisher.PublisherExtensionManager(
-                'ceilometer.publisher',
-            ),
         )
 
         LOG.debug('loading notification handlers from %s',
                   self.COLLECTOR_NAMESPACE)
         self.notification_manager = \
-            extension_manager.ActivatedExtensionManager(
+            extension.ExtensionManager(
                 namespace=self.COLLECTOR_NAMESPACE,
-                disabled_names=
-                cfg.CONF.collector.disabled_notification_listeners,
+                invoke_on_load=True,
             )
 
         if not list(self.notification_manager):
@@ -155,15 +143,18 @@ class CollectorService(service.PeriodicService):
         # Set ourselves up as a separate worker for the metering data,
         # since the default for service is to use create_consumer().
         self.conn.create_worker(
-            cfg.CONF.publisher_meter.metering_topic,
+            cfg.CONF.publisher_rpc.metering_topic,
             rpc_dispatcher.RpcDispatcher([self]),
-            'ceilometer.collector.' + cfg.CONF.publisher_meter.metering_topic,
+            'ceilometer.collector.' + cfg.CONF.publisher_rpc.metering_topic,
         )
 
     def _setup_subscription(self, ext, *args, **kwds):
         handler = ext.obj
-        LOG.debug('Event types from %s: %s',
-                  ext.name, ', '.join(handler.get_event_types()))
+        ack_on_error = cfg.CONF.collector.ack_on_event_error
+        LOG.debug('Event types from %s: %s (ack_on_error=%s)',
+                  ext.name, ', '.join(handler.get_event_types()),
+                  ack_on_error)
+
         for exchange_topic in handler.get_exchange_topics(cfg.CONF):
             for topic in exchange_topic.topics:
                 try:
@@ -172,7 +163,7 @@ class CollectorService(service.PeriodicService):
                         pool_name='ceilometer.notifications',
                         topic=topic,
                         exchange_name=exchange_topic.exchange,
-                    )
+                        ack_on_error=ack_on_error)
                 except Exception:
                     LOG.exception('Could not join consumer pool %s/%s' %
                                   (topic, exchange_topic.exchange))
@@ -181,8 +172,60 @@ class CollectorService(service.PeriodicService):
         """Make a notification processed by an handler."""
         LOG.debug('notification %r', notification.get('event_type'))
         self.notification_manager.map(self._process_notification_for_ext,
-                                      notification=notification,
-                                      )
+                                      notification=notification)
+
+        if cfg.CONF.collector.store_events:
+            self._message_to_event(notification)
+
+    @staticmethod
+    def _extract_when(body):
+        """Extract the generated datetime from the notification.
+        """
+        when = body.get('timestamp', body.get('_context_timestamp'))
+        if when:
+            return timeutils.normalize_time(timeutils.parse_isotime(when))
+
+        return timeutils.utcnow()
+
+    def _message_to_event(self, body):
+        """Convert message to Ceilometer Event.
+
+        NOTE: this is currently based on the Nova notification format.
+        We will need to make this driver-based to support other formats.
+
+        NOTE: the rpc layer currently rips out the notification
+        delivery_info, which is critical to determining the
+        source of the notification. This will have to get added back later.
+        """
+        event_name = body['event_type']
+        when = self._extract_when(body)
+
+        LOG.debug('Saving event "%s"', event_name)
+
+        message_id = body.get('message_id')
+
+        # TODO(sandy) - check we have not already saved this notification.
+        #               (possible on retries) Use message_id to spot dups.
+        publisher = body.get('publisher_id')
+        request_id = body.get('_context_request_id')
+        tenant_id = body.get('_context_tenant')
+
+        text = models.Trait.TEXT_TYPE
+        all_traits = [models.Trait('message_id', text, message_id),
+                      models.Trait('service', text, publisher),
+                      models.Trait('request_id', text, request_id),
+                      models.Trait('tenant_id', text, tenant_id),
+                      ]
+        # Only store non-None value traits ...
+        traits = [trait for trait in all_traits if trait.value is not None]
+
+        event = models.Event(event_name, when, traits)
+        try:
+            self.storage_conn.record_events([event, ])
+        except Exception as err:
+            LOG.exception(_("Unable to store events: %s"), err)
+            # By re-raising we avoid ack()'ing the message.
+            raise
 
     def _process_notification_for_ext(self, ext, notification):
         handler = ext.obj
@@ -207,9 +250,9 @@ class CollectorService(service.PeriodicService):
                      meter['resource_id'],
                      meter.get('timestamp', 'NO TIMESTAMP'),
                      meter['counter_volume'])
-            if publisher_meter.verify_signature(
+            if publisher_rpc.verify_signature(
                     meter,
-                    cfg.CONF.publisher_meter.metering_secret):
+                    cfg.CONF.publisher_rpc.metering_secret):
                 try:
                     # Convert the timestamp to a datetime instance.
                     # Storage engines are responsible for converting
@@ -226,5 +269,8 @@ class CollectorService(service.PeriodicService):
                     'message signature invalid, discarding message: %r',
                     meter)
 
-    def periodic_tasks(self, context):
-        pass
+
+def collector():
+    prepare_service()
+    os_service.launch(CollectorService(cfg.CONF.host,
+                                       'ceilometer.collector')).wait()

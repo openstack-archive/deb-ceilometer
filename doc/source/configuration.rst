@@ -34,23 +34,32 @@ Parameter                        Default                               Note
 nova_control_exchange            nova                                  Exchange name for Nova notifications
 glance_control_exchange          glance                                Exchange name for Glance notifications
 cinder_control_exchange          cinder                                Exchange name for Cinder notifications
-quantum_control_exchange         quantum                               Exchange name for Quantum notifications
+neutron_control_exchange         neutron                               Exchange name for Neutron notifications
 metering_secret                  change this or be hacked              Secret value for signing metering messages
 metering_topic                   metering                              the topic ceilometer uses for metering messages
 counter_source                   openstack                             The source name of emited counters
 control_exchange                 ceilometer                            AMQP exchange to connect to if using RabbitMQ or Qpid
-periodic_interval                600                                   seconds between running periodic tasks
+database_connection              mongodb://localhost:27017/ceilometer  Database connection string
+metering_api_port                8777                                  The port for the ceilometer API server
+reseller_prefix                  AUTH\_                                Prefix used by swift for reseller token
+===============================  ====================================  ==============================================================
+
+Service polling authentication
+==============================
+
+The following options must be placed under a [service_credentials] section
+and will be used by Ceilometer to retrieve information from OpenStack
+components.
+
+===============================  ====================================  ==============================================================
+Parameter                        Default                               Note
+===============================  ====================================  ==============================================================
 os_username                      ceilometer                            Username to use for openstack service access
 os_password                      admin                                 Password to use for openstack service access
 os_tenant_id                                                           Tenant ID to use for openstack service access
 os_tenant_name                   admin                                 Tenant name to use for openstack service access
 os_auth_url                      http://localhost:5000/v2.0            Auth URL to use for openstack service access
-database_connection              mongodb://localhost:27017/ceilometer  Database connection string
-metering_api_port                8777                                  The port for the ceilometer API server
-disabled_central_pollsters                                             List of central pollsters to skip loading
-disabled_compute_pollsters                                             List of compute pollsters to skip loading
-disabled_notification_listeners                                        List of notification listeners to skip loading
-reseller_prefix                  AUTH\_                                Prefix used by swift for reseller token
+os_endpoint_type                 publicURL                             Endpoint type in the catalog to use to access services
 ===============================  ====================================  ==============================================================
 
 Keystone Middleware Authentication

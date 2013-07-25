@@ -17,23 +17,21 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import eventlet
 import os
 import socket
+import sys
 
 from oslo.config import cfg
 
-from ceilometer.openstack.common import context
+from ceilometer.openstack.common import gettextutils
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import rpc
-from ceilometer.openstack.common.rpc import service as rpc_service
 
 
 cfg.CONF.register_opts([
-    cfg.IntOpt('periodic_interval',
-               default=600,
-               help='seconds between running periodic tasks'),
     cfg.StrOpt('host',
-               default=socket.getfqdn(),
+               default=socket.gethostname(),
                help='Name of this node.  This can be an opaque identifier.  '
                'It is not necessarily a hostname, FQDN, or IP address. '
                'However, the node name must be valid within '
@@ -43,43 +41,38 @@ cfg.CONF.register_opts([
 
 CLI_OPTIONS = [
     cfg.StrOpt('os-username',
+               deprecated_group="DEFAULT",
                default=os.environ.get('OS_USERNAME', 'ceilometer'),
                help='Username to use for openstack service access'),
     cfg.StrOpt('os-password',
+               deprecated_group="DEFAULT",
                secret=True,
                default=os.environ.get('OS_PASSWORD', 'admin'),
                help='Password to use for openstack service access'),
     cfg.StrOpt('os-tenant-id',
+               deprecated_group="DEFAULT",
                default=os.environ.get('OS_TENANT_ID', ''),
                help='Tenant ID to use for openstack service access'),
     cfg.StrOpt('os-tenant-name',
+               deprecated_group="DEFAULT",
                default=os.environ.get('OS_TENANT_NAME', 'admin'),
                help='Tenant name to use for openstack service access'),
     cfg.StrOpt('os-auth-url',
+               deprecated_group="DEFAULT",
                default=os.environ.get('OS_AUTH_URL',
                                       'http://localhost:5000/v2.0'),
                help='Auth URL to use for openstack service access'),
+    cfg.StrOpt('os-endpoint-type',
+               default=os.environ.get('OS_ENDPOINT_TYPE', 'publicURL'),
+               help='Type of endpoint in Identity service catalog to use for '
+                    'communication with OpenStack services.'),
 ]
-cfg.CONF.register_cli_opts(CLI_OPTIONS)
+cfg.CONF.register_cli_opts(CLI_OPTIONS, group="service_credentials")
 
 
-class PeriodicService(rpc_service.Service):
-
-    def start(self):
-        super(PeriodicService, self).start()
-        admin_context = context.RequestContext('admin', 'admin', is_admin=True)
-        self.tg.add_timer(cfg.CONF.periodic_interval,
-                          self.manager.periodic_tasks,
-                          context=admin_context)
-
-
-def _sanitize_cmd_line(argv):
-    """Remove non-nova CLI options from argv."""
-    cli_opt_names = ['--%s' % o.name for o in CLI_OPTIONS]
-    return [a for a in argv if a in cli_opt_names]
-
-
-def prepare_service(argv=[]):
+def prepare_service(argv=None):
+    eventlet.monkey_patch()
+    gettextutils.install('ceilometer')
     rpc.set_defaults(control_exchange='ceilometer')
     cfg.set_defaults(log.log_opts,
                      default_log_levels=['amqplib=WARN',
@@ -89,5 +82,7 @@ def prepare_service(argv=[]):
                                          'stevedore=INFO',
                                          'eventlet.wsgi.server=WARN'
                                          ])
+    if argv is None:
+        argv = sys.argv
     cfg.CONF(argv[1:], project='ceilometer')
     log.setup('ceilometer')

@@ -20,6 +20,11 @@
 
 import abc
 import collections
+from oslo.config import cfg
+
+# Import this option so every Notification plugin can use it freely.
+cfg.CONF.import_opt('notification_topics',
+                    'ceilometer.openstack.common.notifier.rpc_notifier')
 
 
 ExchangeTopics = collections.namedtuple('ExchangeTopics',
@@ -30,7 +35,8 @@ class PluginBase(object):
     """Base class for all plugins.
     """
 
-    def is_enabled(self):
+    @staticmethod
+    def is_enabled():
         """Return boolean indicating whether this plugin should
         be enabled and used by the caller.
         """
@@ -42,13 +48,11 @@ class NotificationBase(PluginBase):
 
     __metaclass__ = abc.ABCMeta
 
-    def is_enabled(self):
-        return True
-
     @abc.abstractmethod
     def get_event_types(self):
         """Return a sequence of strings defining the event types to be
-        given to this plugin."""
+        given to this plugin.
+        """
 
     @abc.abstractmethod
     def get_exchange_topics(self, conf):
@@ -62,15 +66,8 @@ class NotificationBase(PluginBase):
     def process_notification(self, message):
         """Return a sequence of Counter instances for the given message.
 
-        :param message: Message to process."""
-
-    def notification_to_metadata(self, event):
-        """Transform a payload dict to a metadata dict."""
-        metadata = dict([(k, event['payload'].get(k))
-                         for k in self.metadata_keys])
-        metadata['event_type'] = event['event_type']
-        metadata['host'] = event['publisher_id']
-        return metadata
+        :param message: Message to process.
+        """
 
 
 class PollsterBase(PluginBase):
@@ -79,10 +76,13 @@ class PollsterBase(PluginBase):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def get_counter_names(self):
-        """Return a sequence of Counter names supported by the pollster."""
+    def get_counters(self, manager, cache):
+        """Return a sequence of Counter instances from polling the resources.
 
-    @abc.abstractmethod
-    def get_counters(self, manager, instance):
-        """Return a sequence of Counter instances from polling the
-        resources."""
+        :param manager: The service manager class invoking the plugin.
+        :param cache: A dictionary to allow pollsters to pass data
+                      between themselves when recomputing it would be
+                      expensive (e.g., asking another service for a
+                      list of objects).
+
+        """

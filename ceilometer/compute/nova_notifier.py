@@ -25,15 +25,15 @@ from nova.openstack.common import log as logging
 # HACK(dhellmann): Insert the nova version of openstack.common into
 # sys.modules as though it was the copy from ceilometer, so that when
 # we use modules from ceilometer below they do not re-define options.
-import ceilometer  # use the real ceilometer base package
+# use the real ceilometer base package
+import ceilometer  # noqa
 for name in ['openstack', 'openstack.common', 'openstack.common.log']:
     sys.modules['ceilometer.' + name] = sys.modules['nova.' + name]
 
 from nova.conductor import api
 
-from oslo.config import cfg
+from stevedore import extension
 
-from ceilometer import extension_manager
 from ceilometer.compute.virt import inspector
 from ceilometer.openstack.common.gettextutils import _
 
@@ -55,12 +55,14 @@ class DeletedInstanceStatsGatherer(object):
         self.mgr = extensions
         self.inspector = inspector.get_hypervisor_inspector()
 
-    def _get_counters_from_plugin(self, ext, instance, *args, **kwds):
+    def _get_counters_from_plugin(self, ext, cache, instance, *args, **kwds):
         """Used with the extenaion manager map() method."""
-        return ext.obj.get_counters(self, instance)
+        return ext.obj.get_counters(self, cache, instance)
 
     def __call__(self, instance):
+        cache = {}
         counters = self.mgr.map(self._get_counters_from_plugin,
+                                cache=cache,
                                 instance=instance,
                                 )
         # counters is a list of lists, so flatten it before returning
@@ -83,9 +85,9 @@ def initialize_gatherer(gatherer=None):
         _gatherer = gatherer
     if _gatherer is None:
         LOG.debug(_('making a new stats gatherer'))
-        mgr = extension_manager.ActivatedExtensionManager(
+        mgr = extension.ExtensionManager(
             namespace='ceilometer.poll.compute',
-            disabled_names=cfg.CONF.disabled_compute_pollsters,
+            invoke_on_load=True,
         )
         _gatherer = DeletedInstanceStatsGatherer(mgr)
     return _gatherer

@@ -43,7 +43,7 @@ class Connection(base.Connection):
     """
 
     def __init__(self, conf):
-        return
+        pass
 
     def upgrade(self, version=None):
         pass
@@ -62,6 +62,15 @@ class Connection(base.Connection):
                  data['resource_id'],
                  data['counter_volume'])
 
+    def clear_expired_metering_data(self, ttl):
+        """Clear expired data from the backend storage system according to the
+        time-to-live.
+
+        :param ttl: Number of seconds to keep records for.
+
+        """
+        LOG.info("Dropping data with TTL %d", ttl)
+
     def get_users(self, source=None):
         """Return an iterable of user id strings.
 
@@ -77,7 +86,8 @@ class Connection(base.Connection):
         return []
 
     def get_resources(self, user=None, project=None, source=None,
-                      start_timestamp=None, end_timestamp=None,
+                      start_timestamp=None, start_timestamp_op=None,
+                      end_timestamp=None, end_timestamp_op=None,
                       metaquery={}, resource=None):
         """Return an iterable of dictionaries containing resource information.
 
@@ -93,14 +103,16 @@ class Connection(base.Connection):
         :param project: Optional ID for project that owns the resource.
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
+        :param start_timestamp_op: Optional start time operator, like gt, ge.
         :param end_timestamp: Optional modified timestamp end range.
+        :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
         """
         return []
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}):
+                   limit=None, metaquery={}):
         """Return an iterable of dictionaries containing meter information.
 
         { 'name': name of the meter,
@@ -114,6 +126,7 @@ class Connection(base.Connection):
         :param project: Optional ID for project that owns the resource.
         :param resource: Optional resource filter.
         :param source: Optional source filter.
+        :param limit: Maximum number of results to return.
         :param metaquery: Optional dict with metadata to match on.
         """
         return []

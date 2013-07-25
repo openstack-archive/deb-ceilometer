@@ -24,14 +24,9 @@ import logging
 import sys
 
 from oslo.config import cfg
-from stevedore import dispatch
-
-from ceilometer.openstack.common import gettextutils
-gettextutils.install('ceilometer')
 
 from ceilometer import counter
 from ceilometer import pipeline
-from ceilometer import publisher
 from ceilometer import service
 from ceilometer import transformer
 from ceilometer.openstack.common import timeutils
@@ -75,7 +70,7 @@ cfg.CONF.register_cli_opts([
                help='counter metadata'),
 ])
 
-service.prepare_service(sys.argv)
+service.prepare_service()
 
 # Set up logging to use the console
 console = logging.StreamHandler(sys.stderr)
@@ -89,9 +84,6 @@ root_logger.setLevel(logging.DEBUG)
 pipeline_manager = pipeline.setup_pipeline(
     transformer.TransformerExtensionManager(
         'ceilometer.transformer',
-    ),
-    publisher.PublisherExtensionManager(
-        'ceilometer.publisher',
     ),
 )
 

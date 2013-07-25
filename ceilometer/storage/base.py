@@ -83,6 +83,15 @@ class Connection(object):
         """
 
     @abc.abstractmethod
+    def clear_expired_metering_data(self, ttl):
+        """Clear expired data from the backend storage system according to the
+        time-to-live.
+
+        :param ttl: Number of seconds to keep records for.
+
+        """
+
+    @abc.abstractmethod
     def get_users(self, source=None):
         """Return an iterable of user id strings.
 
@@ -98,7 +107,8 @@ class Connection(object):
 
     @abc.abstractmethod
     def get_resources(self, user=None, project=None, source=None,
-                      start_timestamp=None, end_timestamp=None,
+                      start_timestamp=None, start_timestamp_op=None,
+                      end_timestamp=None, end_timestamp_op=None,
                       metaquery={}, resource=None):
         """Return an iterable of models.Resource instances containing
         resource information.
@@ -107,7 +117,9 @@ class Connection(object):
         :param project: Optional ID for project that owns the resource.
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
+        :param start_timestamp_op: Optional timestamp start range operation.
         :param end_timestamp: Optional modified timestamp end range.
+        :param end_timestamp_op: Optional timestamp end range operation.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
         """
@@ -126,8 +138,11 @@ class Connection(object):
         """
 
     @abc.abstractmethod
-    def get_samples(self, sample_filter):
-        """Return an iterable of model.Sample instances
+    def get_samples(self, sample_filter, limit=None):
+        """Return an iterable of model.Sample instances.
+
+        :param sample_filter: Filter.
+        :param limit: Maximum number of results to return.
         """
 
     @abc.abstractmethod

@@ -16,11 +16,13 @@
 
 import functools
 
+import novaclient
 from novaclient.v1_1 import client as nova_client
 from oslo.config import cfg
 
 from ceilometer.openstack.common import log
-from ceilometer import service  # For cfg.CONF.os_*
+
+cfg.CONF.import_group('service_credentials', 'ceilometer.service')
 
 LOG = log.getLogger(__name__)
 
@@ -31,7 +33,7 @@ def logged(func):
     def with_logging(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception, e:
+        except Exception as e:
             LOG.exception(e)
             raise
 
@@ -42,29 +44,54 @@ class Client(object):
 
     def __init__(self):
         """Returns a nova Client object."""
-        conf = cfg.CONF
+        conf = cfg.CONF.service_credentials
         tenant = conf.os_tenant_id and conf.os_tenant_id or conf.os_tenant_name
-        self.nova_client = nova_client.Client(username=cfg.CONF.os_username,
-                                              api_key=cfg.CONF.os_password,
-                                              project_id=tenant,
-                                              auth_url=cfg.CONF.os_auth_url,
-                                              no_cache=True)
+        self.nova_client = nova_client.Client(
+            username=cfg.CONF.service_credentials.os_username,
+            api_key=cfg.CONF.service_credentials.os_password,
+            project_id=tenant,
+            auth_url=cfg.CONF.service_credentials.os_auth_url,
+            endpoint_type=cfg.CONF.service_credentials.os_endpoint_type,
+            no_cache=True)
 
-    def _with_flavor(self, instances):
-        flavors = dict((f.id, f) for f in self.nova_client.flavors.list())
+    def _with_flavor_and_image(self, instances):
+        flavor_attrs = ['name', 'vcpus', 'ram', 'disk']
         for instance in instances:
             fid = instance.flavor['id']
             try:
-                instance.flavor['name'] = flavors[fid].name
-            except KeyError:
-                instance.flavor['name'] = 'unknown-id-%s' % fid
+                flavor = self.nova_client.flavors.get(fid)
+            except novaclient.exceptions.NotFound:
+                flavor = None
+
+            for attr in flavor_attrs:
+                try:
+                    instance.flavor[attr] = getattr(flavor, attr)
+                except (KeyError, AttributeError):
+                    if attr == 'name':
+                        instance.flavor['name'] = 'unknown-id-%s' % fid
+
+            iid = instance.image['id']
+            try:
+                image = self.nova_client.images.get(iid)
+            except novaclient.exceptions.NotFound:
+                image = None
+
+            try:
+                image_meta = getattr(image, 'metadata')
+            except (KeyError, AttributeError):
+                instance.image['name'] = 'unknown-id-%s' % iid
+            else:
+                instance.image['name'] = getattr(image, 'name')
+                instance.kernel_id = image_meta['kernel_id']
+                instance.ramdisk_id = image_meta['ramdisk_id']
+
         return instances
 
     @logged
     def instance_get_all_by_host(self, hostname):
         """Returns list of instances on particular host."""
         search_opts = {'host': hostname, 'all_tenants': True}
-        return self._with_flavor(self.nova_client.servers.list(
+        return self._with_flavor_and_image(self.nova_client.servers.list(
             detailed=True,
             search_opts=search_opts))
 

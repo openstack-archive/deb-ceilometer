@@ -18,14 +18,12 @@
 
 """Access Control Lists (ACL's) control access the API server."""
 
+from ceilometer.openstack.common import policy
 from keystoneclient.middleware import auth_token
 from oslo.config import cfg
-from pecan import hooks
-from webob import exc
-
-from ceilometer import policy
 
 
+_ENFORCER = None
 OPT_GROUP_NAME = 'keystone_authtoken'
 
 
@@ -48,5 +46,10 @@ def install(app, conf):
 
 def get_limited_to_project(headers):
     """Return the tenant the request should be limited to."""
-    if not policy.check_is_admin(headers.get('X-Roles', "").split(",")):
+    global _ENFORCER
+    if not _ENFORCER:
+        _ENFORCER = policy.Enforcer()
+    if not _ENFORCER.enforce('context_is_admin',
+                             {},
+                             {'roles': headers.get('X-Roles', "").split(",")}):
         return headers.get('X-Tenant-Id')

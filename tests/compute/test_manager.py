@@ -17,29 +17,20 @@
 # under the License.
 """Tests for ceilometer/agent/manager.py
 """
-
-import datetime
-
 import mock
-from oslo.config import cfg
-from stevedore import extension
-from stevedore.tests import manager as extension_tests
-from stevedore import dispatch
 
 from ceilometer import nova_client
 from ceilometer.compute import manager
-from ceilometer import counter
-from ceilometer import pipeline
 from ceilometer.tests import base
-
 from tests import agentbase
 
 
-@mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-def test_load_plugins():
-    mgr = manager.AgentManager()
-    assert list(mgr.pollster_manager), 'Failed to load any plugins'
-    return
+class TestManager(base.TestCase):
+
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
+    def test_load_plugins(self):
+        mgr = manager.AgentManager()
+        self.assertIsNotNone(list(mgr.pollster_manager))
 
 
 class TestRunTasks(agentbase.BaseAgentManagerTestCase):
@@ -69,7 +60,8 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         self.mgr.setup_notifier_task()
         self.mgr.poll_instance(None, self.instance)
         self.assertEqual(len(self.Pollster.counters), 1)
-        assert self.publisher.counters[0] == self.Pollster.test_data
+        pub = self.mgr.pipeline_manager.pipelines[0].publishers[0]
+        self.assertEqual(pub.counters[0], self.Pollster.test_data)
 
     def test_setup_polling_tasks(self):
         super(TestRunTasks, self).test_setup_polling_tasks()

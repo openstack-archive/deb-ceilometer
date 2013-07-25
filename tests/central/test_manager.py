@@ -18,25 +18,20 @@
 """Tests for ceilometer/central/manager.py
 """
 
-import datetime
-
 import mock
-from oslo.config import cfg
-from stevedore import extension
-
-from ceilometer.central import manager
-from ceilometer import counter
-from ceilometer.tests import base
 from keystoneclient.v2_0 import client as ksclient
 
+from ceilometer.central import manager
+from ceilometer.tests import base
 from tests import agentbase
 
 
-@mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-def test_load_plugins():
-    mgr = manager.AgentManager()
-    assert list(mgr.pollster_manager), 'Failed to load any plugins'
-    return
+class TestManager(base.TestCase):
+
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
+    def test_load_plugins(self):
+        mgr = manager.AgentManager()
+        self.assertIsNotNone(list(mgr.pollster_manager))
 
 
 class TestRunTasks(agentbase.BaseAgentManagerTestCase):

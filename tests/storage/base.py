@@ -25,7 +25,8 @@ import datetime
 
 from oslo.config import cfg
 
-from ceilometer.publisher import meter
+from ceilometer.publisher import rpc
+from ceilometer.openstack.common import timeutils
 from ceilometer import counter
 from ceilometer import storage
 from ceilometer.tests import db as test_db
@@ -40,7 +41,22 @@ class DBTestBase(test_db.TestBase):
         super(DBTestBase, self).setUp()
         self.prepare_data()
 
+    def tearDown(self):
+        timeutils.utcnow.override_time = None
+        super(DBTestBase, self).tearDown()
+
     def prepare_data(self):
+        original_timestamps = [(2012, 7, 2, 10, 40), (2012, 7, 2, 10, 41),
+                               (2012, 7, 2, 10, 41), (2012, 7, 2, 10, 42),
+                               (2012, 7, 2, 10, 43)]
+        timestamps_for_test_samples_default_order = [(2012, 7, 2, 10, 44),
+                                                     (2011, 5, 30, 18, 3),
+                                                     (2012, 12, 1, 1, 25),
+                                                     (2012, 2, 29, 6, 59),
+                                                     (2013, 5, 31, 23, 7)]
+        timestamp_list = (original_timestamps +
+                          timestamps_for_test_samples_default_order)
+
         self.msgs = []
         self.counter = counter.Counter(
             'instance',
@@ -50,14 +66,14 @@ class DBTestBase(test_db.TestBase):
             user_id='user-id',
             project_id='project-id',
             resource_id='resource-id',
-            timestamp=datetime.datetime(2012, 7, 2, 10, 40),
+            timestamp=datetime.datetime(*timestamp_list[0]),
             resource_metadata={'display_name': 'test-server',
                                'tag': 'self.counter',
                                }
         )
-        self.msg1 = meter.meter_message_from_counter(
+        self.msg1 = rpc.meter_message_from_counter(
             self.counter,
-            cfg.CONF.publisher_meter.metering_secret,
+            cfg.CONF.publisher_rpc.metering_secret,
             'test-1',
         )
         self.conn.record_metering_data(self.msg1)
@@ -71,14 +87,14 @@ class DBTestBase(test_db.TestBase):
             user_id='user-id',
             project_id='project-id',
             resource_id='resource-id-alternate',
-            timestamp=datetime.datetime(2012, 7, 2, 10, 41),
+            timestamp=datetime.datetime(*timestamp_list[1]),
             resource_metadata={'display_name': 'test-server',
                                'tag': 'self.counter2',
                                }
         )
-        self.msg2 = meter.meter_message_from_counter(
+        self.msg2 = rpc.meter_message_from_counter(
             self.counter2,
-            cfg.CONF.publisher_meter.metering_secret,
+            cfg.CONF.publisher_rpc.metering_secret,
             'test-2',
         )
         self.conn.record_metering_data(self.msg2)
@@ -92,20 +108,24 @@ class DBTestBase(test_db.TestBase):
             user_id='user-id-alternate',
             project_id='project-id',
             resource_id='resource-id-alternate',
-            timestamp=datetime.datetime(2012, 7, 2, 10, 41),
+            timestamp=datetime.datetime(*timestamp_list[2]),
             resource_metadata={'display_name': 'test-server',
                                'tag': 'self.counter3',
                                }
         )
-        self.msg3 = meter.meter_message_from_counter(
+        self.msg3 = rpc.meter_message_from_counter(
             self.counter3,
-            cfg.CONF.publisher_meter.metering_secret,
+            cfg.CONF.publisher_rpc.metering_secret,
             'test-3',
         )
         self.conn.record_metering_data(self.msg3)
         self.msgs.append(self.msg3)
 
-        for i in range(2, 4):
+        start_idx = 3
+        end_idx = len(timestamp_list)
+
+        for i, ts in zip(range(start_idx - 1, end_idx - 1),
+                         timestamp_list[start_idx:end_idx]):
             c = counter.Counter(
                 'instance',
                 counter.TYPE_CUMULATIVE,
@@ -114,13 +134,13 @@ class DBTestBase(test_db.TestBase):
                 user_id='user-id-%s' % i,
                 project_id='project-id-%s' % i,
                 resource_id='resource-id-%s' % i,
-                timestamp=datetime.datetime(2012, 7, 2, 10, 40 + i),
+                timestamp=datetime.datetime(*ts),
                 resource_metadata={'display_name': 'test-server',
                                    'tag': 'counter-%s' % i},
             )
-            msg = meter.meter_message_from_counter(
+            msg = rpc.meter_message_from_counter(
                 c,
-                cfg.CONF.publisher_meter.metering_secret,
+                cfg.CONF.publisher_rpc.metering_secret,
                 'test',
             )
             self.conn.record_metering_data(msg)
@@ -131,11 +151,10 @@ class UserTest(DBTestBase):
 
     def test_get_users(self):
         users = self.conn.get_users()
-        assert set(users) == set(['user-id',
-                                  'user-id-alternate',
-                                  'user-id-2',
-                                  'user-id-3',
-                                  ])
+        expected = set(['user-id', 'user-id-alternate', 'user-id-2',
+                        'user-id-3', 'user-id-4', 'user-id-5', 'user-id-6',
+                        'user-id-7', 'user-id-8'])
+        self.assertEqual(set(users), expected)
 
     def test_get_users_by_source(self):
         users = self.conn.get_users(source='test-1')
@@ -146,8 +165,10 @@ class ProjectTest(DBTestBase):
 
     def test_get_projects(self):
         projects = self.conn.get_projects()
-        expected = set(['project-id', 'project-id-2', 'project-id-3'])
-        assert set(projects) == expected
+        expected = set(['project-id', 'project-id-2', 'project-id-3',
+                        'project-id-4', 'project-id-5', 'project-id-6',
+                        'project-id-7', 'project-id-8'])
+        self.assertEqual(set(projects), expected)
 
     def test_get_projects_by_source(self):
         projects = self.conn.get_projects(source='test-1')
@@ -160,7 +181,7 @@ class ResourceTest(DBTestBase):
     def test_get_resources(self):
         msgs_sources = [msg['source'] for msg in self.msgs]
         resources = list(self.conn.get_resources())
-        assert len(resources) == 4
+        self.assertEqual(len(resources), 9)
         for resource in resources:
             if resource.resource_id != 'resource-id':
                 continue
@@ -177,25 +198,80 @@ class ResourceTest(DBTestBase):
 
     def test_get_resources_start_timestamp(self):
         timestamp = datetime.datetime(2012, 7, 2, 10, 42)
+        expected = set(['resource-id-2', 'resource-id-3', 'resource-id-4',
+                        'resource-id-6', 'resource-id-8'])
+
         resources = list(self.conn.get_resources(start_timestamp=timestamp))
         resource_ids = [r.resource_id for r in resources]
-        expected = set(['resource-id-2', 'resource-id-3'])
-        assert set(resource_ids) == expected
+        self.assertEqual(set(resource_ids), expected)
+
+        resources = list(self.conn.get_resources(start_timestamp=timestamp,
+                                                 start_timestamp_op='ge'))
+        resource_ids = [r.resource_id for r in resources]
+        self.assertEqual(set(resource_ids), expected)
+
+        resources = list(self.conn.get_resources(start_timestamp=timestamp,
+                                                 start_timestamp_op='gt'))
+        resource_ids = [r.resource_id for r in resources]
+        expected.remove('resource-id-2')
+        self.assertEqual(set(resource_ids), expected)
 
     def test_get_resources_end_timestamp(self):
         timestamp = datetime.datetime(2012, 7, 2, 10, 42)
+        expected = set(['resource-id', 'resource-id-alternate',
+                        'resource-id-5', 'resource-id-7'])
+
         resources = list(self.conn.get_resources(end_timestamp=timestamp))
         resource_ids = [r.resource_id for r in resources]
-        expected = set(['resource-id', 'resource-id-alternate'])
-        assert set(resource_ids) == expected
+        self.assertEqual(set(resource_ids), expected)
+
+        resources = list(self.conn.get_resources(end_timestamp=timestamp,
+                                                 end_timestamp_op='lt'))
+        resource_ids = [r.resource_id for r in resources]
+        self.assertEqual(set(resource_ids), expected)
+
+        resources = list(self.conn.get_resources(end_timestamp=timestamp,
+                                                 end_timestamp_op='le'))
+        resource_ids = [r.resource_id for r in resources]
+        expected.add('resource-id-2')
+        self.assertEqual(set(resource_ids), expected)
 
     def test_get_resources_both_timestamps(self):
         start_ts = datetime.datetime(2012, 7, 2, 10, 42)
         end_ts = datetime.datetime(2012, 7, 2, 10, 43)
+
         resources = list(self.conn.get_resources(start_timestamp=start_ts,
                                                  end_timestamp=end_ts))
         resource_ids = [r.resource_id for r in resources]
         assert set(resource_ids) == set(['resource-id-2'])
+
+        resources = list(self.conn.get_resources(start_timestamp=start_ts,
+                                                 end_timestamp=end_ts,
+                                                 start_timestamp_op='ge',
+                                                 end_timestamp_op='lt'))
+        resource_ids = [r.resource_id for r in resources]
+        assert set(resource_ids) == set(['resource-id-2'])
+
+        resources = list(self.conn.get_resources(start_timestamp=start_ts,
+                                                 end_timestamp=end_ts,
+                                                 start_timestamp_op='gt',
+                                                 end_timestamp_op='lt'))
+        resource_ids = [r.resource_id for r in resources]
+        assert len(resource_ids) == 0
+
+        resources = list(self.conn.get_resources(start_timestamp=start_ts,
+                                                 end_timestamp=end_ts,
+                                                 start_timestamp_op='gt',
+                                                 end_timestamp_op='le'))
+        resource_ids = [r.resource_id for r in resources]
+        assert set(resource_ids) == set(['resource-id-3'])
+
+        resources = list(self.conn.get_resources(start_timestamp=start_ts,
+                                                 end_timestamp=end_ts,
+                                                 start_timestamp_op='ge',
+                                                 end_timestamp_op='le'))
+        resource_ids = [r.resource_id for r in resources]
+        assert set(resource_ids) == set(['resource-id-2', 'resource-id-3'])
 
     def test_get_resources_by_source(self):
         resources = list(self.conn.get_resources(source='test-1'))
@@ -220,7 +296,7 @@ class ResourceTest(DBTestBase):
         got_not_imp = False
         try:
             resources = list(self.conn.get_resources(metaquery=q))
-            assert len(resources) == 4
+            self.assertEqual(len(resources), 9)
         except NotImplementedError:
             got_not_imp = True
             self.assertTrue(got_not_imp)
@@ -233,7 +309,7 @@ class ResourceTest(DBTestBase):
 
     def test_get_resources_by_empty_metaquery(self):
         resources = list(self.conn.get_resources(metaquery={}))
-        self.assertTrue(len(resources) == 4)
+        self.assertEqual(len(resources), 9)
 
 
 class MeterTest(DBTestBase):
@@ -241,7 +317,7 @@ class MeterTest(DBTestBase):
     def test_get_meters(self):
         msgs_sources = [msg['source'] for msg in self.msgs]
         results = list(self.conn.get_meters())
-        assert len(results) == 4
+        self.assertEqual(len(results), 9)
         for meter in results:
             self.assertIn(meter.source, msgs_sources)
 
@@ -259,17 +335,35 @@ class MeterTest(DBTestBase):
         try:
             results = list(self.conn.get_meters(metaquery=q))
             assert results
-            assert len(results) == 4
+            self.assertEqual(len(results), 9)
         except NotImplementedError:
             got_not_imp = True
             self.assertTrue(got_not_imp)
 
     def test_get_meters_by_empty_metaquery(self):
         results = list(self.conn.get_meters(metaquery={}))
-        self.assertTrue(len(results) == 4)
+        self.assertEqual(len(results), 9)
 
 
 class RawSampleTest(DBTestBase):
+
+    def test_get_samples_limit_zero(self):
+        f = storage.SampleFilter()
+        results = list(self.conn.get_samples(f, limit=0))
+        self.assertEqual(len(results), 0)
+
+    def test_get_samples_limit(self):
+        f = storage.SampleFilter()
+        results = list(self.conn.get_samples(f, limit=3))
+        self.assertEqual(len(results), 3)
+
+    def test_get_samples_in_default_order(self):
+        f = storage.SampleFilter()
+        prev_timestamp = None
+        for sample in self.conn.get_samples(f):
+            if prev_timestamp is not None:
+                self.assertTrue(prev_timestamp >= sample.timestamp)
+            prev_timestamp = sample.timestamp
 
     def test_get_samples_by_user(self):
         f = storage.SampleFilter(user='user-id')
@@ -277,6 +371,16 @@ class RawSampleTest(DBTestBase):
         assert len(results) == 2
         for meter in results:
             assert meter.as_dict() in [self.msg1, self.msg2]
+
+    def test_get_samples_by_user_limit(self):
+        f = storage.SampleFilter(user='user-id')
+        results = list(self.conn.get_samples(f, limit=1))
+        self.assertEqual(len(results), 1)
+
+    def test_get_samples_by_user_limit_bigger(self):
+        f = storage.SampleFilter(user='user-id')
+        results = list(self.conn.get_samples(f, limit=42))
+        self.assertEqual(len(results), 2)
 
     def test_get_samples_by_project(self):
         f = storage.SampleFilter(project='project-id')
@@ -307,33 +411,79 @@ class RawSampleTest(DBTestBase):
             self.assertTrue(got_not_imp)
 
     def test_get_samples_by_start_time(self):
+        timestamp = datetime.datetime(2012, 7, 2, 10, 41)
         f = storage.SampleFilter(
             user='user-id',
-            start=datetime.datetime(2012, 7, 2, 10, 41),
+            start=timestamp,
         )
+
         results = list(self.conn.get_samples(f))
         assert len(results) == 1
-        assert results[0].timestamp == datetime.datetime(2012, 7, 2, 10, 41)
+        assert results[0].timestamp == timestamp
+
+        f.start_timestamp_op = 'ge'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 1
+        assert results[0].timestamp == timestamp
+
+        f.start_timestamp_op = 'gt'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 0
 
     def test_get_samples_by_end_time(self):
+        timestamp = datetime.datetime(2012, 7, 2, 10, 40)
         f = storage.SampleFilter(
             user='user-id',
-            end=datetime.datetime(2012, 7, 2, 10, 41),
+            end=timestamp,
         )
+
         results = list(self.conn.get_samples(f))
-        length = len(results)
-        assert length == 1
-        assert results[0].timestamp == datetime.datetime(2012, 7, 2, 10, 40)
+        assert len(results) == 0
+
+        f.end_timestamp_op = 'lt'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 0
+
+        f.end_timestamp_op = 'le'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 1
+        assert results[0].timestamp == timestamp
 
     def test_get_samples_by_both_times(self):
+        start_ts = datetime.datetime(2012, 7, 2, 10, 42)
+        end_ts = datetime.datetime(2012, 7, 2, 10, 43)
         f = storage.SampleFilter(
-            start=datetime.datetime(2012, 7, 2, 10, 42),
-            end=datetime.datetime(2012, 7, 2, 10, 43),
+            start=start_ts,
+            end=end_ts,
         )
+
         results = list(self.conn.get_samples(f))
-        length = len(results)
-        assert length == 1
-        assert results[0].timestamp == datetime.datetime(2012, 7, 2, 10, 42)
+        assert len(results) == 1
+        assert results[0].timestamp == start_ts
+
+        f.start_timestamp_op = 'gt'
+        f.end_timestamp_op = 'lt'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 0
+
+        f.start_timestamp_op = 'ge'
+        f.end_timestamp_op = 'lt'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 1
+        assert results[0].timestamp == start_ts
+
+        f.start_timestamp_op = 'gt'
+        f.end_timestamp_op = 'le'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 1
+        assert results[0].timestamp == end_ts
+
+        f.start_timestamp_op = 'ge'
+        f.end_timestamp_op = 'le'
+        results = list(self.conn.get_samples(f))
+        assert len(results) == 2
+        assert results[0].timestamp == end_ts
+        assert results[1].timestamp == start_ts
 
     def test_get_samples_by_name(self):
         f = storage.SampleFilter(user='user-id', meter='no-such-meter')
@@ -350,6 +500,46 @@ class RawSampleTest(DBTestBase):
         results = list(self.conn.get_samples(f))
         assert results
         assert len(results) == 1
+
+    def test_clear_metering_data(self):
+        timeutils.utcnow.override_time = datetime.datetime(2012, 7, 2, 10, 45)
+
+        try:
+            self.conn.clear_expired_metering_data(3 * 60)
+        except NotImplementedError:
+            got_not_imp = True
+            self.assertTrue(got_not_imp)
+            return
+
+        f = storage.SampleFilter(meter='instance')
+        results = list(self.conn.get_samples(f))
+        self.assertEqual(len(results), 5)
+        results = list(self.conn.get_users())
+        self.assertEqual(len(results), 5)
+        results = list(self.conn.get_projects())
+        self.assertEqual(len(results), 5)
+        results = list(self.conn.get_resources())
+        self.assertEqual(len(results), 5)
+
+    def test_clear_metering_data_no_data_to_remove(self):
+        timeutils.utcnow.override_time = datetime.datetime(2010, 7, 2, 10, 45)
+
+        try:
+            self.conn.clear_expired_metering_data(3 * 60)
+        except NotImplementedError:
+            got_not_imp = True
+            self.assertTrue(got_not_imp)
+            return
+
+        f = storage.SampleFilter(meter='instance')
+        results = list(self.conn.get_samples(f))
+        self.assertEqual(len(results), 10)
+        results = list(self.conn.get_users())
+        self.assertEqual(len(results), 9)
+        results = list(self.conn.get_projects())
+        self.assertEqual(len(results), 8)
+        results = list(self.conn.get_resources())
+        self.assertEqual(len(results), 9)
 
 
 class StatisticsTest(DBTestBase):
@@ -371,7 +561,7 @@ class StatisticsTest(DBTestBase):
                                    }
             )
             self.counters.append(c)
-            msg = meter.meter_message_from_counter(
+            msg = rpc.meter_message_from_counter(
                 c,
                 secret='not-so-secret',
                 source='test',
@@ -392,7 +582,7 @@ class StatisticsTest(DBTestBase):
                                    }
             )
             self.counters.append(c)
-            msg = meter.meter_message_from_counter(
+            msg = rpc.meter_message_from_counter(
                 c,
                 secret='not-so-secret',
                 source='test',
@@ -534,9 +724,9 @@ class CounterDataTypeTest(DBTestBase):
             timestamp=datetime.datetime(2012, 7, 2, 10, 40),
             resource_metadata={}
         )
-        msg = meter.meter_message_from_counter(
+        msg = rpc.meter_message_from_counter(
             c,
-            cfg.CONF.publisher_meter.metering_secret,
+            cfg.CONF.publisher_rpc.metering_secret,
             'test-1',
         )
 
@@ -553,9 +743,9 @@ class CounterDataTypeTest(DBTestBase):
             timestamp=datetime.datetime(2012, 7, 2, 10, 40),
             resource_metadata={}
         )
-        msg = meter.meter_message_from_counter(
+        msg = rpc.meter_message_from_counter(
             c,
-            cfg.CONF.publisher_meter.metering_secret,
+            cfg.CONF.publisher_rpc.metering_secret,
             'test-1',
         )
         self.conn.record_metering_data(msg)
@@ -571,9 +761,9 @@ class CounterDataTypeTest(DBTestBase):
             timestamp=datetime.datetime(2012, 7, 2, 10, 40),
             resource_metadata={}
         )
-        msg = meter.meter_message_from_counter(
+        msg = rpc.meter_message_from_counter(
             c,
-            cfg.CONF.publisher_meter.metering_secret,
+            cfg.CONF.publisher_rpc.metering_secret,
             'test-1',
         )
         self.conn.record_metering_data(msg)

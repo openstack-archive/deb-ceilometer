@@ -19,15 +19,14 @@
 """
 
 import datetime
-import functools
 import mock
 import msgpack
 from oslo.config import cfg
-import socket
 
 from ceilometer import counter
 from ceilometer.publisher import udp
 from ceilometer.tests import base
+from ceilometer.openstack.common import network_utils
 
 
 class TestUDPPublisher(base.TestCase):
@@ -106,7 +105,8 @@ class TestUDPPublisher(base.TestCase):
         self.data_sent = []
         with mock.patch('socket.socket',
                         self._make_fake_socket(self.data_sent)):
-            publisher = udp.UDPPublisher()
+            publisher = udp.UDPPublisher(
+                network_utils.urlsplit('udp://somehost'))
         publisher.publish_counters(None,
                                    self.test_data,
                                    self.COUNTER_SOURCE)
@@ -124,8 +124,8 @@ class TestUDPPublisher(base.TestCase):
             sent_counters.append(counter)
 
             # Check destination
-            self.assertEqual(dest, (cfg.CONF.publisher_udp.host,
-                                    cfg.CONF.publisher_udp.port))
+            self.assertEqual(dest, ('somehost',
+                                    cfg.CONF.collector.udp_port))
 
         # Check that counters are equal
         self.assertEqual(sorted(sent_counters),
@@ -143,7 +143,8 @@ class TestUDPPublisher(base.TestCase):
     def test_publish_error(self):
         with mock.patch('socket.socket',
                         self._make_broken_socket):
-            publisher = udp.UDPPublisher()
+            publisher = udp.UDPPublisher(
+                network_utils.urlsplit('udp://localhost'))
         publisher.publish_counters(None,
                                    self.test_data,
                                    self.COUNTER_SOURCE)
