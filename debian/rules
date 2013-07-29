@@ -35,5 +35,6 @@ override_dh_auto_clean:
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	PYTHONPATH=. nosetests -P || true
+	./run-tests.sh || true
+	#PYTHONPATH=. nosetests -P || true
 endif
