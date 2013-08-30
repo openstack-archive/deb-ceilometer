@@ -139,8 +139,7 @@ def _query_to_kwargs(query, db_func):
     if trans:
         for k in trans:
             if k not in valid_keys:
-                raise wsme.exc.UnknownArgument(i.field,
-                                               "unrecognized query field")
+                raise wsme.exc.UnknownArgument(k, "unrecognized query field")
             kwargs[k] = trans[k]
 
     return kwargs
@@ -501,9 +500,13 @@ class ResourcesController(rest.RestController):
 
         :param resource_id: The UUID of the resource.
         """
-        r = list(pecan.request.storage_conn.get_resources(
-                 resource=resource_id))[0]
-        return Resource(**r)
+        resources = list(pecan.request.storage_conn.get_resources(
+                         resource=resource_id))
+        if not resources:
+            raise wsme.exc.InvalidInput("resource_id",
+                                        resource_id,
+                                        _("Unknown resource"))
+        return Resource(**resources[0])
 
     @wsme_pecan.wsexpose([Resource], [Query])
     def get_all(self, q=[]):

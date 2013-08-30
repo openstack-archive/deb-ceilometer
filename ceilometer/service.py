@@ -33,7 +33,7 @@ cfg.CONF.register_opts([
                default=600,
                help='seconds between running periodic tasks'),
     cfg.StrOpt('host',
-               default=socket.getfqdn(),
+               default=socket.gethostname(),
                help='Name of this node.  This can be an opaque identifier.  '
                'It is not necessarily a hostname, FQDN, or IP address. '
                'However, the node name must be valid within '
@@ -58,6 +58,10 @@ CLI_OPTIONS = [
                default=os.environ.get('OS_AUTH_URL',
                                       'http://localhost:5000/v2.0'),
                help='Auth URL to use for openstack service access'),
+    cfg.StrOpt('os-endpoint-type',
+               default=os.environ.get('OS_ENDPOINT_TYPE', 'publicURL'),
+               help='Type of endpoint in Identity service catalog to use for '
+                    'communication with OpenStack services.'),
 ]
 cfg.CONF.register_cli_opts(CLI_OPTIONS)
 

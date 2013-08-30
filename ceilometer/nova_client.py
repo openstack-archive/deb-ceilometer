@@ -16,6 +16,7 @@
 
 import functools
 
+import novaclient
 from novaclient.v1_1 import client as nova_client
 from oslo.config import cfg
 
@@ -44,27 +45,58 @@ class Client(object):
         """Returns a nova Client object."""
         conf = cfg.CONF
         tenant = conf.os_tenant_id and conf.os_tenant_id or conf.os_tenant_name
+        endpoint_type = cfg.CONF.os_endpoint_type
         self.nova_client = nova_client.Client(username=cfg.CONF.os_username,
                                               api_key=cfg.CONF.os_password,
                                               project_id=tenant,
                                               auth_url=cfg.CONF.os_auth_url,
+                                              endpoint_type=endpoint_type,
                                               no_cache=True)
 
-    def _with_flavor(self, instances):
-        flavors = dict((f.id, f) for f in self.nova_client.flavors.list())
+    def _with_flavor_and_image(self, instances):
         for instance in instances:
-            fid = instance.flavor['id']
-            try:
-                instance.flavor['name'] = flavors[fid].name
-            except KeyError:
-                instance.flavor['name'] = 'unknown-id-%s' % fid
+            self._with_flavor(instance)
+            self._with_image(instance)
+
         return instances
+
+    def _with_flavor(self, instance):
+        fid = instance.flavor['id']
+        try:
+            flavor = self.nova_client.flavors.get(fid)
+        except novaclient.exceptions.NotFound:
+            flavor = None
+
+        attr_defaults = [('name', 'unknown-id-%s' % fid),
+                         ('vcpus', 0), ('ram', 0), ('disk', 0)]
+        for attr, default in attr_defaults:
+            if not flavor:
+                instance.flavor[attr] = default
+                continue
+            instance.flavor[attr] = getattr(flavor, attr, default)
+
+    def _with_image(self, instance):
+        iid = instance.image['id']
+        try:
+            image = self.nova_client.images.get(iid)
+        except novaclient.exceptions.NotFound:
+            instance.image['name'] = 'unknown-id-%s' % iid
+            instance.kernel_id = None
+            instance.ramdisk_id = None
+            return
+
+        instance.image['name'] = getattr(image, 'name')
+        image_metadata = getattr(image, 'metadata', None)
+
+        for attr in ['kernel_id', 'ramdisk_id']:
+            ameta = image_metadata.get(attr, None) if image_metadata else None
+            setattr(instance, attr, ameta)
 
     @logged
     def instance_get_all_by_host(self, hostname):
         """Returns list of instances on particular host."""
         search_opts = {'host': hostname, 'all_tenants': True}
-        return self._with_flavor(self.nova_client.servers.list(
+        return self._with_flavor_and_image(self.nova_client.servers.list(
             detailed=True,
             search_opts=search_opts))
 
