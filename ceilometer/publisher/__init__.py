@@ -43,5 +43,5 @@ class PublisherBase(object):
         pass
 
     @abc.abstractmethod
-    def publish_counters(self, context, counters, source):
-        "Publish counters into final conduit."
+    def publish_samples(self, context, samples):
+        "Publish samples into final conduit."

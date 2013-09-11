@@ -20,13 +20,10 @@ from ceilometer import pipeline
 from ceilometer import transformer
 from ceilometer.openstack.common import context as req_context
 from ceilometer.openstack.common import log as logging
-from oslo.config import cfg
 from stevedore import extension
 
 
 LOG = logging.getLogger(__name__)
-
-cfg.CONF.import_opt('counter_source', 'ceilometer.counter')
 
 
 _notification_manager = None
@@ -60,13 +57,9 @@ def _load_pipeline_manager():
 
 
 def _process_notification_for_ext(ext, context, notification):
-    handler = ext.obj
-    if notification['event_type'] in handler.get_event_types():
-
-        with _pipeline_manager.publisher(context,
-                                         cfg.CONF.counter_source) as p:
-            # FIXME(dhellmann): Spawn green thread?
-            p(list(handler.process_notification(notification)))
+    with _pipeline_manager.publisher(context) as p:
+        # FIXME(dhellmann): Spawn green thread?
+        p(list(ext.obj.to_samples(notification)))
 
 
 def notify(context, message):

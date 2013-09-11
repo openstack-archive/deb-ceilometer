@@ -46,9 +46,9 @@ Units
    disk, routers, floating IPs, etc.).
 4. When creating a new meter, if another meter exists measuring
    something similar, the same units and precision should be used.
-5. Samples (aka "meters" or "counters") should always document their
-   units in Ceilometer (API and Documentation) and new sampling code
-   should not be merged without the appropriate documentation.
+5. Meters and samples should always document their units in Ceilometer (API
+   and Documentation) and new sampling code should not be merged without the
+   appropriate documentation.
 
 ============  ========  ==============  =====
 Dimension     Unit      Abbreviations   Note
@@ -63,6 +63,8 @@ Here are the meter types by components that are currently implemented:
 Compute (Nova)
 ==============
 
+All meters are related to the guest machine, not the host.
+
 ========================  ==========  ========  ========  ============  =======================================================
 Name                      Type        Unit      Resource  Origin        Note
 ========================  ==========  ========  ========  ============  =======================================================
@@ -70,10 +72,10 @@ instance                  Gauge       instance  inst ID   both          Duration
 instance:<type>           Gauge       instance  inst ID   both          Duration of instance <type> (openstack types)
 memory                    Gauge             MB  inst ID   notification  Volume of RAM in MB
 cpu                       Cumulative        ns  inst ID   pollster      CPU time used
-cpu_util                  Gauge              %  inst ID   pollster      CPU utilisation
+cpu_util                  Gauge              %  inst ID   pollster      Average CPU utilisation
 vcpus                     Gauge           vcpu  inst ID   notification  Number of VCPUs
-disk.read.request         Cumulative   request  inst ID   pollster      Number of read requests
-disk.write.request        Cumulative   request  inst ID   pollster      Number of write requests
+disk.read.requests        Cumulative   request  inst ID   pollster      Number of read requests
+disk.write.requests       Cumulative   request  inst ID   pollster      Number of write requests
 disk.read.bytes           Cumulative         B  inst ID   pollster      Volume of read in B
 disk.write.bytes          Cumulative         B  inst ID   pollster      Volume of write in B
 disk.root.size            Gauge             GB  inst ID   notification  Size of root disk in GB
@@ -137,6 +139,8 @@ volume                    Gauge        volume  vol ID    notification  Duration 
 volume.size               Gauge            GB  vol ID    notification  Size of volume
 ========================  ==========  =======  ========  ============  =======================================================
 
+Make sure Cinder is properly configured first: see :ref:`installing_manually`.
+
 Object Storage (Swift)
 ======================
 
@@ -150,6 +154,11 @@ storage.objects.incoming.bytes  Delta                B  store ID  notification  
 storage.objects.outgoing.bytes  Delta                B  store ID  notification  Number of outgoing bytes
 storage.api.request             Delta          request  store ID  notification  Number of API requests against swift
 ==============================  ==========  ==========  ========  ============  ==============================================
+
+In order to use storage.objects.incoming.bytes and storage.outgoing.bytes, one must configure
+Swift as described in :ref:`installing_manually`. Note that they may not be
+updated right after an upload/download, since Swift takes some time to update
+the container properties.
 
 Energy (Kwapi)
 ==============
@@ -187,3 +196,17 @@ If you plan on adding meters, please follow the convention bellow:
    For example do not use <type>.image but image:<type>, where type is your variable name.
 
 3. If you have any hesitation, come and ask in #openstack-metering
+
+
+User-defined sample metadata (nova only)
+=========================================
+
+Users are allowed to add additional metadata to samples of nova meter.
+These additional metadata are stored in 'resource_metadata.user_metadata.*' of the sample
+To do so, users should add nova user metadata prefixed with 'metering.':
+
+::
+    $ nova boot --meta metering.custom_metadata=a_value my_vm
+
+Note: The name of the metadata shouldn't exceed 256 characters otherwise it will be cut off.
+Also, if it has '.', this will be replaced by a '_' in ceilometer.

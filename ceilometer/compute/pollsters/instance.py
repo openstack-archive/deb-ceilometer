@@ -18,7 +18,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 
@@ -26,11 +26,11 @@ from ceilometer.compute.pollsters import util
 class InstancePollster(plugin.ComputePollster):
 
     @staticmethod
-    def get_counters(manager, cache, instance):
-        yield util.make_counter_from_instance(
+    def get_samples(manager, cache, instance):
+        yield util.make_sample_from_instance(
             instance,
             name='instance',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='instance',
             volume=1,
         )
@@ -39,13 +39,13 @@ class InstancePollster(plugin.ComputePollster):
 class InstanceFlavorPollster(plugin.ComputePollster):
 
     @staticmethod
-    def get_counters(manager, cache, instance):
-        yield util.make_counter_from_instance(
+    def get_samples(manager, cache, instance):
+        yield util.make_sample_from_instance(
             instance,
             # Use the "meter name + variable" syntax
             name='instance:%s' %
             instance.flavor['name'],
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='instance',
             volume=1,
         )

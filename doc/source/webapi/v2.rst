@@ -32,11 +32,27 @@ Samples and Statistics
 .. autotype:: ceilometer.api.controllers.v2.Statistics
    :members:
 
+Alarms
+======
+
+.. rest-controller:: ceilometer.api.controllers.v2:AlarmsController
+   :webprefix: /v2/alarms
+
+.. autotype:: ceilometer.api.controllers.v2.Alarm
+   :members:
+
+
 Filtering Queries
 =================
 
 Many of the endpoints above accept a query filter argument, which
-should be a list of Query data structures:
+should be a list of Query data structures. Whatever the endpoint you
+want to apply a filter on, you always filter on the fields of the *Sample*
+type (for example, if you apply a filter on a query for statistics,
+you won't target *duration_start* field of *Statistics*, but *timestamp*
+field of *Sample*). You may also apply filters based on the values of one
+or more of the *resource_metadata* field, in which case you should target
+*metadata.<field>*.
 
 .. autotype:: ceilometer.api.controllers.v2.Query
    :members:
@@ -155,7 +171,7 @@ Get the list of samples about instances running for June 2013 for a particular p
          "op": "eq",
          "value": "8d6057bc-5b90-4296-afe0-84acaa2ef909"}]
 
-Get the list of samples about instances with m1.tiny flavor running for June 2013 for a particular project::
+Get the list of samples about instances with *m1.tiny* flavor running for June 2013 for a particular project::
 
     GET /v2/meters/instance:m1.tiny
     q: [{"field": "timestamp",
@@ -170,7 +186,7 @@ Get the list of samples about instances with m1.tiny flavor running for June 201
 
 Now you may want to have statistics on the meters you are targeting.
 Consider the following example where you are getting the list of samples
-about CPU utilisation of a given instance (identified by its "resource_id")
+about CPU utilisation of a given instance (identified by its *resource_id*)
 running for June 2013::
 
     GET /v2/meters/cpu_util
@@ -184,8 +200,8 @@ running for June 2013::
          "op": "eq",
          "value": "64da755c-9120-4236-bee1-54acafe24980"}]
 
-You can have statistics on the list of samples requested (avg, sum, max,
-min, count) computed on the full duration)::
+You can have statistics on the list of samples requested (*avg*, *sum*, *max*,
+*min*, *count*) computed on the full duration::
 
     GET /v2/meters/cpu_util/statistics
     q: [{"field": "timestamp",
@@ -275,3 +291,45 @@ parameter to the query::
     limit: 3
 
 This query would only return the last 3 samples.
+
+User-defined data
++++++++++++++++++
+
+It is possible to add your own samples (created from data retrieved in any
+way like monitoring agents on your instances) in Ceilometer to store
+them and query on them. You can even get *Statistics* on your own inserted data.
+By adding a *Sample* to a *Resource*, you create automatically the corresponding
+*Meter* if it does not exist already. To achieve this, you have to POST a list
+of one to many samples in JSON format::
+
+    curl -X POST -H 'X-Auth-Token: <inserttokenhere>' -H 'Content-Type: application/json' \
+      -d '<insertyoursampleslisthere>' \
+      http://localhost:8777/v2/meters/<insertyourmeternamehere>
+
+Fields *source*, *timestamp*, *project_id* and *user_id* are automatically
+added if not present in the samples. Field *message_id* is not taken into
+account if present and an internal value will be set.
+
+Here is an example showing how to add a sample for a *ram_util* meter (already
+existing or not)::
+
+    POST /v2/meters/ram_util
+    body: [
+            {
+              "counter_name": "ram_util",
+              "user_id": "4790fbafad2e44dab37b1d7bfc36299b",
+              "resource_id": "87acaca4-ae45-43ae-ac91-846d8d96a89b",
+              "resource_metadata": {
+                "display_name": "my_instance",
+                "my_custom_metadata_1": "value1",
+                "my_custom_metadata_2": "value2"
+               },
+              "counter_unit": "%",
+              "counter_volume": 8.57762938230384,
+              "project_id": "97f9a6aaa9d842fcab73797d3abb2f53",
+              "counter_type": "gauge"
+            }
+          ]
+
+You get back the same list containing your example completed with the missing
+fields : *source* and *timestamp* in this case.

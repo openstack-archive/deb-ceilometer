@@ -202,68 +202,100 @@ NOTIFICATION_FLOATINGIP_EXISTS = {
     u'publisher_id': u'network.ubuntu-VirtualBox',
     u'message_id': u'9e839576-cc47-4c60-a7d8-5743681213b1'}
 
+NOTIFICATION_L3_METER = {
+    u'_context_roles': [u'admin'],
+    u'_context_read_deleted': u'no',
+    u'event_type': u'l3.meter',
+    u'timestamp': u'2013-08-22 13:14:06.880304',
+    u'_context_tenant_id': None,
+    u'payload': {u'first_update': 1377176476,
+                 u'bytes': 0,
+                 u'label_id': u'383244a7-e99b-433a-b4a1-d37cf5b17d15',
+                 u'last_update': 1377177246,
+                 u'host': u'precise64',
+                 u'tenant_id': u'admin',
+                 u'time': 30,
+                 u'pkts': 0},
+    u'priority': u'INFO',
+    u'_context_is_admin': True,
+    u'_context_timestamp': u'2013-08-22 13:01:06.614635',
+    u'_context_user_id': None,
+    u'publisher_id': u'metering.precise64',
+    u'message_id': u'd7aee6e8-c7eb-4d47-9338-f60920d708e4',
+    u'_unique_id': u'd5a3bdacdcc24644b84e67a4c10e886a',
+    u'_context_project_id': None}
+
 
 class TestNotifications(base.TestCase):
     def test_network_create(self):
         v = notifications.Network()
-        counters = list(v.process_notification(NOTIFICATION_NETWORK_CREATE))
-        self.assertEqual(len(counters), 2)
-        self.assertEqual(counters[1].name, "network.create")
+        samples = list(v.process_notification(NOTIFICATION_NETWORK_CREATE))
+        self.assertEqual(len(samples), 2)
+        self.assertEqual(samples[1].name, "network.create")
 
     def test_subnet_create(self):
         v = notifications.Subnet()
-        counters = list(v.process_notification(NOTIFICATION_SUBNET_CREATE))
-        self.assertEqual(len(counters), 2)
-        self.assertEqual(counters[1].name, "subnet.create")
+        samples = list(v.process_notification(NOTIFICATION_SUBNET_CREATE))
+        self.assertEqual(len(samples), 2)
+        self.assertEqual(samples[1].name, "subnet.create")
 
     def test_port_create(self):
         v = notifications.Port()
-        counters = list(v.process_notification(NOTIFICATION_PORT_CREATE))
-        self.assertEqual(len(counters), 2)
-        self.assertEqual(counters[1].name, "port.create")
+        samples = list(v.process_notification(NOTIFICATION_PORT_CREATE))
+        self.assertEqual(len(samples), 2)
+        self.assertEqual(samples[1].name, "port.create")
 
     def test_port_update(self):
         v = notifications.Port()
-        counters = list(v.process_notification(NOTIFICATION_PORT_UPDATE))
-        self.assertEqual(len(counters), 2)
-        self.assertEqual(counters[1].name, "port.update")
+        samples = list(v.process_notification(NOTIFICATION_PORT_UPDATE))
+        self.assertEqual(len(samples), 2)
+        self.assertEqual(samples[1].name, "port.update")
 
     def test_network_exists(self):
         v = notifications.Network()
-        counters = v.process_notification(NOTIFICATION_NETWORK_EXISTS)
-        self.assertEqual(len(list(counters)), 1)
+        samples = v.process_notification(NOTIFICATION_NETWORK_EXISTS)
+        self.assertEqual(len(list(samples)), 1)
 
     def test_router_exists(self):
         v = notifications.Router()
-        counters = v.process_notification(NOTIFICATION_ROUTER_EXISTS)
-        self.assertEqual(len(list(counters)), 1)
+        samples = v.process_notification(NOTIFICATION_ROUTER_EXISTS)
+        self.assertEqual(len(list(samples)), 1)
 
     def test_floatingip_exists(self):
         v = notifications.FloatingIP()
-        counters = list(v.process_notification(NOTIFICATION_FLOATINGIP_EXISTS))
-        self.assertEqual(len(counters), 1)
-        self.assertEqual(counters[0].name, "ip.floating")
+        samples = list(v.process_notification(NOTIFICATION_FLOATINGIP_EXISTS))
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0].name, "ip.floating")
+
+    def test_metering_report(self):
+        v = notifications.Bandwidth()
+        samples = list(v.process_notification(NOTIFICATION_L3_METER))
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0].name, "bandwidth")
 
 
 class TestEventTypes(base.TestCase):
 
     def test_network(self):
         v = notifications.Network()
-        events = v.get_event_types()
+        events = v.event_types
         assert events
 
     def test_subnet(self):
         v = notifications.Subnet()
-        events = v.get_event_types()
+        events = v.event_types
         assert events
 
     def test_port(self):
         v = notifications.Port()
-        events = v.get_event_types()
+        events = v.event_types
         assert events
 
     def test_router(self):
-        assert notifications.Router().get_event_types()
+        self.assertTrue(notifications.Router().event_types)
 
     def test_floatingip(self):
-        assert notifications.FloatingIP().get_event_types()
+        self.assertTrue(notifications.FloatingIP().event_types)
+
+    def test_bandwidth(self):
+        self.assertTrue(notifications.Bandwidth().event_types)

@@ -30,7 +30,8 @@ import ceilometer  # noqa
 for name in ['openstack', 'openstack.common', 'openstack.common.log']:
     sys.modules['ceilometer.' + name] = sys.modules['nova.' + name]
 
-from nova.conductor import api
+from nova import conductor
+from nova import utils
 
 from stevedore import extension
 
@@ -46,7 +47,7 @@ from ceilometer.openstack.common.gettextutils import _
 LOG = logging.getLogger('nova.ceilometer.notifier')
 
 _gatherer = None
-instance_info_source = api.API()
+conductor_api = conductor.API()
 
 
 class DeletedInstanceStatsGatherer(object):
@@ -55,21 +56,20 @@ class DeletedInstanceStatsGatherer(object):
         self.mgr = extensions
         self.inspector = inspector.get_hypervisor_inspector()
 
-    def _get_counters_from_plugin(self, ext, cache, instance, *args, **kwds):
+    def _get_samples_from_plugin(self, ext, cache, instance, *args, **kwds):
         """Used with the extenaion manager map() method."""
-        return ext.obj.get_counters(self, cache, instance)
+        return ext.obj.get_samples(self, cache, instance)
 
     def __call__(self, instance):
         cache = {}
-        counters = self.mgr.map(self._get_counters_from_plugin,
-                                cache=cache,
-                                instance=instance,
-                                )
-        # counters is a list of lists, so flatten it before returning
+        samples = self.mgr.map(self._get_samples_from_plugin,
+                               cache=cache,
+                               instance=instance)
+        # samples is a list of lists, so flatten it before returning
         # the results
         results = []
-        for clist in counters:
-            results.extend(clist)
+        for slist in samples:
+            results.extend(slist)
         return results
 
 
@@ -101,9 +101,16 @@ class Instance(object):
     dictionary. This class makes an object from the dictonary so we
     can pass it to the pollsters.
     """
-    def __init__(self, info):
+    def __init__(self, context, info):
         for k, v in info.iteritems():
-            setattr(self, k, v)
+            if k == 'name':
+                setattr(self, 'OS-EXT-SRV-ATTR:instance_name', v)
+            elif k == 'metadata':
+                setattr(self, k, utils.metadata_to_dict(v))
+            else:
+                setattr(self, k, v)
+        self.flavor_name = conductor_api.instance_type_get(
+            context, self.instance_type_id).get('name', 'UNKNOWN')
         LOG.debug(_('INFO %r'), info)
 
     @property
@@ -114,7 +121,11 @@ class Instance(object):
     def flavor(self):
         return {
             'id': self.instance_type_id,
-            'name': self.instance_type.get('name', 'UNKNOWN'),
+            'name': self.flavor_name,
+            'vcpus': self.vcpus,
+            'ram': self.memory_mb,
+            'disk': self.root_gb + self.ephemeral_gb,
+            'ephemeral': self.ephemeral_gb
         }
 
     @property
@@ -124,6 +135,10 @@ class Instance(object):
     @property
     def image(self):
         return {'id': self.image_ref}
+
+    @property
+    def name(self):
+        return self.display_name
 
 
 def notify(context, message):
@@ -137,7 +152,7 @@ def notify(context, message):
     LOG.debug(_('polling final stats for %r'), instance_id)
 
     # Ask for the instance details
-    instance_ref = instance_info_source.instance_get_by_uuid(
+    instance_ref = conductor_api.instance_get_by_uuid(
         context,
         instance_id,
     )
@@ -147,15 +162,15 @@ def notify(context, message):
         context, instance_ref, None, None)
 
     # Extend the payload with samples from our plugins.  We only need
-    # to send some of the data from the counter objects, since a lot
+    # to send some of the data from the sample objects, since a lot
     # of the fields are the same.
-    instance = Instance(instance_ref)
-    counters = gatherer(instance)
-    payload['samples'] = [{'name': c.name,
-                           'type': c.type,
-                           'unit': c.unit,
-                           'volume': c.volume}
-                          for c in counters]
+    instance = Instance(context, instance_ref)
+    samples = gatherer(instance)
+    payload['samples'] = [{'name': s.name,
+                           'type': s.type,
+                           'unit': s.unit,
+                           'volume': s.volume}
+                          for s in samples]
 
     publisher_id = notifier_api.publisher_id('compute', None)
 

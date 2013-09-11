@@ -21,7 +21,7 @@ events.
 
 from oslo.config import cfg
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer import plugin
 
 
@@ -38,6 +38,13 @@ cfg.CONF.register_opts(OPTS)
 class _Base(plugin.NotificationBase):
     """Convert volume notifications into Counters."""
 
+    event_types = [
+        'volume.exists',
+        'volume.create.*',
+        'volume.delete.*',
+        'volume.resize.*',
+    ]
+
     @staticmethod
     def get_exchange_topics(conf):
         """Return a sequence of ExchangeTopics defining the exchange and
@@ -50,18 +57,12 @@ class _Base(plugin.NotificationBase):
                            for topic in conf.notification_topics)),
         ]
 
-    @staticmethod
-    def get_event_types():
-        return ['volume.exists',
-                'volume.create.end',
-                'volume.delete.start']
-
 
 class Volume(_Base):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='volume',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='volume',
             volume=1,
             user_id=message['payload']['user_id'],
@@ -72,9 +73,9 @@ class Volume(_Base):
 
 class VolumeSize(_Base):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='volume.size',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='GB',
             volume=message['payload']['size'],
             user_id=message['payload']['user_id'],

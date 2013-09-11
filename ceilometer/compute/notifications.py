@@ -17,12 +17,12 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""Converters for producing compute counter messages from notification events.
+"""Converters for producing compute sample messages from notification events.
 """
 
 from oslo.config import cfg
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer import plugin
 
 
@@ -51,14 +51,12 @@ class ComputeNotificationBase(plugin.NotificationBase):
 
 
 class InstanceScheduled(ComputeNotificationBase):
-    @staticmethod
-    def get_event_types():
-        return ['scheduler.run_instance.scheduled']
+    event_types = ['scheduler.run_instance.scheduled']
 
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='instance.scheduled',
-            type=counter.TYPE_DELTA,
+            type=sample.TYPE_DELTA,
             volume=1,
             unit='instance',
             user_id=None,
@@ -70,25 +68,16 @@ class InstanceScheduled(ComputeNotificationBase):
 
 
 class ComputeInstanceNotificationBase(ComputeNotificationBase):
-    """Convert compute.instance.* notifications into Counters
+    """Convert compute.instance.* notifications into Samples
     """
-    @staticmethod
-    def get_event_types():
-        return ['compute.instance.create.start',
-                'compute.instance.create.end',
-                'compute.instance.exists',
-                'compute.instance.update',
-                'compute.instance.delete.start',
-                'compute.instance.delete.end',
-                'compute.instance.finish_resize.end',
-                'compute.instance.resize.revert.end']
+    event_types = ['compute.instance.*']
 
 
 class Instance(ComputeInstanceNotificationBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='instance',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='instance',
             volume=1,
             user_id=message['payload']['user_id'],
@@ -99,9 +88,9 @@ class Instance(ComputeInstanceNotificationBase):
 
 class Memory(ComputeInstanceNotificationBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='memory',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='MB',
             volume=message['payload']['memory_mb'],
             user_id=message['payload']['user_id'],
@@ -112,9 +101,9 @@ class Memory(ComputeInstanceNotificationBase):
 
 class VCpus(ComputeInstanceNotificationBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='vcpus',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='vcpu',
             volume=message['payload']['vcpus'],
             user_id=message['payload']['user_id'],
@@ -125,9 +114,9 @@ class VCpus(ComputeInstanceNotificationBase):
 
 class RootDiskSize(ComputeInstanceNotificationBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='disk.root.size',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='GB',
             volume=message['payload']['root_gb'],
             user_id=message['payload']['user_id'],
@@ -138,9 +127,9 @@ class RootDiskSize(ComputeInstanceNotificationBase):
 
 class EphemeralDiskSize(ComputeInstanceNotificationBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='disk.ephemeral.size',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='GB',
             volume=message['payload']['ephemeral_gb'],
             user_id=message['payload']['user_id'],
@@ -153,9 +142,9 @@ class InstanceFlavor(ComputeInstanceNotificationBase):
     def process_notification(self, message):
         instance_type = message.get('payload', {}).get('instance_type')
         if instance_type:
-            yield counter.Counter.from_notification(
+            yield sample.Sample.from_notification(
                 name='instance:%s' % instance_type,
-                type=counter.TYPE_GAUGE,
+                type=sample.TYPE_GAUGE,
                 unit='instance',
                 volume=1,
                 user_id=message['payload']['user_id'],
@@ -169,17 +158,15 @@ class InstanceDelete(ComputeInstanceNotificationBase):
     when an instance is being deleted.
     """
 
-    @staticmethod
-    def get_event_types():
-        return ['compute.instance.delete.samples']
+    event_types = ['compute.instance.delete.samples']
 
     def process_notification(self, message):
-        for sample in message['payload'].get('samples', []):
-            yield counter.Counter.from_notification(
-                name=sample['name'],
-                type=sample['type'],
-                unit=sample['unit'],
-                volume=sample['volume'],
+        for s in message['payload'].get('samples', []):
+            yield sample.Sample.from_notification(
+                name=s['name'],
+                type=s['type'],
+                unit=s['unit'],
+                volume=s['volume'],
                 user_id=message['payload']['user_id'],
                 project_id=message['payload']['tenant_id'],
                 resource_id=message['payload']['instance_id'],

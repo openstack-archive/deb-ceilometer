@@ -27,13 +27,13 @@ import decimal
 from ceilometer.openstack.common import timeutils
 
 
-def recursive_keypairs(d):
+def recursive_keypairs(d, separator=':'):
     """Generator that produces sequence of keypairs for nested dictionaries.
     """
     for name, value in sorted(d.iteritems()):
         if isinstance(value, dict):
             for subname, subvalue in recursive_keypairs(value):
-                yield ('%s:%s' % (name, subname), subvalue)
+                yield ('%s%s%s' % (name, separator, subname), subvalue)
         elif isinstance(value, (tuple, list)):
             # When doing a pair of JSON encode/decode operations to the tuple,
             # the tuple would become list. So we have to generate the value as
@@ -74,3 +74,10 @@ def sanitize_timestamp(timestamp):
     if not isinstance(timestamp, datetime.datetime):
         timestamp = timeutils.parse_isotime(timestamp)
     return timeutils.normalize_time(timestamp)
+
+
+def stringify_timestamps(data):
+    """Stringify any datetimes in given dict."""
+    isa_timestamp = lambda v: isinstance(v, datetime.datetime)
+    return dict((k, v.isoformat() if isa_timestamp(v) else v)
+                for (k, v) in data.iteritems())

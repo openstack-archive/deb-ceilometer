@@ -22,7 +22,7 @@ import datetime
 import os
 import logging
 import logging.handlers
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.publisher import file
 from ceilometer.tests import base
 from ceilometer.openstack.common.network_utils import urlsplit
@@ -31,9 +31,9 @@ from ceilometer.openstack.common.network_utils import urlsplit
 class TestFilePublisher(base.TestCase):
 
     test_data = [
-        counter.Counter(
+        sample.Sample(
             name='test',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -42,9 +42,9 @@ class TestFilePublisher(base.TestCase):
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
         ),
-        counter.Counter(
+        sample.Sample(
             name='test2',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -53,9 +53,9 @@ class TestFilePublisher(base.TestCase):
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
         ),
-        counter.Counter(
+        sample.Sample(
             name='test2',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -66,16 +66,13 @@ class TestFilePublisher(base.TestCase):
         ),
     ]
 
-    COUNTER_SOURCE = 'testsource'
-
     def test_file_publisher(self):
         # Test valid configurations
         parsed_url = urlsplit(
             'file:///tmp/log_file?max_bytes=50&backup_count=3')
         publisher = file.FilePublisher(parsed_url)
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   self.COUNTER_SOURCE)
+        publisher.publish_samples(None,
+                                  self.test_data)
 
         handler = publisher.publisher_logger.handlers[0]
         self.assertTrue(isinstance(handler,
@@ -90,9 +87,8 @@ class TestFilePublisher(base.TestCase):
         parsed_url = urlsplit(
             'file:///tmp/log_file_plain')
         publisher = file.FilePublisher(parsed_url)
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   self.COUNTER_SOURCE)
+        publisher.publish_samples(None,
+                                  self.test_data)
 
         handler = publisher.publisher_logger.handlers[0]
         self.assertTrue(isinstance(handler,
@@ -108,8 +104,7 @@ class TestFilePublisher(base.TestCase):
         parsed_url = urlsplit(
             'file:///tmp/log_file_bad?max_bytes=yus&backup_count=5y')
         publisher = file.FilePublisher(parsed_url)
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   self.COUNTER_SOURCE)
+        publisher.publish_samples(None,
+                                  self.test_data)
 
         self.assertIsNone(publisher.publisher_logger)

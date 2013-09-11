@@ -23,7 +23,7 @@ notification events.
 
 from ceilometer.tests import base
 from ceilometer.compute import notifications
-from ceilometer import counter
+from ceilometer import sample
 
 
 INSTANCE_CREATE_END = {
@@ -406,7 +406,7 @@ class TestNotifications(base.TestCase):
         ))[0]
         for name, actual, expected in [
                 ('counter_name', info.name, 'instance'),
-                ('counter_type', info.type, counter.TYPE_GAUGE),
+                ('counter_type', info.type, sample.TYPE_GAUGE),
                 ('counter_volume', info.volume, 1),
                 ('timestamp', info.timestamp,
                  INSTANCE_CREATE_END['timestamp']),
@@ -560,7 +560,7 @@ class TestNotifications(base.TestCase):
         ic = notifications.InstanceScheduled()
 
         self.assertIn(INSTANCE_SCHEDULED['event_type'],
-                      ic.get_event_types())
+                      ic.event_types)
 
         counters = list(ic.process_notification(INSTANCE_SCHEDULED))
         self.assertEqual(len(counters), 1)

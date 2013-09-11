@@ -19,10 +19,11 @@
 """Tests for ceilometer/publish.py
 """
 
+import eventlet
 import datetime
 from oslo.config import cfg
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.openstack.common import jsonutils
 from ceilometer.openstack.common import network_utils
 from ceilometer.openstack.common import rpc as oslo_rpc
@@ -111,29 +112,27 @@ class TestSignature(base.TestCase):
 
 class TestCounter(base.TestCase):
 
-    TEST_COUNTER = counter.Counter(name='name',
-                                   type='typ',
-                                   unit='',
-                                   volume=1,
-                                   user_id='user',
-                                   project_id='project',
-                                   resource_id=2,
-                                   timestamp='today',
-                                   resource_metadata={'key': 'value'},
-                                   )
+    TEST_COUNTER = sample.Sample(name='name',
+                                 type='typ',
+                                 unit='',
+                                 volume=1,
+                                 user_id='user',
+                                 project_id='project',
+                                 resource_id=2,
+                                 timestamp='today',
+                                 resource_metadata={'key': 'value'},
+                                 source='rpc')
 
     def test_meter_message_from_counter_signed(self):
         msg = rpc.meter_message_from_counter(self.TEST_COUNTER,
-                                             'not-so-secret',
-                                             'src')
+                                             'not-so-secret')
         self.assertIn('message_signature', msg)
 
     def test_meter_message_from_counter_field(self):
         def compare(f, c, msg_f, msg):
             self.assertEqual(msg, c)
         msg = rpc.meter_message_from_counter(self.TEST_COUNTER,
-                                             'not-so-secret',
-                                             'src')
+                                             'not-so-secret')
         name_map = {'name': 'counter_name',
                     'type': 'counter_type',
                     'unit': 'counter_unit',
@@ -146,9 +145,9 @@ class TestCounter(base.TestCase):
 class TestPublish(base.TestCase):
 
     test_data = [
-        counter.Counter(
+        sample.Sample(
             name='test',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -157,9 +156,9 @@ class TestPublish(base.TestCase):
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
         ),
-        counter.Counter(
+        sample.Sample(
             name='test',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -168,9 +167,9 @@ class TestPublish(base.TestCase):
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
         ),
-        counter.Counter(
+        sample.Sample(
             name='test2',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -179,9 +178,9 @@ class TestPublish(base.TestCase):
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
         ),
-        counter.Counter(
+        sample.Sample(
             name='test2',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -190,9 +189,9 @@ class TestPublish(base.TestCase):
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
         ),
-        counter.Counter(
+        sample.Sample(
             name='test3',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -222,9 +221,8 @@ class TestPublish(base.TestCase):
     def test_published(self):
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
         self.assertEqual(len(self.published), 1)
         self.assertEqual(self.published[0][0],
                          cfg.CONF.publisher_rpc.metering_topic)
@@ -235,9 +233,8 @@ class TestPublish(base.TestCase):
     def test_publish_target(self):
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?target=custom_procedure_call'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
         self.assertEqual(len(self.published), 1)
         self.assertEqual(self.published[0][0],
                          cfg.CONF.publisher_rpc.metering_topic)
@@ -248,9 +245,8 @@ class TestPublish(base.TestCase):
     def test_published_with_per_meter_topic(self):
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?per_meter_topic=1'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
         self.assertEqual(len(self.published), 4)
         for topic, rpc_call in self.published:
             meters = rpc_call['args']['data']
@@ -270,14 +266,41 @@ class TestPublish(base.TestCase):
         self.assertIn(
             cfg.CONF.publisher_rpc.metering_topic + '.' + 'test3', topics)
 
+    def test_published_concurrency(self):
+        """This test the concurrent access to the local queue
+        of the rpc publisher
+        """
+
+        def faux_cast_go(context, topic, msg):
+            self.published.append((topic, msg))
+
+        def faux_cast_wait(context, topic, msg):
+            self.stubs.Set(oslo_rpc, 'cast', faux_cast_go)
+            # Sleep to simulate concurrency and allow other threads to work
+            eventlet.sleep(0)
+            self.published.append((topic, msg))
+
+        self.stubs.Set(oslo_rpc, 'cast', faux_cast_wait)
+
+        publisher = rpc.RPCPublisher(network_utils.urlsplit('rpc://'))
+        job1 = eventlet.spawn(publisher.publish_samples, None, self.test_data)
+        job2 = eventlet.spawn(publisher.publish_samples, None, self.test_data)
+
+        job1.wait()
+        job2.wait()
+
+        self.assertEqual(publisher.policy, 'default')
+        self.assertEqual(len(self.published), 2)
+        self.assertEqual(len(publisher.local_queue), 0)
+
     def test_published_with_no_policy(self):
         self.rpc_unreachable = True
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://'))
         self.assertRaises(
             SystemExit,
-            publisher.publish_counters,
-            None, self.test_data, 'test')
+            publisher.publish_samples,
+            None, self.test_data)
         self.assertEqual(publisher.policy, 'default')
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 0)
@@ -288,8 +311,8 @@ class TestPublish(base.TestCase):
             network_utils.urlsplit('rpc://?policy=default'))
         self.assertRaises(
             SystemExit,
-            publisher.publish_counters,
-            None, self.test_data, 'test')
+            publisher.publish_samples,
+            None, self.test_data)
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 0)
 
@@ -299,8 +322,8 @@ class TestPublish(base.TestCase):
             network_utils.urlsplit('rpc://?policy=notexist'))
         self.assertRaises(
             SystemExit,
-            publisher.publish_counters,
-            None, self.test_data, 'test')
+            publisher.publish_samples,
+            None, self.test_data)
         self.assertEqual(publisher.policy, 'default')
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 0)
@@ -309,9 +332,8 @@ class TestPublish(base.TestCase):
         self.rpc_unreachable = True
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?policy=drop'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 0)
 
@@ -319,9 +341,8 @@ class TestPublish(base.TestCase):
         self.rpc_unreachable = True
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?policy=queue'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 1)
 
@@ -329,16 +350,14 @@ class TestPublish(base.TestCase):
         self.rpc_unreachable = True
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?policy=queue'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 1)
 
         self.rpc_unreachable = False
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   'test')
+        publisher.publish_samples(None,
+                                  self.test_data)
 
         self.assertEqual(len(self.published), 2)
         self.assertEqual(len(publisher.local_queue), 0)
@@ -348,9 +367,10 @@ class TestPublish(base.TestCase):
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?policy=queue&max_queue_length=3'))
         for i in range(0, 5):
-            publisher.publish_counters(None,
-                                       self.test_data,
-                                       'test-%d' % i)
+            for s in self.test_data:
+                s.source = 'test-%d' % i
+            publisher.publish_samples(None,
+                                      self.test_data)
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 3)
         self.assertEqual(
@@ -371,9 +391,10 @@ class TestPublish(base.TestCase):
         publisher = rpc.RPCPublisher(
             network_utils.urlsplit('rpc://?policy=queue'))
         for i in range(0, 2000):
-            publisher.publish_counters(None,
-                                       self.test_data,
-                                       'test-%d' % i)
+            for s in self.test_data:
+                s.source = 'test-%d' % i
+            publisher.publish_samples(None,
+                                      self.test_data)
         self.assertEqual(len(self.published), 0)
         self.assertEqual(len(publisher.local_queue), 1024)
         self.assertEqual(

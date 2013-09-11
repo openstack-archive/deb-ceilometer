@@ -92,12 +92,12 @@
 
    source
      The origin of metering data. This field is set to "openstack" by default.
-     It can be configured to a different value using the counter_source field
+     It can be configured to a different value using the sample_source field
      in the ceilometer.conf file.
 
    user
      An OpenStack user.
 
 .. [#] http://en.wikipedia.org/wiki/Ceilometer
-.. [#] https://github.com/openstack/oslo-incubator/tree/master/openstack/common/notifier
+.. [#] https://git.openstack.org/cgit/openstack/ceilometer/tree/ceilometer/openstack/common/notifier
 .. [#] http://en.wikipedia.org/wiki/Non-repudiation

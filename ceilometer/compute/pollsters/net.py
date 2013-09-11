@@ -20,7 +20,7 @@
 
 import copy
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.openstack.common import log
@@ -35,7 +35,7 @@ class _Base(plugin.ComputePollster):
                                   "write-bytes=%d"])
 
     @staticmethod
-    def make_vnic_counter(instance, name, type, unit, volume, vnic_data):
+    def make_vnic_sample(instance, name, type, unit, volume, vnic_data):
         metadata = copy.copy(vnic_data)
         resource_metadata = dict(zip(metadata._fields, metadata))
         resource_metadata['instance_id'] = instance.id
@@ -48,7 +48,7 @@ class _Base(plugin.ComputePollster):
             instance_name = util.instance_name(instance)
             rid = "%s-%s-%s" % (instance_name, instance.id, vnic_data.name)
 
-        return counter.Counter(
+        return sample.Sample(
             name=name,
             type=type,
             unit=unit,
@@ -70,7 +70,7 @@ class _Base(plugin.ComputePollster):
             )
         return i_cache[instance_name]
 
-    def get_counters(self, manager, cache, instance):
+    def get_samples(self, manager, cache, instance):
         instance_name = util.instance_name(instance)
         LOG.info('checking instance %s', instance.id)
         try:
@@ -82,7 +82,7 @@ class _Base(plugin.ComputePollster):
             for vnic, info in vnics:
                 LOG.info(self.NET_USAGE_MESSAGE, instance_name,
                          vnic.name, info.rx_bytes, info.tx_bytes)
-                yield self._get_counter(instance, vnic, info)
+                yield self._get_sample(instance, vnic, info)
         except Exception as err:
             LOG.warning('Ignoring instance %s: %s',
                         instance_name, err)
@@ -91,11 +91,11 @@ class _Base(plugin.ComputePollster):
 
 class IncomingBytesPollster(_Base):
 
-    def _get_counter(self, instance, vnic, info):
-        return self.make_vnic_counter(
+    def _get_sample(self, instance, vnic, info):
+        return self.make_vnic_sample(
             instance,
             name='network.incoming.bytes',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='B',
             volume=info.rx_bytes,
             vnic_data=vnic,
@@ -104,11 +104,11 @@ class IncomingBytesPollster(_Base):
 
 class IncomingPacketsPollster(_Base):
 
-    def _get_counter(self, instance, vnic, info):
-        return self.make_vnic_counter(
+    def _get_sample(self, instance, vnic, info):
+        return self.make_vnic_sample(
             instance,
             name='network.incoming.packets',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='packet',
             volume=info.rx_packets,
             vnic_data=vnic,
@@ -117,11 +117,11 @@ class IncomingPacketsPollster(_Base):
 
 class OutgoingBytesPollster(_Base):
 
-    def _get_counter(self, instance, vnic, info):
-        return self.make_vnic_counter(
+    def _get_sample(self, instance, vnic, info):
+        return self.make_vnic_sample(
             instance,
             name='network.outgoing.bytes',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='B',
             volume=info.tx_bytes,
             vnic_data=vnic,
@@ -130,11 +130,11 @@ class OutgoingBytesPollster(_Base):
 
 class OutgoingPacketsPollster(_Base):
 
-    def _get_counter(self, instance, vnic, info):
-        return self.make_vnic_counter(
+    def _get_sample(self, instance, vnic, info):
+        return self.make_vnic_sample(
             instance,
             name='network.outgoing.packets',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='packet',
             volume=info.tx_packets,
             vnic_data=vnic,

@@ -57,6 +57,9 @@ CLI_OPTIONS = [
                deprecated_group="DEFAULT",
                default=os.environ.get('OS_TENANT_NAME', 'admin'),
                help='Tenant name to use for openstack service access'),
+    cfg.StrOpt('os-cacert',
+               default=os.environ.get('OS_CACERT', None),
+               help='Certificate chain for SSL validation'),
     cfg.StrOpt('os-auth-url',
                deprecated_group="DEFAULT",
                default=os.environ.get('OS_AUTH_URL',
@@ -72,7 +75,8 @@ cfg.CONF.register_cli_opts(CLI_OPTIONS, group="service_credentials")
 
 def prepare_service(argv=None):
     eventlet.monkey_patch()
-    gettextutils.install('ceilometer')
+    gettextutils.install('ceilometer', True)
+    gettextutils.enable_lazy()
     rpc.set_defaults(control_exchange='ceilometer')
     cfg.set_defaults(log.log_opts,
                      default_log_levels=['amqplib=WARN',

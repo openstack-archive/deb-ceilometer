@@ -35,17 +35,17 @@ class PollingTask(agent.PollingTask):
     def poll_and_publish(self):
         """Tasks to be run at a periodic interval."""
         with self.publish_context as publisher:
-            # TODO(yjiang5) passing counters into get_counters to avoid
+            # TODO(yjiang5) passing samples into get_samples to avoid
             # polling all counters one by one
             cache = {}
             for pollster in self.pollsters:
                 try:
                     LOG.info("Polling pollster %s", pollster.name)
-                    counters = list(pollster.obj.get_counters(
+                    samples = list(pollster.obj.get_samples(
                         self.manager,
                         cache,
                     ))
-                    publisher(counters)
+                    publisher(samples)
                 except Exception as err:
                     LOG.warning('Continue after error from %s: %s',
                                 pollster.name, err)
@@ -71,6 +71,7 @@ class AgentManager(agent.AgentManager):
             password=cfg.CONF.service_credentials.os_password,
             tenant_id=cfg.CONF.service_credentials.os_tenant_id,
             tenant_name=cfg.CONF.service_credentials.os_tenant_name,
+            cacert=cfg.CONF.service_credentials.os_cacert,
             auth_url=cfg.CONF.service_credentials.os_auth_url)
 
         super(AgentManager, self).interval_task(task)

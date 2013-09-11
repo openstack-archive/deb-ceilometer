@@ -48,6 +48,10 @@ class TestBase(db_test_base.TestBase):
                                    enable_acl=False,
                                    attach_storage=False,
                                    sources_file=sources_file)
+
+        # this is needed to pass over unhandled exceptions
+        self.app.debug = True
+
         self.app.register_blueprint(v1_blueprint.blueprint)
         self.test_app = self.app.test_client()
 
@@ -110,6 +114,17 @@ class FunctionalTest(db_test_base.TestBase):
 
     def put_json(self, path, params, expect_errors=False, headers=None,
                  extra_environ=None, status=None):
+        """Sends simulated HTTP PUT request to Pecan test app.
+
+        :param path: url path of target service
+        :param params: content for wsgi.input of request
+        :param expect_errors: boolean value whether an error is expected based
+                              on request
+        :param headers: A dictionary of headers to send along with the request
+        :param extra_environ: A dictionary of environ variables to send along
+                              with the request
+        :param status: Expected status code of response
+        """
         return self.post_json(path=path, params=params,
                               expect_errors=expect_errors,
                               headers=headers, extra_environ=extra_environ,
@@ -117,6 +132,19 @@ class FunctionalTest(db_test_base.TestBase):
 
     def post_json(self, path, params, expect_errors=False, headers=None,
                   method="post", extra_environ=None, status=None):
+        """Sends simulated HTTP POST request to Pecan test app.
+
+        :param path: url path of target service
+        :param params: content for wsgi.input of request
+        :param expect_errors: boolean value whether an error is expected based
+                              on request
+        :param headers: A dictionary of headers to send along with the request
+        :param method: Request method type. Appropriate method function call
+                       should be used rather than passing attribute in.
+        :param extra_environ: A dictionary of environ variables to send along
+                              with the request
+        :param status: Expected status code of response
+        """
         full_path = self.PATH_PREFIX + path
         print('%s: %s %s' % (method.upper(), full_path, params))
         response = getattr(self.app, "%s_json" % method)(
@@ -132,6 +160,16 @@ class FunctionalTest(db_test_base.TestBase):
 
     def delete(self, path, expect_errors=False, headers=None,
                extra_environ=None, status=None):
+        """Sends simulated HTTP DELETE request to Pecan test app.
+
+        :param path: url path of target service
+        :param expect_errors: boolean value whether an error is expected based
+                              on request
+        :param headers: A dictionary of headers to send along with the request
+        :param extra_environ: A dictionary of environ variables to send along
+                              with the request
+        :param status: Expected status code of response
+        """
         full_path = self.PATH_PREFIX + path
         print('DELETE: %s' % (full_path))
         response = self.app.delete(str(full_path),
@@ -143,19 +181,35 @@ class FunctionalTest(db_test_base.TestBase):
         return response
 
     def get_json(self, path, expect_errors=False, headers=None,
-                 extra_environ=None, q=[], **params):
+                 extra_environ=None, q=[], groupby=[], **params):
+        """Sends simulated HTTP GET request to Pecan test app.
+
+        :param path: url path of target service
+        :param expect_errors: boolean value whether an error is expected based
+                              on request
+        :param headers: A dictionary of headers to send along with the request
+        :param extra_environ: A dictionary of environ variables to send along
+                              with the request
+        :param q: list of queries consisting of: field, value, op, and type
+                  keys
+        :param groupby: list of fields to group by
+        :param params: content for wsgi.input of request
+        """
         full_path = self.PATH_PREFIX + path
         query_params = {'q.field': [],
                         'q.value': [],
                         'q.op': [],
+                        'q.type': [],
                         }
         for query in q:
-            for name in ['field', 'op', 'value']:
+            for name in ['field', 'op', 'value', 'type']:
                 query_params['q.%s' % name].append(query.get(name, ''))
         all_params = {}
         all_params.update(params)
         if q:
             all_params.update(query_params)
+        if groupby:
+            all_params.update({'groupby': groupby})
         print('GET: %s %r' % (full_path, all_params))
         response = self.app.get(full_path,
                                 params=all_params,

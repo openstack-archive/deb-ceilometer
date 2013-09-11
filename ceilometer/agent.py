@@ -19,8 +19,6 @@
 import abc
 import itertools
 
-from oslo.config import cfg
-
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 from ceilometer import pipeline
@@ -30,7 +28,7 @@ LOG = log.getLogger(__name__)
 
 
 class PollingTask(object):
-    """Polling task for polling counters and inject into pipeline.
+    """Polling task for polling samples and inject into pipeline.
     A polling task can be invoked periodically or only once.
 
     """
@@ -39,8 +37,7 @@ class PollingTask(object):
         self.manager = agent_manager
         self.pollsters = set()
         self.publish_context = pipeline.PublishContext(
-            agent_manager.context,
-            cfg.CONF.counter_source)
+            agent_manager.context)
 
     def add(self, pollster, pipelines):
         self.publish_context.add_pipelines(pipelines)
@@ -48,17 +45,12 @@ class PollingTask(object):
 
     @abc.abstractmethod
     def poll_and_publish(self):
-        """Polling counter and publish into pipeline."""
+        """Polling sample and publish into pipeline."""
 
 
 class AgentManager(object):
 
     def __init__(self, extension_manager):
-        self.pipeline_manager = pipeline.setup_pipeline(
-            transformer.TransformerExtensionManager(
-                'ceilometer.transformer',
-            ),
-        )
 
         self.pollster_manager = extension_manager
 
@@ -73,7 +65,7 @@ class AgentManager(object):
         for pipeline, pollster in itertools.product(
                 self.pipeline_manager.pipelines,
                 self.pollster_manager.extensions):
-            if pipeline.support_counter(pollster.name):
+            if pipeline.support_meter(pollster.name):
                 polling_task = polling_tasks.get(pipeline.interval, None)
                 if not polling_task:
                     polling_task = self.create_polling_task()
@@ -83,6 +75,12 @@ class AgentManager(object):
         return polling_tasks
 
     def initialize_service_hook(self, service):
+        self.pipeline_manager = pipeline.setup_pipeline(
+            transformer.TransformerExtensionManager(
+                'ceilometer.transformer',
+            ),
+        )
+
         self.service = service
         for interval, task in self.setup_polling_tasks().iteritems():
             self.service.tg.add_timer(interval,

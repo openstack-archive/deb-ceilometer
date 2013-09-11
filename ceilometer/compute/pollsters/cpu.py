@@ -18,7 +18,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.openstack.common import log
@@ -28,7 +28,7 @@ LOG = log.getLogger(__name__)
 
 class CPUPollster(plugin.ComputePollster):
 
-    def get_counters(self, manager, cache, instance):
+    def get_samples(self, manager, cache, instance):
         LOG.info('checking instance %s', instance.id)
         instance_name = util.instance_name(instance)
         try:
@@ -36,10 +36,10 @@ class CPUPollster(plugin.ComputePollster):
             LOG.info("CPUTIME USAGE: %s %d",
                      instance.__dict__, cpu_info.time)
             cpu_num = {'cpu_number': cpu_info.number}
-            yield util.make_counter_from_instance(
+            yield util.make_sample_from_instance(
                 instance,
                 name='cpu',
-                type=counter.TYPE_CUMULATIVE,
+                type=sample.TYPE_CUMULATIVE,
                 unit='ns',
                 volume=cpu_info.time,
                 additional_metadata=cpu_num,

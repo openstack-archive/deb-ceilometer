@@ -1,5 +1,6 @@
 # -*- encoding: utf-8 -*-
 #
+# Copyright 2013 IBM Corp.
 # Copyright © 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
@@ -24,7 +25,13 @@ Based on pecan.middleware.errordocument
 import json
 import webob
 from xml import etree as et
+try:
+    from xml.etree.ElementTree import ParseError
+except ImportError:
+    from xml.parsers.expat import ExpatError as ParseError
 
+from ceilometer.api import hooks
+from ceilometer.openstack.common import gettextutils
 from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
@@ -33,6 +40,20 @@ LOG = log.getLogger(__name__)
 class ParsableErrorMiddleware(object):
     """Replace error body with something the client can parse.
     """
+
+    @staticmethod
+    def best_match_language(accept_language):
+        """Determines best available locale from the Accept-Language
+        header.
+
+        :returns: the best language match or None if the 'Accept-Language'
+                  header was not available in the request.
+        """
+        if not accept_language:
+            return None
+        all_languages = gettextutils.get_available_languages('ceilometer')
+        return accept_language.best_match(all_languages)
+
     def __init__(self, app):
         self.app = app
 
@@ -68,21 +89,45 @@ class ParsableErrorMiddleware(object):
         app_iter = self.app(environ, replacement_start_response)
         if (state['status_code'] / 100) not in (2, 3):
             req = webob.Request(environ)
+            # Find the first TranslationHook in the array of hooks and use the
+            # translatable_error object from it
+            error = None
+            for hook in self.app.hooks:
+                if isinstance(hook, hooks.TranslationHook):
+                    error = hook.local_error.translatable_error
+                    break
+            user_locale = self.best_match_language(req.accept_language)
             if (req.accept.best_match(['application/json', 'application/xml'])
                == 'application/xml'):
                 try:
                     # simple check xml is valid
+                    fault = et.ElementTree.fromstring('\n'.join(app_iter))
+                    # Add the translated error to the xml data
+                    if error is not None:
+                        for fault_string in fault.findall('faultstring'):
+                            fault_string.text = (
+                                gettextutils.get_localized_message(
+                                    error, user_locale))
                     body = [et.ElementTree.tostring(
-                            et.ElementTree.fromstring('<error_message>'
-                                                      + '\n'.join(app_iter)
-                                                      + '</error_message>'))]
-                except et.ElementTree.ParseError as err:
+                            et.ElementTree.fromstring(
+                                '<error_message>'
+                                + et.ElementTree.tostring(fault)
+                                + '</error_message>'))]
+                except ParseError as err:
                     LOG.error('Error parsing HTTP response: %s' % err)
                     body = ['<error_message>%s' % state['status_code']
                             + '</error_message>']
                 state['headers'].append(('Content-Type', 'application/xml'))
             else:
-                body = [json.dumps({'error_message': '\n'.join(app_iter)})]
+                try:
+                    fault = json.loads('\n'.join(app_iter))
+                    if error is not None and 'faultstring' in fault:
+                        fault['faultstring'] = (
+                            gettextutils.get_localized_message(
+                                error, user_locale))
+                    body = [json.dumps({'error_message': json.dumps(fault)})]
+                except ValueError as err:
+                    body = [json.dumps({'error_message': '\n'.join(app_iter)})]
                 state['headers'].append(('Content-Type', 'application/json'))
             state['headers'].append(('Content-Length', len(body[0])))
         else:

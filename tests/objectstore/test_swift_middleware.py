@@ -43,23 +43,20 @@ class FakeApp(object):
 
 class TestSwiftMiddleware(base.TestCase):
 
-    class _faux_pipeline_manager(object):
+    class _faux_pipeline_manager(pipeline.PipelineManager):
         class _faux_pipeline(object):
             def __init__(self, pipeline_manager):
                 self.pipeline_manager = pipeline_manager
-                self.counters = []
+                self.samples = []
 
-            def publish_counters(self, ctxt, counters, source):
-                self.counters.extend(counters)
+            def publish_samples(self, ctxt, samples):
+                self.samples.extend(samples)
 
-            def flush(self, context, source):
+            def flush(self, context):
                 pass
 
         def __init__(self):
             self.pipelines = [self._faux_pipeline(self)]
-
-            def flush(self, ctx, source):
-                pass
 
     def _faux_setup_pipeline(self, transformer_manager):
         return self.pipeline_manager
@@ -83,16 +80,16 @@ class TestSwiftMiddleware(base.TestCase):
                             environ={'REQUEST_METHOD': 'GET'})
         resp = app(req.environ, self.start_response)
         self.assertEqual(list(resp), ["This string is 28 bytes long"])
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         self.assertEqual(data.volume, 28)
         self.assertEqual(data.resource_metadata['version'], '1.0')
         self.assertEqual(data.resource_metadata['container'], 'container')
         self.assertEqual(data.resource_metadata['object'], 'obj')
 
         # test the # of request and the request method
-        data = counters[1]
+        data = samples[1]
         self.assertEqual(data.name, 'storage.api.request')
         self.assertEqual(data.volume, 1)
         self.assertEqual(data.resource_metadata['method'], 'get')
@@ -104,16 +101,16 @@ class TestSwiftMiddleware(base.TestCase):
                                      'wsgi.input':
                                      StringIO.StringIO('some stuff')})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         self.assertEqual(data.volume, 10)
         self.assertEqual(data.resource_metadata['version'], '1.0')
         self.assertEqual(data.resource_metadata['container'], 'container')
         self.assertEqual(data.resource_metadata['object'], 'obj')
 
         # test the # of request and the request method
-        data = counters[1]
+        data = samples[1]
         self.assertEqual(data.name, 'storage.api.request')
         self.assertEqual(data.volume, 1)
         self.assertEqual(data.resource_metadata['method'], 'put')
@@ -125,16 +122,16 @@ class TestSwiftMiddleware(base.TestCase):
                                      'wsgi.input':
                                      StringIO.StringIO('some other stuff')})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         self.assertEqual(data.volume, 16)
         self.assertEqual(data.resource_metadata['version'], '1.0')
         self.assertEqual(data.resource_metadata['container'], 'container')
         self.assertEqual(data.resource_metadata['object'], 'obj')
 
         # test the # of request and the request method
-        data = counters[1]
+        data = samples[1]
         self.assertEqual(data.name, 'storage.api.request')
         self.assertEqual(data.volume, 1)
         self.assertEqual(data.resource_metadata['method'], 'post')
@@ -144,9 +141,9 @@ class TestSwiftMiddleware(base.TestCase):
         req = Request.blank('/1.0/account/container/obj',
                             environ={'REQUEST_METHOD': 'HEAD'})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 1)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 1)
+        data = samples[0]
         self.assertEqual(data.resource_metadata['version'], '1.0')
         self.assertEqual(data.resource_metadata['container'], 'container')
         self.assertEqual(data.resource_metadata['object'], 'obj')
@@ -161,10 +158,10 @@ class TestSwiftMiddleware(base.TestCase):
         req = Request.blank('/1.0/account/container/obj',
                             environ={'REQUEST_METHOD': 'BOGUS'})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
+        samples = self.pipeline_manager.pipelines[0].samples
 
-        self.assertEqual(len(counters), 1)
-        data = counters[0]
+        self.assertEqual(len(samples), 1)
+        data = samples[0]
         self.assertEqual(data.resource_metadata['version'], '1.0')
         self.assertEqual(data.resource_metadata['container'], 'container')
         self.assertEqual(data.resource_metadata['object'], 'obj')
@@ -178,9 +175,9 @@ class TestSwiftMiddleware(base.TestCase):
         req = Request.blank('/1.0/account/container',
                             environ={'REQUEST_METHOD': 'GET'})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         self.assertEqual(data.volume, 28)
         self.assertEqual(data.resource_metadata['version'], '1.0')
         self.assertEqual(data.resource_metadata['container'], 'container')
@@ -191,9 +188,9 @@ class TestSwiftMiddleware(base.TestCase):
         req = Request.blank('/1.0/account/container',
                             environ={'REQUEST_METHOD': 'GET'})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         http_headers = [k for k in data.resource_metadata.keys()
                         if k.startswith('http_header_')]
         self.assertEqual(len(http_headers), 0)
@@ -212,9 +209,9 @@ class TestSwiftMiddleware(base.TestCase):
                                 'X_VAR2': 'value2'
                             })
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         http_headers = [k for k in data.resource_metadata.keys()
                         if k.startswith('http_header_')]
         self.assertEqual(len(http_headers), 2)
@@ -234,9 +231,9 @@ class TestSwiftMiddleware(base.TestCase):
         req = Request.blank('/1.0/account/container',
                             environ={'REQUEST_METHOD': 'GET'})
         list(app(req.environ, self.start_response))
-        counters = self.pipeline_manager.pipelines[0].counters
-        self.assertEqual(len(counters), 2)
-        data = counters[0]
+        samples = self.pipeline_manager.pipelines[0].samples
+        self.assertEqual(len(samples), 2)
+        data = samples[0]
         http_headers = [k for k in data.resource_metadata.keys()
                         if k.startswith('http_header_')]
         self.assertEqual(len(http_headers), 0)

@@ -15,13 +15,13 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""Handler for producing image counter messages from glance notification
+"""Handler for producing image metering messages from glance notification
    events.
 """
 
 from oslo.config import cfg
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer import plugin
 
 OPTS = [
@@ -51,20 +51,18 @@ class ImageBase(plugin.NotificationBase):
 
 
 class ImageCRUDBase(ImageBase):
-    @staticmethod
-    def get_event_types():
-        return [
-            'image.update',
-            'image.upload',
-            'image.delete',
-        ]
+    event_types = [
+        'image.update',
+        'image.upload',
+        'image.delete',
+    ]
 
 
 class ImageCRUD(ImageCRUDBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name=message['event_type'],
-            type=counter.TYPE_DELTA,
+            type=sample.TYPE_DELTA,
             unit='image',
             volume=1,
             resource_id=message['payload']['id'],
@@ -75,9 +73,9 @@ class ImageCRUD(ImageCRUDBase):
 
 class Image(ImageCRUDBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='image',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='image',
             volume=1,
             resource_id=message['payload']['id'],
@@ -88,9 +86,9 @@ class Image(ImageCRUDBase):
 
 class ImageSize(ImageCRUDBase):
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='image.size',
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit='B',
             volume=message['payload']['size'],
             resource_id=message['payload']['id'],
@@ -100,17 +98,13 @@ class ImageSize(ImageCRUDBase):
 
 
 class ImageDownload(ImageBase):
-    """Emit image_download counter when an image is downloaded."""
-    @staticmethod
-    def get_event_types():
-        return [
-            'image.send',
-        ]
+    """Emit image_download sample when an image is downloaded."""
+    event_types = ['image.send']
 
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='image.download',
-            type=counter.TYPE_DELTA,
+            type=sample.TYPE_DELTA,
             unit='B',
             volume=message['payload']['bytes_sent'],
             resource_id=message['payload']['image_id'],
@@ -120,17 +114,13 @@ class ImageDownload(ImageBase):
 
 
 class ImageServe(ImageBase):
-    """Emit image_serve counter when an image is served out."""
-    @staticmethod
-    def get_event_types():
-        return [
-            'image.send',
-        ]
+    """Emit image_serve sample when an image is served out."""
+    event_types = ['image.send']
 
     def process_notification(self, message):
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name='image.serve',
-            type=counter.TYPE_DELTA,
+            type=sample.TYPE_DELTA,
             unit='B',
             volume=message['payload']['bytes_sent'],
             resource_id=message['payload']['image_id'],

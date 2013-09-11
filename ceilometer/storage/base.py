@@ -45,14 +45,67 @@ def iter_period(start, end, period):
         period_start = next_start
 
 
+def _handle_sort_key(model_name, sort_key=None):
+    """Generate sort keys according to the passed in sort key from user.
+
+    :param model_name: Database model name be query.(alarm, meter, etc.)
+    :param sort_key: sort key passed from user.
+    return: sort keys list
+    """
+    sort_keys_extra = {'alarm': ['name', 'user_id', 'project_id'],
+                       'meter': ['user_id', 'project_id'],
+                       'resource': ['user_id', 'project_id'],
+                       }
+
+    sort_keys = sort_keys_extra[model_name]
+    if not sort_key:
+        return sort_keys
+    # NOTE(Fengqian): We need to put the sort key from user
+    #in the first place of sort keys list.
+    try:
+        sort_keys.remove(sort_key)
+    except ValueError:
+        pass
+    finally:
+        sort_keys.insert(0, sort_key)
+    return sort_keys
+
+
+class MultipleResultsFound(Exception):
+    pass
+
+
+class NoResultFound(Exception):
+    pass
+
+
+class Pagination(object):
+    """Class for pagination query."""
+
+    def __init__(self, limit=None, primary_sort_dir='desc', sort_keys=[],
+                 sort_dirs=[], marker_value=None):
+        """This puts all parameters used for paginate query together.
+
+        :param limit: Maximum number of items to return;
+        :param primary_sort_dir: Sort direction of primary key.
+        :param marker_value: Value of primary key to identify the last item of
+                             the previous page.
+        :param sort_keys: Array of attributes passed in by users to sort the
+                            results besides the primary key.
+        :param sort_dirs: Per-column array of sort_dirs, corresponding to
+                            sort_keys.
+        """
+        self.limit = limit
+        self.primary_sort_dir = primary_sort_dir
+        self.marker_value = marker_value
+        self.sort_keys = sort_keys
+        self.sort_dirs = sort_dirs
+
+
 class StorageEngine(object):
     """Base class for storage engines."""
 
     __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def register_opts(self, conf):
-        """Register any configuration options used by this engine."""
 
     @abc.abstractmethod
     def get_connection(self, conf):
@@ -69,7 +122,7 @@ class Connection(object):
         """Constructor."""
 
     @abc.abstractmethod
-    def upgrade(self, version=None):
+    def upgrade(self):
         """Migrate the database to `version` or the most recent version."""
 
     @abc.abstractmethod
@@ -109,7 +162,7 @@ class Connection(object):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None):
+                      metaquery={}, resource=None, pagination=None):
         """Return an iterable of models.Resource instances containing
         resource information.
 
@@ -122,11 +175,12 @@ class Connection(object):
         :param end_timestamp_op: Optional timestamp end range operation.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
+        :param pagination: Optional pagination query.
         """
 
     @abc.abstractmethod
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}):
+                   metaquery={}, pagination=None):
         """Return an iterable of model.Meter instances containing meter
         information.
 
@@ -135,6 +189,7 @@ class Connection(object):
         :param resource: Optional resource filter.
         :param source: Optional source filter.
         :param metaquery: Optional dict with metadata to match on.
+        :param pagination: Optional pagination query.
         """
 
     @abc.abstractmethod
@@ -146,7 +201,7 @@ class Connection(object):
         """
 
     @abc.abstractmethod
-    def get_meter_statistics(self, sample_filter, period=None):
+    def get_meter_statistics(self, sample_filter, period=None, groupby=None):
         """Return an iterable of model.Statistics instances.
 
         The filter must have a meter value set.
@@ -154,8 +209,15 @@ class Connection(object):
 
     @abc.abstractmethod
     def get_alarms(self, name=None, user=None,
-                   project=None, enabled=True, alarm_id=None):
+                   project=None, enabled=True, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
+        """
+
+    @abc.abstractmethod
+    def create_alarm(self, alarm):
+        """Create an alarm. Returns the alarm as created.
+
+        :param alarm: The alarm to create.
         """
 
     @abc.abstractmethod
@@ -166,6 +228,29 @@ class Connection(object):
     @abc.abstractmethod
     def delete_alarm(self, alarm_id):
         """Delete a alarm
+        """
+
+    @abc.abstractmethod
+    def get_alarm_changes(self, alarm_id, on_behalf_of,
+                          user=None, project=None, type=None,
+                          start_timestamp=None, start_timestamp_op=None,
+                          end_timestamp=None, end_timestamp_op=None):
+        """Yields list of AlarmChanges describing alarm history
+        :param alarm_id: ID of alarm to return changes for
+        :param on_behalf_of: ID of tenant to scope changes query (None for
+                             administrative user, indicating all projects)
+        :param user: Optional ID of user to return changes for
+        :param project: Optional ID of project to return changes for
+        :project type: Optional change type
+        :param start_timestamp: Optional modified timestamp start range
+        :param start_timestamp_op: Optional timestamp start range operation
+        :param end_timestamp: Optional modified timestamp end range
+        :param end_timestamp_op: Optional timestamp end range operation
+        """
+
+    @abc.abstractmethod
+    def record_alarm_change(self, alarm_change):
+        """Record alarm change event.
         """
 
     @abc.abstractmethod

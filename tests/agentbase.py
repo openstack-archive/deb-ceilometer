@@ -26,15 +26,15 @@ import mock
 from stevedore import extension
 from stevedore.tests import manager as extension_tests
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer import pipeline
 from ceilometer.tests import base
 from ceilometer import transformer
 
 
-default_test_data = counter.Counter(
+default_test_data = sample.Sample(
     name='test',
-    type=counter.TYPE_CUMULATIVE,
+    type=sample.TYPE_CUMULATIVE,
     unit='',
     volume=1,
     user_id='test',
@@ -48,38 +48,65 @@ default_test_data = counter.Counter(
 class TestPollster:
     test_data = default_test_data
 
-    def get_counters(self, manager, cache, instance=None):
-        self.counters.append((manager, instance))
+    def get_samples(self, manager, cache, instance=None):
+        self.samples.append((manager, instance))
         return [self.test_data]
 
 
 class TestPollsterException(TestPollster):
-    def get_counters(self, manager, cache, instance=None):
+    def get_samples(self, manager, cache, instance=None):
         # Put an instance parameter here so that it can be used
         # by both central manager and compute manager
         # In future, we possibly don't need such hack if we
-        # combine the get_counters() function again
-        self.counters.append((manager, instance))
+        # combine the get_samples() function again
+        self.samples.append((manager, instance))
         raise Exception()
 
 
 class BaseAgentManagerTestCase(base.TestCase):
 
     class Pollster(TestPollster):
-        counters = []
+        samples = []
         test_data = default_test_data
 
     class PollsterAnother(TestPollster):
-        counters = []
-        test_data = default_test_data._replace(name='testanother')
+        samples = []
+        test_data = sample.Sample(
+            name='testanother',
+            type=default_test_data.type,
+            unit=default_test_data.unit,
+            volume=default_test_data.volume,
+            user_id=default_test_data.user_id,
+            project_id=default_test_data.project_id,
+            resource_id=default_test_data.resource_id,
+            timestamp=default_test_data.timestamp,
+            resource_metadata=default_test_data.resource_metadata)
 
     class PollsterException(TestPollsterException):
-        counters = []
-        test_data = default_test_data._replace(name='testexception')
+        samples = []
+        test_data = sample.Sample(
+            name='testexception',
+            type=default_test_data.type,
+            unit=default_test_data.unit,
+            volume=default_test_data.volume,
+            user_id=default_test_data.user_id,
+            project_id=default_test_data.project_id,
+            resource_id=default_test_data.resource_id,
+            timestamp=default_test_data.timestamp,
+            resource_metadata=default_test_data.resource_metadata)
 
     class PollsterExceptionAnother(TestPollsterException):
-        counters = []
-        test_data = default_test_data._replace(name='testexceptionanother')
+        samples = []
+        test_data = sample.Sample(
+            name='testexceptionanother',
+            type=default_test_data.type,
+            unit=default_test_data.unit,
+            volume=default_test_data.volume,
+            user_id=default_test_data.user_id,
+            project_id=default_test_data.project_id,
+            resource_id=default_test_data.resource_id,
+            timestamp=default_test_data.timestamp,
+            resource_metadata=default_test_data.resource_metadata)
 
     def setup_pipeline(self):
         self.transformer_manager = transformer.TransformerExtensionManager(
@@ -136,10 +163,10 @@ class BaseAgentManagerTestCase(base.TestCase):
         self.setup_pipeline()
 
     def tearDown(self):
-        self.Pollster.counters = []
-        self.PollsterAnother.counters = []
-        self.PollsterException.counters = []
-        self.PollsterExceptionAnother.counters = []
+        self.Pollster.samples = []
+        self.PollsterAnother.samples = []
+        self.PollsterException.samples = []
+        self.PollsterExceptionAnother.samples = []
         super(BaseAgentManagerTestCase, self).tearDown()
 
     def test_setup_polling_tasks(self):
@@ -148,7 +175,7 @@ class BaseAgentManagerTestCase(base.TestCase):
         self.assertTrue(60 in polling_tasks.keys())
         self.mgr.interval_task(polling_tasks.values()[0])
         pub = self.mgr.pipeline_manager.pipelines[0].publishers[0]
-        self.assertEqual(pub.counters[0], self.Pollster.test_data)
+        self.assertEqual(pub.samples[0], self.Pollster.test_data)
 
     def test_setup_polling_tasks_multiple_interval(self):
         self.pipeline_cfg.append({
@@ -217,4 +244,4 @@ class BaseAgentManagerTestCase(base.TestCase):
         polling_tasks.get(10)
         self.mgr.interval_task(polling_tasks.get(10))
         pub = self.mgr.pipeline_manager.pipelines[0].publishers[0]
-        self.assertEqual(len(pub.counters), 0)
+        self.assertEqual(len(pub.samples), 0)

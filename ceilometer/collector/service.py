@@ -20,8 +20,8 @@ import msgpack
 from oslo.config import cfg
 import socket
 from stevedore import extension
+from stevedore import named
 
-from ceilometer.publisher import rpc as publisher_rpc
 from ceilometer.service import prepare_service
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common.gettextutils import _
@@ -29,7 +29,6 @@ from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 from ceilometer.openstack.common.rpc import dispatcher as rpc_dispatcher
 from ceilometer.openstack.common.rpc import service as rpc_service
-
 
 from ceilometer.openstack.common import timeutils
 from ceilometer import pipeline
@@ -51,6 +50,9 @@ OPTS = [
     cfg.BoolOpt('store_events',
                 default=False,
                 help='Save event details'),
+    cfg.MultiStrOpt('dispatcher',
+                    default=['database'],
+                    help='dispatcher to process metering data'),
 ]
 
 cfg.CONF.register_opts(OPTS, group="collector")
@@ -105,13 +107,19 @@ def udp_collector():
     os_service.launch(UDPCollectorService()).wait()
 
 
+class UnableToSaveEventException(Exception):
+    """Thrown when we want to requeue an event.
+
+    Any exception is fine, but this one should make debugging
+    a little easier.
+    """
+    pass
+
+
 class CollectorService(rpc_service.Service):
 
     COLLECTOR_NAMESPACE = 'ceilometer.collector'
-
-    def __init__(self, host, topic, manager=None):
-        super(CollectorService, self).__init__(host, topic, manager)
-        self.storage_conn = storage.get_connection(cfg.CONF)
+    DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
 
     def start(self):
         super(CollectorService, self).start()
@@ -140,6 +148,17 @@ class CollectorService(rpc_service.Service):
                         self.COLLECTOR_NAMESPACE)
         self.notification_manager.map(self._setup_subscription)
 
+        LOG.debug('loading dispatchers from %s',
+                  self.DISPATCHER_NAMESPACE)
+        self.dispatcher_manager = named.NamedExtensionManager(
+            namespace=self.DISPATCHER_NAMESPACE,
+            names=cfg.CONF.collector.dispatcher,
+            invoke_on_load=True,
+            invoke_args=[cfg.CONF])
+        if not list(self.dispatcher_manager):
+            LOG.warning('Failed to load any dispatchers for %s',
+                        self.DISPATCHER_NAMESPACE)
+
         # Set ourselves up as a separate worker for the metering data,
         # since the default for service is to use create_consumer().
         self.conn.create_worker(
@@ -152,7 +171,7 @@ class CollectorService(rpc_service.Service):
         handler = ext.obj
         ack_on_error = cfg.CONF.collector.ack_on_event_error
         LOG.debug('Event types from %s: %s (ack_on_error=%s)',
-                  ext.name, ', '.join(handler.get_event_types()),
+                  ext.name, ', '.join(handler.event_types),
                   ack_on_error)
 
         for exchange_topic in handler.get_exchange_topics(cfg.CONF):
@@ -160,13 +179,18 @@ class CollectorService(rpc_service.Service):
                 try:
                     self.conn.join_consumer_pool(
                         callback=self.process_notification,
-                        pool_name='ceilometer.notifications',
+                        pool_name=topic,
                         topic=topic,
                         exchange_name=exchange_topic.exchange,
                         ack_on_error=ack_on_error)
                 except Exception:
                     LOG.exception('Could not join consumer pool %s/%s' %
                                   (topic, exchange_topic.exchange))
+
+    def record_metering_data(self, context, data):
+        self.dispatcher_manager.map(self._record_metering_data_for_ext,
+                                    context=context,
+                                    data=data)
 
     def process_notification(self, notification):
         """Make a notification processed by an handler."""
@@ -197,77 +221,41 @@ class CollectorService(rpc_service.Service):
         delivery_info, which is critical to determining the
         source of the notification. This will have to get added back later.
         """
+        message_id = body.get('message_id')
         event_name = body['event_type']
         when = self._extract_when(body)
-
         LOG.debug('Saving event "%s"', event_name)
 
-        message_id = body.get('message_id')
-
-        # TODO(sandy) - check we have not already saved this notification.
-        #               (possible on retries) Use message_id to spot dups.
         publisher = body.get('publisher_id')
         request_id = body.get('_context_request_id')
         tenant_id = body.get('_context_tenant')
 
         text = models.Trait.TEXT_TYPE
-        all_traits = [models.Trait('message_id', text, message_id),
-                      models.Trait('service', text, publisher),
+        all_traits = [models.Trait('service', text, publisher),
                       models.Trait('request_id', text, request_id),
                       models.Trait('tenant_id', text, tenant_id),
                       ]
         # Only store non-None value traits ...
         traits = [trait for trait in all_traits if trait.value is not None]
 
-        event = models.Event(event_name, when, traits)
-        try:
-            self.storage_conn.record_events([event, ])
-        except Exception as err:
-            LOG.exception(_("Unable to store events: %s"), err)
-            # By re-raising we avoid ack()'ing the message.
-            raise
+        event = models.Event(message_id, event_name, when, traits)
+
+        problem_events = []
+        for dispatcher in self.dispatcher_manager:
+            problem_events.extend(dispatcher.obj.record_events(event))
+        if models.Event.UNKNOWN_PROBLEM in [x[0] for x in problem_events]:
+            # Don't ack the message, raise to requeue it
+            # if ack_on_error = False
+            raise UnableToSaveEventException()
+
+    @staticmethod
+    def _record_metering_data_for_ext(ext, context, data):
+        ext.obj.record_metering_data(context, data)
 
     def _process_notification_for_ext(self, ext, notification):
-        handler = ext.obj
-        if notification['event_type'] in handler.get_event_types():
-            ctxt = context.get_admin_context()
-            with self.pipeline_manager.publisher(ctxt,
-                                                 cfg.CONF.counter_source) as p:
-                # FIXME(dhellmann): Spawn green thread?
-                p(list(handler.process_notification(notification)))
-
-    def record_metering_data(self, context, data):
-        """This method is triggered when metering data is
-        cast from an agent.
-        """
-        # We may have receive only one counter on the wire
-        if not isinstance(data, list):
-            data = [data]
-
-        for meter in data:
-            LOG.info('metering data %s for %s @ %s: %s',
-                     meter['counter_name'],
-                     meter['resource_id'],
-                     meter.get('timestamp', 'NO TIMESTAMP'),
-                     meter['counter_volume'])
-            if publisher_rpc.verify_signature(
-                    meter,
-                    cfg.CONF.publisher_rpc.metering_secret):
-                try:
-                    # Convert the timestamp to a datetime instance.
-                    # Storage engines are responsible for converting
-                    # that value to something they can store.
-                    if meter.get('timestamp'):
-                        ts = timeutils.parse_isotime(meter['timestamp'])
-                        meter['timestamp'] = timeutils.normalize_time(ts)
-                    self.storage_conn.record_metering_data(meter)
-                except Exception as err:
-                    LOG.error('Failed to record metering data: %s', err)
-                    LOG.exception(err)
-            else:
-                LOG.warning(
-                    'message signature invalid, discarding message: %r',
-                    meter)
+        with self.pipeline_manager.publisher(context.get_admin_context()) as p:
+            # FIXME(dhellmann): Spawn green thread?
+            p(list(ext.obj.to_samples(notification)))
 
 
 def collector():

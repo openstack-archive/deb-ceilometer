@@ -15,12 +15,13 @@
 # under the License.
 
 import datetime
+from oslo.config import cfg
 
 from keystoneclient import exceptions
 import requests
 
 from ceilometer.central import plugin
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 
@@ -56,9 +57,9 @@ class _Base(plugin.CentralPollster):
     @staticmethod
     def get_kwapi_client(ksclient):
         """Returns a KwapiClient configured with the proper url and token."""
-        endpoint = ksclient.service_catalog.url_for(service_type='energy',
-                                                    endpoint_type='internalURL'
-                                                    )
+        endpoint = ksclient.service_catalog.url_for(
+            service_type='energy',
+            endpoint_type=cfg.CONF.service_credentials.os_endpoint_type)
         return KwapiClient(endpoint, ksclient.auth_token)
 
     CACHE_KEY_PROBE = 'kwapi.probes'
@@ -81,12 +82,12 @@ class _Base(plugin.CentralPollster):
 class EnergyPollster(_Base):
     """Measures energy consumption."""
 
-    def get_counters(self, manager, cache):
-        """Returns all counters."""
+    def get_samples(self, manager, cache):
+        """Returns all samples."""
         for probe in self._iter_probes(manager.keystone, cache):
-            yield counter.Counter(
+            yield sample.Sample(
                 name='energy',
-                type=counter.TYPE_CUMULATIVE,
+                type=sample.TYPE_CUMULATIVE,
                 unit='kWh',
                 volume=probe['kwh'],
                 user_id=None,
@@ -101,12 +102,12 @@ class EnergyPollster(_Base):
 class PowerPollster(_Base):
     """Measures power consumption."""
 
-    def get_counters(self, manager, cache):
-        """Returns all counters."""
+    def get_samples(self, manager, cache):
+        """Returns all samples."""
         for probe in self._iter_probes(manager.keystone, cache):
-            yield counter.Counter(
+            yield sample.Sample(
                 name='power',
-                type=counter.TYPE_GAUGE,
+                type=sample.TYPE_GAUGE,
                 unit='W',
                 volume=probe['w'],
                 user_id=None,

@@ -28,13 +28,13 @@ from oslo.config import cfg
 from stevedore import extension
 from stevedore.tests import manager as test_manager
 
-from ceilometer import counter
-from ceilometer.openstack.common import timeutils
-from ceilometer.publisher import rpc
 from ceilometer.collector import service
-from ceilometer.storage import base
-from ceilometer.tests import base as tests_base
 from ceilometer.compute import notifications
+from ceilometer.openstack.common import timeutils
+from ceilometer import sample
+from ceilometer.storage import base
+from ceilometer.storage import models
+from ceilometer.tests import base as tests_base
 
 
 TEST_NOTICE = {
@@ -116,7 +116,7 @@ class TestUDPCollectorService(TestCollector):
     def setUp(self):
         super(TestUDPCollectorService, self).setUp()
         self.srv = service.UDPCollectorService()
-        self.counter = dict(counter.Counter(
+        self.counter = sample.Sample(
             name='foobar',
             type='bad',
             unit='F',
@@ -126,7 +126,11 @@ class TestUDPCollectorService(TestCollector):
             resource_id='cat',
             timestamp='NOW!',
             resource_metadata={},
-        )._asdict())
+        ).as_dict()
+
+    def test_service_has_storage_conn(self):
+        srv = service.UDPCollectorService()
+        self.assertIsNotNone(srv.storage_conn)
 
     def test_udp_receive(self):
         self.srv.storage_conn = self.mox.CreateMock(base.Connection)
@@ -184,87 +188,6 @@ class TestCollectorService(TestCollector):
         with patch('ceilometer.openstack.common.rpc.create_connection'):
             self.srv.start()
 
-    def test_valid_message(self):
-        msg = {'counter_name': 'test',
-               'resource_id': self.id(),
-               'counter_volume': 1,
-               }
-        msg['message_signature'] = rpc.compute_signature(
-            msg,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-
-        self.srv.storage_conn = self.mox.CreateMock(base.Connection)
-        self.srv.storage_conn.record_metering_data(msg)
-        self.mox.ReplayAll()
-
-        self.srv.record_metering_data(self.ctx, msg)
-        self.mox.VerifyAll()
-
-    def test_invalid_message(self):
-        msg = {'counter_name': 'test',
-               'resource_id': self.id(),
-               'counter_volume': 1,
-               }
-        msg['message_signature'] = 'invalid-signature'
-
-        class ErrorConnection:
-
-            called = False
-
-            def record_metering_data(self, data):
-                self.called = True
-
-        self.srv.storage_conn = ErrorConnection()
-
-        self.srv.record_metering_data(self.ctx, msg)
-
-        assert not self.srv.storage_conn.called, \
-            'Should not have called the storage connection'
-
-    def test_timestamp_conversion(self):
-        msg = {'counter_name': 'test',
-               'resource_id': self.id(),
-               'counter_volume': 1,
-               'timestamp': '2012-07-02T13:53:40Z',
-               }
-        msg['message_signature'] = rpc.compute_signature(
-            msg,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-
-        expected = {}
-        expected.update(msg)
-        expected['timestamp'] = datetime.datetime(2012, 7, 2, 13, 53, 40)
-
-        self.srv.storage_conn = self.mox.CreateMock(base.Connection)
-        self.srv.storage_conn.record_metering_data(expected)
-        self.mox.ReplayAll()
-
-        self.srv.record_metering_data(self.ctx, msg)
-
-    def test_timestamp_tzinfo_conversion(self):
-        msg = {'counter_name': 'test',
-               'resource_id': self.id(),
-               'counter_volume': 1,
-               'timestamp': '2012-09-30T15:31:50.262-08:00',
-               }
-        msg['message_signature'] = rpc.compute_signature(
-            msg,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-
-        expected = {}
-        expected.update(msg)
-        expected['timestamp'] = datetime.datetime(2012, 9, 30,
-                                                  23, 31, 50, 262000)
-
-        self.srv.storage_conn = self.mox.CreateMock(base.Connection)
-        self.srv.storage_conn.record_metering_data(expected)
-        self.mox.ReplayAll()
-
-        self.srv.record_metering_data(self.ctx, msg)
-
     @patch('ceilometer.pipeline.setup_pipeline', MagicMock())
     def test_process_notification(self):
         # If we try to create a real RPC connection, init_host() never
@@ -302,30 +225,59 @@ class TestCollectorService(TestCollector):
     def test_message_to_event_missing_keys(self):
         now = timeutils.utcnow()
         timeutils.set_time_override(now)
-        message = {'event_type': "foo", 'message_id': "abc"}
+        message = {'event_type': "foo",
+                   'message_id': "abc",
+                   'publisher_id': "1"}
 
-        self.srv.storage_conn = MagicMock()
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher
+                                 ),
+             ])
 
         with patch('ceilometer.collector.service.LOG') as mylog:
             self.srv._message_to_event(message)
             self.assertFalse(mylog.exception.called)
-        events = self.srv.storage_conn.record_events.call_args[0]
-        self.assertEquals(1, len(events))
-        event = events[0][0]
-        self.assertEquals("foo", event.event_name)
-        self.assertEquals(now, event.generated)
-        self.assertEquals(1, len(event.traits))
+        events = mock_dispatcher.record_events.call_args[0]
+        self.assertEqual(1, len(events))
+        event = events[0]
+        self.assertEqual("foo", event.event_name)
+        self.assertEqual(now, event.generated)
+        self.assertEqual(1, len(event.traits))
 
-    def test_message_to_event_bad_save(self):
+    def test_message_to_event_duplicate(self):
         cfg.CONF.set_override("store_events", True, group="collector")
-        self.srv.storage_conn = MagicMock()
-        self.srv.storage_conn.record_events.side_effect = MyException("Boom")
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher
+                                 ),
+             ])
+        mock_dispatcher.record_events.return_value = [
+            (models.Event.DUPLICATE, object())]
         message = {'event_type': "foo", 'message_id': "abc"}
-        try:
-            self.srv._message_to_event(message)
-            self.fail("failing save should raise")
-        except MyException:
-            pass
+        self.srv._message_to_event(message)  # Should return silently.
+
+    def test_message_to_event_bad_event(self):
+        cfg.CONF.set_override("store_events", True, group="collector")
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher
+                                 ),
+             ])
+        mock_dispatcher.record_events.return_value = [
+            (models.Event.UNKNOWN_PROBLEM, object())]
+        message = {'event_type': "foo", 'message_id': "abc"}
+        self.assertRaises(service.UnableToSaveEventException,
+                          self.srv._message_to_event, message)
 
     def test_extract_when(self):
         now = timeutils.utcnow()
@@ -333,16 +285,16 @@ class TestCollectorService(TestCollector):
         timeutils.set_time_override(now)
 
         body = {"timestamp": str(modified)}
-        self.assertEquals(service.CollectorService._extract_when(body),
-                          modified)
+        self.assertEqual(service.CollectorService._extract_when(body),
+                         modified)
 
         body = {"_context_timestamp": str(modified)}
-        self.assertEquals(service.CollectorService._extract_when(body),
-                          modified)
+        self.assertEqual(service.CollectorService._extract_when(body),
+                         modified)
 
         then = now + datetime.timedelta(hours=1)
         body = {"timestamp": str(modified), "_context_timestamp": str(then)}
-        self.assertEquals(service.CollectorService._extract_when(body),
-                          modified)
+        self.assertEqual(service.CollectorService._extract_when(body),
+                         modified)
 
-        self.assertEquals(service.CollectorService._extract_when({}), now)
+        self.assertEqual(service.CollectorService._extract_when({}), now)

@@ -23,18 +23,21 @@ import mock
 import msgpack
 from oslo.config import cfg
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.publisher import udp
 from ceilometer.tests import base
 from ceilometer.openstack.common import network_utils
 
 
+COUNTER_SOURCE = 'testsource'
+
+
 class TestUDPPublisher(base.TestCase):
 
     test_data = [
-        counter.Counter(
+        sample.Sample(
             name='test',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -42,10 +45,11 @@ class TestUDPPublisher(base.TestCase):
             resource_id='test_run_tasks',
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
+            source=COUNTER_SOURCE,
         ),
-        counter.Counter(
+        sample.Sample(
             name='test',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -53,10 +57,11 @@ class TestUDPPublisher(base.TestCase):
             resource_id='test_run_tasks',
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
+            source=COUNTER_SOURCE,
         ),
-        counter.Counter(
+        sample.Sample(
             name='test2',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -64,10 +69,11 @@ class TestUDPPublisher(base.TestCase):
             resource_id='test_run_tasks',
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
+            source=COUNTER_SOURCE,
         ),
-        counter.Counter(
+        sample.Sample(
             name='test2',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -75,10 +81,11 @@ class TestUDPPublisher(base.TestCase):
             resource_id='test_run_tasks',
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
+            source=COUNTER_SOURCE,
         ),
-        counter.Counter(
+        sample.Sample(
             name='test3',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='',
             volume=1,
             user_id='test',
@@ -86,6 +93,7 @@ class TestUDPPublisher(base.TestCase):
             resource_id='test_run_tasks',
             timestamp=datetime.datetime.utcnow().isoformat(),
             resource_metadata={'name': 'TestPublish'},
+            source=COUNTER_SOURCE,
         ),
     ]
 
@@ -99,17 +107,14 @@ class TestUDPPublisher(base.TestCase):
             return udp_socket
         return _fake_socket_socket
 
-    COUNTER_SOURCE = 'testsource'
-
     def test_published(self):
         self.data_sent = []
         with mock.patch('socket.socket',
                         self._make_fake_socket(self.data_sent)):
             publisher = udp.UDPPublisher(
                 network_utils.urlsplit('udp://somehost'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   self.COUNTER_SOURCE)
+        publisher.publish_samples(None,
+                                  self.test_data)
 
         self.assertEqual(len(self.data_sent), 5)
 
@@ -117,10 +122,6 @@ class TestUDPPublisher(base.TestCase):
 
         for data, dest in self.data_sent:
             counter = msgpack.loads(data)
-            self.assertEqual(counter['source'], self.COUNTER_SOURCE)
-            # Remove source because our test Counters don't have it, so the
-            # comparison would fail later
-            del counter['source']
             sent_counters.append(counter)
 
             # Check destination
@@ -129,7 +130,7 @@ class TestUDPPublisher(base.TestCase):
 
         # Check that counters are equal
         self.assertEqual(sorted(sent_counters),
-                         sorted([dict(d._asdict()) for d in self.test_data]))
+                         sorted([dict(d.as_dict()) for d in self.test_data]))
 
     @staticmethod
     def _raise_ioerror():
@@ -145,6 +146,5 @@ class TestUDPPublisher(base.TestCase):
                         self._make_broken_socket):
             publisher = udp.UDPPublisher(
                 network_utils.urlsplit('udp://localhost'))
-        publisher.publish_counters(None,
-                                   self.test_data,
-                                   self.COUNTER_SOURCE)
+        publisher.publish_samples(None,
+                                  self.test_data)

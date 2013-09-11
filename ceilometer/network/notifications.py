@@ -22,7 +22,7 @@
 
 from oslo.config import cfg
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.openstack.common import log
 from ceilometer import plugin
 
@@ -42,10 +42,11 @@ class NetworkNotificationBase(plugin.NotificationBase):
 
     resource_name = None
 
-    def get_event_types(self):
+    @property
+    def event_types(self):
         return [
-            '%s.create.end' % (self.resource_name),
-            '%s.update.end' % (self.resource_name),
+            '%s.create.*' % (self.resource_name),
+            '%s.update.*' % (self.resource_name),
             '%s.exists' % (self.resource_name),
             # FIXME(dhellmann): Neutron delete notifications do
             # not include the same metadata as the other messages,
@@ -75,9 +76,9 @@ class NetworkNotificationBase(plugin.NotificationBase):
         counter_name = getattr(self, 'counter_name', self.resource_name)
         unit_value = getattr(self, 'unit', self.resource_name)
 
-        yield counter.Counter.from_notification(
+        yield sample.Sample.from_notification(
             name=counter_name,
-            type=counter.TYPE_GAUGE,
+            type=sample.TYPE_GAUGE,
             unit=unit_value,
             volume=1,
             user_id=message['_context_user_id'],
@@ -87,10 +88,10 @@ class NetworkNotificationBase(plugin.NotificationBase):
 
         event_type_split = message['event_type'].split('.')
         if len(event_type_split) > 2:
-            yield counter.Counter.from_notification(
+            yield sample.Sample.from_notification(
                 name=counter_name
                 + "." + event_type_split[1],
-                type=counter.TYPE_DELTA,
+                type=sample.TYPE_DELTA,
                 unit=unit_value,
                 volume=1,
                 user_id=message['_context_user_id'],
@@ -139,3 +140,22 @@ class FloatingIP(NetworkNotificationBase):
     resource_name = 'floatingip'
     counter_name = 'ip.floating'
     unit = 'ip'
+
+
+class Bandwidth(NetworkNotificationBase):
+    """Listen for Neutron notifications in order to mediate with the
+    metering framework.
+
+    """
+    event_types = ['l3.meter']
+
+    def process_notification(self, message):
+        yield sample.Sample.from_notification(
+            name='bandwidth',
+            type=sample.TYPE_DELTA,
+            unit='B',
+            volume=message['payload']['bytes'],
+            user_id=None,
+            project_id=message['payload']['tenant_id'],
+            resource_id=message['payload']['label_id'],
+            message=message)

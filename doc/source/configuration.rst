@@ -37,7 +37,7 @@ cinder_control_exchange          cinder                                Exchange 
 neutron_control_exchange         neutron                               Exchange name for Neutron notifications
 metering_secret                  change this or be hacked              Secret value for signing metering messages
 metering_topic                   metering                              the topic ceilometer uses for metering messages
-counter_source                   openstack                             The source name of emited counters
+sample_source                    openstack                             The source name of emited samples
 control_exchange                 ceilometer                            AMQP exchange to connect to if using RabbitMQ or Qpid
 database_connection              mongodb://localhost:27017/ceilometer  Database connection string
 metering_api_port                8777                                  The port for the ceilometer API server
@@ -247,8 +247,9 @@ rpc_conn_pool_size           30                                    Size of RPC c
 rpc_response_timeout         60                                    Seconds to wait for a response from call or multicall
 rpc_cast_timeout             30                                    Seconds to wait before a cast expires (TTL).
                                                                    Only supported by impl_zmq.
+dispatchers                  database                              The list of dispatchers to process metering data.
 ===========================  ====================================  ==============================================================
 
 A sample configuration file can be found in `ceilometer.conf.sample`_.
 
-.. _ceilometer.conf.sample: https://github.com/openstack/ceilometer/blob/master/etc/ceilometer/ceilometer.conf.sample
+.. _ceilometer.conf.sample: https://git.openstack.org/cgit/openstack/ceilometer/tree/etc/ceilometer/ceilometer.conf.sample

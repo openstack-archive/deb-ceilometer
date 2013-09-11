@@ -37,7 +37,6 @@ metadata_headers = X-TEST
 
 from __future__ import absolute_import
 
-from oslo.config import cfg
 from swift.common.utils import split_path
 import webob
 
@@ -56,7 +55,7 @@ except ImportError:
     # Swift <= 1.7.5 ... module exists and has class.
     from swift.common.middleware.proxy_logging import InputProxy
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common import timeutils
 from ceilometer import pipeline
@@ -101,19 +100,19 @@ class CeilometerMiddleware(object):
                         bytes_sent += len(chunk)
                     yield chunk
             finally:
-                self.publish_counter(env,
-                                     input_proxy.bytes_received,
-                                     bytes_sent)
+                self.publish_sample(env,
+                                    input_proxy.bytes_received,
+                                    bytes_sent)
 
         try:
             iterable = self.app(env, my_start_response)
         except Exception:
-            self.publish_counter(env, input_proxy.bytes_received, 0)
+            self.publish_sample(env, input_proxy.bytes_received, 0)
             raise
         else:
             return iter_response(iterable)
 
-    def publish_counter(self, env, bytes_received, bytes_sent):
+    def publish_sample(self, env, bytes_received, bytes_sent):
         req = REQUEST.Request(env)
         version, account, container, obj = split_path(req.path, 1, 4, True)
         now = timeutils.utcnow().isoformat()
@@ -130,15 +129,12 @@ class CeilometerMiddleware(object):
                 resource_metadata['http_header_%s' % header] = req.headers.get(
                     header.upper())
 
-        with pipeline.PublishContext(
-                context.get_admin_context(),
-                cfg.CONF.counter_source,
-                self.pipeline_manager.pipelines,
-        ) as publisher:
+        with self.pipeline_manager.publisher(
+                context.get_admin_context()) as publisher:
             if bytes_received:
-                publisher([counter.Counter(
+                publisher([sample.Sample(
                     name='storage.objects.incoming.bytes',
-                    type=counter.TYPE_DELTA,
+                    type=sample.TYPE_DELTA,
                     unit='B',
                     volume=bytes_received,
                     user_id=env.get('HTTP_X_USER_ID'),
@@ -148,9 +144,9 @@ class CeilometerMiddleware(object):
                     resource_metadata=resource_metadata)])
 
             if bytes_sent:
-                publisher([counter.Counter(
+                publisher([sample.Sample(
                     name='storage.objects.outgoing.bytes',
-                    type=counter.TYPE_DELTA,
+                    type=sample.TYPE_DELTA,
                     unit='B',
                     volume=bytes_sent,
                     user_id=env.get('HTTP_X_USER_ID'),
@@ -162,9 +158,9 @@ class CeilometerMiddleware(object):
             # publish the event for each request
             # request method will be recorded in the metadata
             resource_metadata['method'] = req.method.lower()
-            publisher([counter.Counter(
+            publisher([sample.Sample(
                 name='storage.api.request',
-                type=counter.TYPE_DELTA,
+                type=sample.TYPE_DELTA,
                 unit='request',
                 volume=1,
                 user_id=env.get('HTTP_X_USER_ID'),

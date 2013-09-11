@@ -32,21 +32,26 @@ class TestInstancePollster(base.TestPollsterBase):
         super(TestInstancePollster, self).setUp()
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-    def test_get_counters_instance(self):
+    def test_get_samples_instance(self):
         self.mox.ReplayAll()
 
         mgr = manager.AgentManager()
         pollster = pollsters_instance.InstancePollster()
-        counters = list(pollster.get_counters(mgr, {}, self.instance))
-        self.assertEquals(len(counters), 1)
-        self.assertEqual(counters[0].name, 'instance')
+        samples = list(pollster.get_samples(mgr, {}, self.instance))
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0].name, 'instance')
+        self.assertEqual(samples[0].resource_metadata['vcpus'], 1)
+        self.assertEqual(samples[0].resource_metadata['memory_mb'], 512)
+        self.assertEqual(samples[0].resource_metadata['disk_gb'], 20)
+        self.assertEqual(samples[0].resource_metadata['root_gb'], 20)
+        self.assertEqual(samples[0].resource_metadata['ephemeral_gb'], 0)
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-    def test_get_counters_instance_flavor(self):
+    def test_get_samples_instance_flavor(self):
         self.mox.ReplayAll()
 
         mgr = manager.AgentManager()
         pollster = pollsters_instance.InstanceFlavorPollster()
-        counters = list(pollster.get_counters(mgr, {}, self.instance))
-        self.assertEquals(len(counters), 1)
-        self.assertEqual(counters[0].name, 'instance:m1.small')
+        samples = list(pollster.get_samples(mgr, {}, self.instance))
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0].name, 'instance:m1.small')

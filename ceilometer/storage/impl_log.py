@@ -28,10 +28,6 @@ class LogStorage(base.StorageEngine):
     """Log the data
     """
 
-    def register_opts(self, conf):
-        """Register any configuration options used by this engine.
-        """
-
     def get_connection(self, conf):
         """Return a Connection instance based on the configuration settings.
         """
@@ -45,7 +41,7 @@ class Connection(base.Connection):
     def __init__(self, conf):
         pass
 
-    def upgrade(self, version=None):
+    def upgrade(self):
         pass
 
     def clear(self):
@@ -88,7 +84,7 @@ class Connection(base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None):
+                      metaquery={}, resource=None, pagination=None):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -108,11 +104,12 @@ class Connection(base.Connection):
         :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
+        :param pagination: Optional pagination query.
         """
         return []
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   limit=None, metaquery={}):
+                   limit=None, metaquery={}, pagination=None):
         """Return an iterable of dictionaries containing meter information.
 
         { 'name': name of the meter,
@@ -128,6 +125,7 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         :param limit: Maximum number of results to return.
         :param metaquery: Optional dict with metadata to match on.
+        :param pagination: Optional pagination query.
         """
         return []
 
@@ -137,7 +135,7 @@ class Connection(base.Connection):
         """
         return []
 
-    def get_meter_statistics(self, sample_filter, period=None):
+    def get_meter_statistics(self, sample_filter, period=None, groupby=None):
         """Return a dictionary containing meter statistics.
         described by the query parameters.
 
@@ -160,10 +158,15 @@ class Connection(base.Connection):
         return []
 
     def get_alarms(self, name=None, user=None,
-                   project=None, enabled=True, alarm_id=None):
+                   project=None, enabled=True, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
         """
         return []
+
+    def create_alarm(self, alarm):
+        """Create alarm.
+        """
+        return alarm
 
     def update_alarm(self, alarm):
         """update alarm
@@ -173,6 +176,29 @@ class Connection(base.Connection):
     def delete_alarm(self, alarm_id):
         """Delete a alarm
         """
+
+    def get_alarm_changes(self, alarm_id, on_behalf_of,
+                          user=None, project=None, type=None,
+                          start_timestamp=None, start_timestamp_op=None,
+                          end_timestamp=None, end_timestamp_op=None):
+        """Yields list of AlarmChanges describing alarm history
+        :param alarm_id: ID of alarm to return changes for
+        :param on_behalf_of: ID of tenant to scope changes query (None for
+                             administrative user, indicating all projects)
+        :param user: Optional ID of user to return changes for
+        :param project: Optional ID of project to return changes for
+        :project type: Optional change type
+        :param start_timestamp: Optional modified timestamp start range
+        :param start_timestamp_op: Optional timestamp start range operation
+        :param end_timestamp: Optional modified timestamp end range
+        :param end_timestamp_op: Optional timestamp end range operation
+        """
+        raise NotImplementedError('Alarm history not implemented')
+
+    def record_alarm_change(self, alarm_change):
+        """Record alarm change event.
+        """
+        raise NotImplementedError('Alarm history not implemented')
 
     def record_events(self, events):
         """Write the events.

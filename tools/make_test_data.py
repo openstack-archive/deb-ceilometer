@@ -28,7 +28,7 @@ import sys
 from oslo.config import cfg
 
 from ceilometer.publisher import rpc
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer import storage
 from ceilometer.openstack.common import timeutils
 
@@ -119,7 +119,7 @@ def main():
     # Generate events
     n = 0
     while timestamp <= end:
-        c = counter.Counter(name=args.counter,
+        c = sample.Sample(name=args.counter,
                             type=args.type,
                             unit=args.unit,
                             volume=args.volume,
@@ -128,11 +128,11 @@ def main():
                             resource_id=args.resource,
                             timestamp=timestamp,
                             resource_metadata={},
+                            source='artificial',
                             )
         data = rpc.meter_message_from_counter(
             c,
-            cfg.CONF.publisher_rpc.metering_secret,
-            'artificial')
+            cfg.CONF.publisher_rpc.metering_secret)
         conn.record_metering_data(data)
         n += 1
         timestamp = timestamp + increment

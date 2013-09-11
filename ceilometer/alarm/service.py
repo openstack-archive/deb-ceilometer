@@ -21,12 +21,14 @@
 from oslo.config import cfg
 from stevedore import extension
 
+from ceilometer.alarm import rpc as rpc_alarm
 from ceilometer.service import prepare_service
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import network_utils
 from ceilometer.openstack.common import service as os_service
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common.rpc import service as rpc_service
+from ceilometer.openstack.common.rpc import dispatcher as rpc_dispatcher
 from ceilometerclient import client as ceiloclient
 
 
@@ -39,6 +41,8 @@ OPTS = [
 ]
 
 cfg.CONF.register_opts(OPTS, group='alarm')
+cfg.CONF.import_opt('notifier_rpc_topic', 'ceilometer.alarm.rpc',
+                    group='alarm')
 
 LOG = log.getLogger(__name__)
 
@@ -52,6 +56,7 @@ class SingletonAlarmService(os_service.Service):
         self.extension_manager = extension.ExtensionManager(
             namespace=self.ALARM_NAMESPACE,
             invoke_on_load=True,
+            invoke_args=(rpc_alarm.RPCAlarmNotifier(),)
         )
 
     def start(self):
@@ -78,6 +83,7 @@ class SingletonAlarmService(os_service.Service):
             os_tenant_name=auth_config.os_tenant_name,
             os_password=auth_config.os_password,
             os_username=auth_config.os_username,
+            cacert=auth_config.os_cacert,
             endpoint_type=auth_config.os_endpoint_type,
         )
         return ceiloclient.get_client(2, **creds)
@@ -114,12 +120,20 @@ class AlarmNotifierService(rpc_service.Service):
         # Add a dummy thread to have wait() working
         self.tg.add_timer(604800, lambda: None)
 
-    def _handle_action(self, action, alarm, state, reason):
+    def initialize_service_hook(self, service):
+        LOG.debug('initialize_service_hooks')
+        self.conn.create_worker(
+            cfg.CONF.alarm.notifier_rpc_topic,
+            rpc_dispatcher.RpcDispatcher([self]),
+            'ceilometer.alarm.' + cfg.CONF.alarm.notifier_rpc_topic,
+        )
+
+    def _handle_action(self, action, alarm_id, previous, current, reason):
         try:
             action = network_utils.urlsplit(action)
         except Exception:
             LOG.error(
-                _("Unable to parse action %(action)s for alarm %(alarm)s"),
+                _("Unable to parse action %(action)s for alarm %(alarm_id)s"),
                 locals())
             return
 
@@ -128,17 +142,17 @@ class AlarmNotifierService(rpc_service.Service):
         except KeyError:
             scheme = action.scheme
             LOG.error(
-                _("Action %(scheme)s for alarm %(alarm)s is unknown, "
+                _("Action %(scheme)s for alarm %(alarm_id)s is unknown, "
                   "cannot notify"),
                 locals())
             return
 
         try:
             LOG.debug("Notifying alarm %s with action %s",
-                      alarm, action)
-            notifier.notify(action, alarm, state, reason)
+                      alarm_id, action)
+            notifier.notify(action, alarm_id, previous, current, reason)
         except Exception:
-            LOG.exception(_("Unable to notify alarm %s"), alarm)
+            LOG.exception(_("Unable to notify alarm %s"), alarm_id)
             return
 
     def notify_alarm(self, context, data):
@@ -147,8 +161,9 @@ class AlarmNotifierService(rpc_service.Service):
         data should be a dict with the following keys:
         - actions, the URL of the action to run;
           this is a mapped to extensions automatically
-        - alarm, the alarm that has been triggered
-        - state, the new state the alarm transitionned to
+        - alarm_id, the ID of the alarm that has been triggered
+        - previous, the previous state of the alarm
+        - current, the new state the alarm has transitioned to
         - reason, the reason the alarm changed its state
 
         :param context: Request context.
@@ -161,8 +176,9 @@ class AlarmNotifierService(rpc_service.Service):
 
         for action in actions:
             self._handle_action(action,
-                                data.get('alarm'),
-                                data.get('state'),
+                                data.get('alarm_id'),
+                                data.get('previous'),
+                                data.get('current'),
                                 data.get('reason'))
 
 

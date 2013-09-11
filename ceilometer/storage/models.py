@@ -48,23 +48,34 @@ class Event(Model):
 
        Metrics will be derived from one or more Events.
     """
-    def __init__(self, event_name, generated, traits):
+
+    DUPLICATE = 1
+    UNKNOWN_PROBLEM = 2
+
+    def __init__(self, message_id, event_name, generated, traits):
         """Create a new event.
 
+        :param message_id:  Unique ID for the message this event
+                            stemmed from. This is different than
+                            the Event ID, which comes from the
+                            underlying storage system.
         :param event_name:  Name of the event.
         :param generated:   UTC time for when the event occured.
         :param traits:      list of Traits on this Event.
         """
-        Model.__init__(self, event_name=event_name, generated=generated,
-                       traits=traits)
+        Model.__init__(self, message_id=message_id, event_name=event_name,
+                       generated=generated, traits=traits)
 
     def append_trait(self, trait_model):
         self.traits.append(trait_model)
 
     def __repr__(self):
-        trait_list = [str(trait) for trait in self.traits]
-        return "<Event: %s, %s %s>" % \
-            (self.event_name, self.generated, " ".join(trait_list))
+        trait_list = []
+        if self.traits:
+            trait_list = [str(trait) for trait in self.traits]
+        return "<Event: %s, %s, %s, %s>" % \
+            (self.message_id, self.event_name, self.generated,
+             " ".join(trait_list))
 
 
 class Trait(Model):
@@ -88,12 +99,17 @@ class Resource(Model):
     """Something for which sample data has been collected.
     """
 
-    def __init__(self, resource_id, project_id, source, user_id, metadata,
+    def __init__(self, resource_id, project_id,
+                 first_sample_timestamp,
+                 last_sample_timestamp,
+                 source, user_id, metadata,
                  meter):
         """Create a new resource.
 
         :param resource_id: UUID of the resource
         :param project_id:  UUID of project owning the resource
+        :param first_sample_timestamp: first sample timestamp captured
+        :param last_sample_timestamp: last sample timestamp captured
         :param source:      the identifier for the user/project id definition
         :param user_id:     UUID of user owning the resource
         :param metadata:    most current metadata for the resource (a dict)
@@ -101,6 +117,8 @@ class Resource(Model):
         """
         Model.__init__(self,
                        resource_id=resource_id,
+                       first_sample_timestamp=first_sample_timestamp,
+                       last_sample_timestamp=last_sample_timestamp,
                        project_id=project_id,
                        source=source,
                        user_id=user_id,
@@ -202,12 +220,14 @@ class Sample(Model):
 class Statistics(Model):
     """Computed statistics based on a set of sample data.
     """
-    def __init__(self,
+    def __init__(self, unit,
                  min, max, avg, sum, count,
                  period, period_start, period_end,
-                 duration, duration_start, duration_end):
+                 duration, duration_start, duration_end,
+                 groupby):
         """Create a new statistics object.
 
+        :param unit: The unit type of the data set
         :param min: The smallest volume found
         :param max: The largest volume found
         :param avg: The average of all volumes found
@@ -219,19 +239,28 @@ class Statistics(Model):
         :param duration: The total time for the matching samples
         :param duration_start: The earliest time for the matching samples
         :param duration_end: The latest time for the matching samples
+        :param groupby: The fields used to group the samples.
         """
-        Model.__init__(self,
+        Model.__init__(self, unit=unit,
                        min=min, max=max, avg=avg, sum=sum, count=count,
                        period=period, period_start=period_start,
                        period_end=period_end, duration=duration,
                        duration_start=duration_start,
-                       duration_end=duration_end)
+                       duration_end=duration_end,
+                       groupby=groupby)
 
 
 class Alarm(Model):
     ALARM_INSUFFICIENT_DATA = 'insufficient data'
     ALARM_OK = 'ok'
     ALARM_ALARM = 'alarm'
+
+    ALARM_ACTIONS_MAP = {
+        ALARM_INSUFFICIENT_DATA: 'insufficient_data_actions',
+        ALARM_OK: 'ok_actions',
+        ALARM_ALARM: 'alarm_actions',
+    }
+
     """
     An alarm to monitor.
 
@@ -240,7 +269,7 @@ class Alarm(Model):
     :param description: User friendly description of the alarm
     :param enabled: Is the alarm enabled
     :param state: Alarm state (alarm/nodata/ok)
-    :param counter_name: The counter that the alarm is based on
+    :param meter_name: The counter that the alarm is based on
     :param comparison_operator: How to compare the samples and the threshold
     :param threshold: the value to compare to the samples
     :param statistic: the function from Statistic (min/max/avg/count)
@@ -256,13 +285,14 @@ class Alarm(Model):
     :param insufficient_data_actions: the list of webhooks to call when
                                       entering the insufficient data state
     :param matching_metadata: the key/values of metadata to match on.
+    :param repeat_actions: Is the actions should be triggered on each
+                           alarm evaluation.
     """
-    def __init__(self, name, counter_name,
+    def __init__(self, alarm_id, name, meter_name,
                  comparison_operator, threshold, statistic,
                  user_id, project_id,
                  evaluation_periods=1,
                  period=60,
-                 alarm_id=None,
                  enabled=True,
                  description='',
                  timestamp=None,
@@ -271,12 +301,13 @@ class Alarm(Model):
                  ok_actions=[],
                  alarm_actions=[],
                  insufficient_data_actions=[],
-                 matching_metadata={}
+                 matching_metadata={},
+                 repeat_actions=False
                  ):
         if not description:
             # make a nice user friendly description by default
             description = 'Alarm when %s is %s a %s of %s over %s seconds' % (
-                counter_name, comparison_operator,
+                meter_name, comparison_operator,
                 statistic, threshold, period)
 
         Model.__init__(
@@ -286,7 +317,7 @@ class Alarm(Model):
             name=name,
             description=description,
             timestamp=timestamp,
-            counter_name=counter_name,
+            meter_name=meter_name,
             user_id=user_id,
             project_id=project_id,
             comparison_operator=comparison_operator,
@@ -300,4 +331,46 @@ class Alarm(Model):
             alarm_actions=alarm_actions,
             insufficient_data_actions=
             insufficient_data_actions,
+            repeat_actions=repeat_actions,
             matching_metadata=matching_metadata)
+
+
+class AlarmChange(Model):
+    """Record of an alarm change.
+
+    :param event_id: UUID of the change event
+    :param alarm_id: UUID of the alarm
+    :param type: The type of change
+    :param detail: JSON fragment describing change
+    :param user_id: the user ID of the initiating identity
+    :param project_id: the project ID of the initiating identity
+    :param on_behalf_of: the tenant on behalf of which the change
+                         is being made
+    :param timestamp: the timestamp of the change
+    """
+
+    CREATION = 'creation'
+    RULE_CHANGE = 'rule change'
+    STATE_TRANSITION = 'state transition'
+    DELETION = 'deletion'
+
+    def __init__(self,
+                 event_id,
+                 alarm_id,
+                 type,
+                 detail,
+                 user_id,
+                 project_id,
+                 on_behalf_of,
+                 timestamp=None
+                 ):
+        Model.__init__(
+            self,
+            event_id=event_id,
+            alarm_id=alarm_id,
+            type=type,
+            detail=detail,
+            user_id=user_id,
+            project_id=project_id,
+            on_behalf_of=on_behalf_of,
+            timestamp=timestamp)

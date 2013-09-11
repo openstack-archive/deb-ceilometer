@@ -20,25 +20,24 @@
 """MongoDB storage backend
 """
 
+import calendar
 import copy
-import datetime
 import operator
-import os
-import re
 import urlparse
-import uuid
+import weakref
 
 import bson.code
 import bson.objectid
+import json
 import pymongo
 
 from oslo.config import cfg
 
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
+from ceilometer.openstack.common.gettextutils import _
 
 cfg.CONF.import_opt('time_to_live', 'ceilometer.storage',
                     group="database")
@@ -71,22 +70,6 @@ class MongoDBStorage(base.StorageEngine):
                                  counter_unit: string} ]
             }
     """
-
-    OPTIONS = [
-        cfg.StrOpt('replica_set_name',
-                   default='',
-                   help='Used to identify the replication set name',
-                   ),
-    ]
-
-    OPTION_GROUP = cfg.OptGroup(name='storage_mongodb',
-                                title='Options for the mongodb storage')
-
-    def register_opts(self, conf):
-        """Register any configuration options used by this engine.
-        """
-        conf.register_group(self.OPTION_GROUP)
-        conf.register_opts(self.OPTIONS, self.OPTION_GROUP)
 
     def get_connection(self, conf):
         """Return a Connection instance based on the configuration settings.
@@ -161,20 +144,23 @@ class ConnectionPool(object):
     def __init__(self):
         self._pool = {}
 
-    def connect(self, opts):
-        # opts is a dict, dict are unhashable, convert to tuple
-        connection_pool_key = tuple(sorted(opts.items()))
-
-        if connection_pool_key not in self._pool:
-            LOG.info('connecting to MongoDB replicaset "%s" on %s',
-                     opts['replica_set'],
-                     opts['netloc'])
-            self._pool[connection_pool_key] = pymongo.Connection(
-                opts['netloc'],
-                replicaSet=opts['replica_set'],
-                safe=True)
-
-        return self._pool.get(connection_pool_key)
+    def connect(self, url):
+        if url in self._pool:
+            client = self._pool.get(url)()
+            if client:
+                return client
+        LOG.info('connecting to MongoDB on %s', url)
+        url_parsed = urlparse.urlparse(url)
+        if url_parsed.path.startswith('/ceilometer_for_tox_testing_'):
+            #note(sileht): this is a workaround for running tests without reach
+            #the maximum allowed connection of mongod in gate
+            #this only work with pymongo >= 2.6, this is not in the
+            #requirements file because is not needed for normal use of mongo
+            client = pymongo.MongoClient(url, safe=True, max_pool_size=None)
+        else:
+            client = pymongo.MongoClient(url, safe=True)
+        self._pool[url] = weakref.ref(client)
+        return client
 
 
 class Connection(base.Connection):
@@ -194,45 +180,95 @@ class Connection(base.Connection):
     }
     """)
 
-    MAP_STATS = bson.code.Code("""
-    function () {
-        emit('statistics', { min : this.counter_volume,
-                             max : this.counter_volume,
-                             sum : this.counter_volume,
-                             count : NumberInt(1),
-                             duration_start : this.timestamp,
-                             duration_end : this.timestamp,
-                             period_start : this.timestamp,
-                             period_end : this.timestamp} )
-    }
-    """)
+    EMIT_STATS_COMMON = """
+        emit(%(key_val)s, { unit: this.counter_unit,
+                            min : this.counter_volume,
+                            max : this.counter_volume,
+                            sum : this.counter_volume,
+                            count : NumberInt(1),
+                            groupby : %(groupby_val)s,
+                            duration_start : this.timestamp,
+                            duration_end : this.timestamp,
+                            period_start : %(period_start_val)s,
+                            period_end : %(period_end_val)s} )
+    """
 
-    MAP_STATS_PERIOD = bson.code.Code("""
-    function () {
-        var period = %d * 1000;
-        var period_first = %d * 1000;
+    MAP_STATS_PERIOD_VAR = """
+        var period = %(period)d * 1000;
+        var period_first = %(period_first)d * 1000;
         var period_start = period_first
                            + (Math.floor(new Date(this.timestamp.getTime()
                                          - period_first) / period)
                               * period);
-        emit(period_start,
-             { min : this.counter_volume,
-               max : this.counter_volume,
-               sum : this.counter_volume,
-               count : NumberInt(1),
-               duration_start : this.timestamp,
-               duration_end : this.timestamp,
-               period_start : new Date(period_start),
-               period_end : new Date(period_start + period) } )
+    """
+
+    MAP_STATS_GROUPBY_VAR = """
+        var groupby_fields = %(groupby_fields)s;
+        var groupby = {};
+        var groupby_key = {};
+
+        for ( var i=0; i<groupby_fields.length; i++ ) {
+            groupby[groupby_fields[i]] = this[groupby_fields[i]]
+            groupby_key[groupby_fields[i]] = this[groupby_fields[i]]
+        }
+    """
+
+    PARAMS_MAP_STATS = {'key_val': '\'statistics\'',
+                        'groupby_val': 'null',
+                        'period_start_val': 'this.timestamp',
+                        'period_end_val': 'this.timestamp'}
+
+    MAP_STATS = bson.code.Code("function () {" +
+                               EMIT_STATS_COMMON % PARAMS_MAP_STATS +
+                               "}")
+
+    PARAMS_MAP_STATS_PERIOD = {
+        'key_val': 'period_start',
+        'groupby_val': 'null',
+        'period_start_val': 'new Date(period_start)',
+        'period_end_val': 'new Date(period_start + period)'
     }
-    """)
+
+    MAP_STATS_PERIOD = bson.code.Code(
+        "function () {" +
+        MAP_STATS_PERIOD_VAR +
+        EMIT_STATS_COMMON % PARAMS_MAP_STATS_PERIOD +
+        "}")
+
+    PARAMS_MAP_STATS_GROUPBY = {'key_val': 'groupby_key',
+                                'groupby_val': 'groupby',
+                                'period_start_val': 'this.timestamp',
+                                'period_end_val': 'this.timestamp'}
+
+    MAP_STATS_GROUPBY = bson.code.Code(
+        "function () {" +
+        MAP_STATS_GROUPBY_VAR +
+        EMIT_STATS_COMMON % PARAMS_MAP_STATS_GROUPBY +
+        "}")
+
+    PARAMS_MAP_STATS_PERIOD_GROUPBY = {
+        'key_val': 'groupby_key',
+        'groupby_val': 'groupby',
+        'period_start_val': 'new Date(period_start)',
+        'period_end_val': 'new Date(period_start + period)'
+    }
+
+    MAP_STATS_PERIOD_GROUPBY = bson.code.Code(
+        "function () {" +
+        MAP_STATS_PERIOD_VAR +
+        MAP_STATS_GROUPBY_VAR +
+        "    groupby_key['period_start'] = period_start\n" +
+        EMIT_STATS_COMMON % PARAMS_MAP_STATS_PERIOD_GROUPBY +
+        "}")
 
     REDUCE_STATS = bson.code.Code("""
     function (key, values) {
-        var res = { min: values[0].min,
+        var res = { unit: values[0].unit,
+                    min: values[0].min,
                     max: values[0].max,
                     count: values[0].count,
                     sum: values[0].sum,
+                    groupby: values[0].groupby,
                     period_start: values[0].period_start,
                     period_end: values[0].period_end,
                     duration_start: values[0].duration_start,
@@ -263,29 +299,27 @@ class Connection(base.Connection):
     }""")
 
     def __init__(self, conf):
-        opts = self._parse_connection_url(conf.database.connection)
-
-        if opts['netloc'] == '__test__':
-            url = os.environ.get('CEILOMETER_TEST_MONGODB_URL')
-            if not url:
-                raise RuntimeError(
-                    "No MongoDB test URL set,"
-                    "export CEILOMETER_TEST_MONGODB_URL environment variable")
-            opts = self._parse_connection_url(url)
-
-        # FIXME(jd) This should be a parameter in the database URL, not global
-        opts['replica_set'] = conf.storage_mongodb.replica_set_name
+        url = conf.database.connection
 
         # NOTE(jd) Use our own connection pooling on top of the Pymongo one.
         # We need that otherwise we overflow the MongoDB instance with new
         # connection since we instanciate a Pymongo client each time someone
         # requires a new storage connection.
-        self.conn = self.CONNECTION_POOL.connect(opts)
+        self.conn = self.CONNECTION_POOL.connect(url)
 
-        self.db = getattr(self.conn, opts['dbname'])
-        if 'username' in opts:
-            self.db.authenticate(opts['username'], opts['password'])
+        # Require MongoDB 2.2 to use aggregate() and TTL
+        if self.conn.server_info()['versionArray'] < [2, 2]:
+            raise storage.StorageBadVersion("Need at least MongoDB 2.2")
 
+        connection_options = pymongo.uri_parser.parse_uri(url)
+        self.db = getattr(self.conn, connection_options['database'])
+
+        # NOTE(jd) Upgrading is just about creating index, so let's do this
+        # on connection to be sure at least the TTL is correcly updated if
+        # needed.
+        self.upgrade()
+
+    def upgrade(self):
         # Establish indexes
         #
         # We need variations for user_id vs. project_id because of the
@@ -308,11 +342,6 @@ class Connection(base.Connection):
         self.db.meter.ensure_index([('timestamp', pymongo.DESCENDING)],
                                    name='timestamp_idx')
 
-        # Since mongodb 2.2 support db-ttl natively
-        if self._is_natively_ttl_supported():
-            self._ensure_meter_ttl_index()
-
-    def _ensure_meter_ttl_index(self):
         indexes = self.db.meter.index_information()
 
         ttl = cfg.CONF.database.time_to_live
@@ -337,29 +366,10 @@ class Connection(base.Connection):
             name='meter_ttl'
         )
 
-    def _is_natively_ttl_supported(self):
-        # Assume is not supported if we can get the version
-        return self.conn.server_info().get('versionArray', []) >= [2, 2]
-
-    @staticmethod
-    def upgrade(version=None):
-        pass
-
     def clear(self):
         self.conn.drop_database(self.db)
-
-    @staticmethod
-    def _parse_connection_url(url):
-        opts = {}
-        result = urlparse.urlparse(url)
-        opts['dbtype'] = result.scheme
-        opts['dbname'] = result.path.replace('/', '')
-        netloc_match = re.match(r'(?:(\w+:\w+)@)?(.*)', result.netloc)
-        auth = netloc_match.group(1)
-        opts['netloc'] = netloc_match.group(2)
-        if auth:
-            opts['username'], opts['password'] = auth.split(':')
-        return opts
+        # Connection will be reopened automatically if needed
+        self.conn.close()
 
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
@@ -413,13 +423,6 @@ class Connection(base.Connection):
         :param ttl: Number of seconds to keep records for.
 
         """
-        # Before mongodb 2.2 we need to clear expired data manually
-        if not self._is_natively_ttl_supported():
-            end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
-            f = storage.SampleFilter(end=end)
-            q = make_query_from_filter(f, require_meter=False)
-            self.db.meter.remove(q)
-
         results = self.db.meter.group(
             key={},
             condition={},
@@ -435,6 +438,107 @@ class Connection(base.Connection):
         self.db.project.remove({'_id': {'$nin': results['projects']}})
         self.db.resource.remove({'_id': {'$nin': results['resources']}})
 
+    @staticmethod
+    def _get_marker(db_collection, marker_pairs):
+        """Return the mark document according to the attribute-value pairs.
+
+        :param db_collection: Database collection that be query.
+        :param maker_pairs: Attribute-value pairs filter.
+        """
+        if db_collection is None:
+            return
+        if not marker_pairs:
+            return
+        ret = db_collection.find(marker_pairs, limit=2)
+
+        if ret.count() == 0:
+            raise base.NoResultFound
+        elif ret.count() > 1:
+            raise base.MultipleResultsFound
+        else:
+            _ret = ret.__getitem__(0)
+            return _ret
+
+    @classmethod
+    def _recurse_sort_keys(cls, sort_keys, marker, flag):
+        _first = sort_keys[0]
+        value = marker[_first]
+        if len(sort_keys) == 1:
+            return {_first: {flag: value}}
+        else:
+            criteria_equ = {_first: {'eq': value}}
+            criteria_cmp = cls._recurse_sort_keys(sort_keys[1:], marker, flag)
+        return dict(criteria_equ, ** criteria_cmp)
+
+    @classmethod
+    def _build_paginate_query(cls, marker, sort_keys=[], sort_dir='desc'):
+        """Returns a query with sorting / pagination.
+
+        Pagination works by requiring sort_key and sort_dir.
+        We use the last item in previous page as the 'marker' for pagination.
+        So we return values that follow the passed marker in the order.
+        :param q: The query dict passed in.
+        :param marker: the last item of the previous page; we return the next
+                       results after this item.
+        :param sort_keys: array of attributes by which results be sorted.
+        :param sort_dir: direction in which results be sorted (asc, desc).
+        :return: sort parameters, query to use
+        """
+        all_sort = []
+        sort_mapping = {'desc': (pymongo.DESCENDING, '$lt'),
+                        'asc': (pymongo.ASCENDING, '$gt')
+                        }
+        _sort_dir, _sort_flag = sort_mapping.get(sort_dir,
+                                                 sort_mapping['desc'])
+
+        for _sort_key in sort_keys:
+            _all_sort = (_sort_key, _sort_dir)
+            all_sort.append(_all_sort)
+
+        if marker is not None:
+            sort_criteria_list = []
+
+            for i in range(0, len(sort_keys)):
+                sort_criteria_list.append(cls._recurse_sort_keys(
+                                          sort_keys[:(len(sort_keys) - i)],
+                                          marker, _sort_flag))
+
+            metaquery = {"$or": sort_criteria_list}
+        else:
+            metaquery = {}
+
+        return all_sort, metaquery
+
+    @classmethod
+    def paginate_query(cls, q, db_collection, limit=None, marker=None,
+                       sort_keys=[], sort_dir='desc'):
+        """Returns a query result with sorting / pagination.
+
+        Pagination works by requiring sort_key and sort_dir.
+        We use the last item in previous page as the 'marker' for pagination.
+        So we return values that follow the passed marker in the order.
+        :param q: the query dict passed in.
+        :param db_collection: Database collection that be query.
+        :param limit: maximum number of items to return.
+        :param marker: the last item of the previous page; we return the next
+                       results after this item.
+        :param sort_keys: array of attributes by which results be sorted.
+        :param sort_dir: direction in which results be sorted (asc, desc).
+        return: The query with sorting/pagination added.
+        """
+
+        all_sort, query = cls._build_paginate_query(marker,
+                                                    sort_keys,
+                                                    sort_dir)
+        q.update(query)
+
+        #NOTE(Fengqian):MongoDB collection.find can not handle limit
+        #when it equals None, it will raise TypeError, so we treate
+        #None as 0 for the value of limit.
+        if limit is None:
+            limit = 0
+        return db_collection.find(q, limit=limit, sort=all_sort)
+
     def get_users(self, source=None):
         """Return an iterable of user id strings.
 
@@ -443,7 +547,10 @@ class Connection(base.Connection):
         q = {}
         if source is not None:
             q['source'] = source
-        return sorted(self.db.user.find(q).distinct('_id'))
+
+        return (doc['_id'] for doc in
+                self.db.user.find(q, fields=['_id'],
+                                  sort=[('_id', pymongo.ASCENDING)]))
 
     def get_projects(self, source=None):
         """Return an iterable of project id strings.
@@ -453,12 +560,15 @@ class Connection(base.Connection):
         q = {}
         if source is not None:
             q['source'] = source
-        return sorted(self.db.project.find(q).distinct('_id'))
+
+        return (doc['_id'] for doc in
+                self.db.project.find(q, fields=['_id'],
+                                     sort=[('_id', pymongo.ASCENDING)]))
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None):
+                      metaquery={}, resource=None, pagination=None):
         """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -470,7 +580,11 @@ class Connection(base.Connection):
         :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
+        :param pagination: Optional pagination query.
         """
+        if pagination:
+            raise NotImplementedError(_('Pagination not implemented'))
+
         q = {}
         if user is not None:
             q['user_id'] = user
@@ -498,31 +612,45 @@ class Connection(base.Connection):
             if ts_range:
                 q['timestamp'] = ts_range
 
-        # FIXME(jd): We should use self.db.meter.group() and not use the
-        # resource collection, but that's not supported by MIM, so it's not
-        # easily testable yet. Since it was bugged before anyway, it's still
-        # better for now.
-        resource_ids = self.db.meter.find(q).distinct('resource_id')
-        q = {'_id': {'$in': resource_ids}}
-        for resource in self.db.resource.find(q):
+        aggregate = self.db.meter.aggregate([
+            {"$match": q},
+            {"$group": {
+                "_id": "$resource_id",
+                "user_id": {"$first": "$user_id"},
+                "project_id": {"$first": "$project_id"},
+                "source": {"$first": "$source"},
+                "first_sample_timestamp": {"$min": "$timestamp"},
+                "last_sample_timestamp": {"$max": "$timestamp"},
+                "metadata": {"$first": "$resource_metadata"},
+                "meters_name": {"$push": "$counter_name"},
+                "meters_type": {"$push": "$counter_type"},
+                "meters_unit": {"$push": "$counter_unit"},
+            }},
+        ])
+
+        for result in aggregate['result']:
             yield models.Resource(
-                resource_id=resource['_id'],
-                project_id=resource['project_id'],
-                source=resource['source'],
-                user_id=resource['user_id'],
-                metadata=resource['metadata'],
+                resource_id=result['_id'],
+                user_id=result['user_id'],
+                project_id=result['project_id'],
+                first_sample_timestamp=result['first_sample_timestamp'],
+                last_sample_timestamp=result['last_sample_timestamp'],
+                source=result['source'],
+                metadata=result['metadata'],
                 meter=[
                     models.ResourceMeter(
-                        counter_name=meter['counter_name'],
-                        counter_type=meter['counter_type'],
-                        counter_unit=meter.get('counter_unit', ''),
+                        counter_name=m_n,
+                        counter_type=m_t,
+                        counter_unit=m_u,
                     )
-                    for meter in resource['meter']
+                    for m_n, m_u, m_t in zip(result['meters_name'],
+                                             result['meters_unit'],
+                                             result['meters_type'])
                 ],
             )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}):
+                   metaquery={}, pagination=None):
         """Return an iterable of models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
@@ -530,7 +658,11 @@ class Connection(base.Connection):
         :param resource: Optional resource filter.
         :param source: Optional source filter.
         :param metaquery: Optional dict with metadata to match on.
+        :param pagination: Optional pagination query.
         """
+        if pagination:
+            raise NotImplementedError(_('Pagination not implemented'))
+
         q = {}
         if user is not None:
             q['user_id'] = user
@@ -581,13 +713,18 @@ class Connection(base.Connection):
             s['counter_unit'] = s.get('counter_unit', '')
             yield models.Sample(**s)
 
-    def get_meter_statistics(self, sample_filter, period=None):
+    def get_meter_statistics(self, sample_filter, period=None, groupby=None):
         """Return an iterable of models.Statistics instance containing meter
         statistics described by the query parameters.
 
         The filter must have a meter value set.
 
         """
+        if (groupby and
+                set(groupby) - set(['user_id', 'project_id',
+                                    'resource_id', 'source'])):
+            raise NotImplementedError("Unable to group by these fields")
+
         q = make_query_from_filter(sample_filter)
 
         if period:
@@ -597,10 +734,20 @@ class Connection(base.Connection):
                 period_start = self.db.meter.find(
                     limit=1, sort=[('timestamp',
                                     pymongo.ASCENDING)])[0]['timestamp']
-            period_start = int(period_start.strftime('%s'))
-            map_stats = self.MAP_STATS_PERIOD % (period, period_start)
+            period_start = int(calendar.timegm(period_start.utctimetuple()))
+            params_period = {'period': period,
+                             'period_first': period_start,
+                             'groupby_fields': json.dumps(groupby)}
+            if groupby:
+                map_stats = self.MAP_STATS_PERIOD_GROUPBY % params_period
+            else:
+                map_stats = self.MAP_STATS_PERIOD % params_period
         else:
-            map_stats = self.MAP_STATS
+            if groupby:
+                params_groupby = {'groupby_fields': json.dumps(groupby)}
+                map_stats = self.MAP_STATS_GROUPBY % params_groupby
+            else:
+                map_stats = self.MAP_STATS
 
         results = self.db.meter.map_reduce(
             map_stats,
@@ -610,14 +757,45 @@ class Connection(base.Connection):
             query=q,
         )
 
-        return sorted((models.Statistics(**(r['value']))
-                       for r in results['results']),
-                      key=operator.attrgetter('period_start'))
+        # FIXME(terriyu) Fix get_meter_statistics() so we don't use sorted()
+        # to return the results
+        return sorted(
+            (models.Statistics(**(r['value'])) for r in results['results']),
+            key=operator.attrgetter('period_start'))
+
+    @staticmethod
+    def _decode_matching_metadata(matching_metadata):
+        if isinstance(matching_metadata, dict):
+            #note(sileht): keep compatibility with old db format
+            return matching_metadata
+        else:
+            new_matching_metadata = {}
+            for elem in matching_metadata:
+                new_matching_metadata[elem['key']] = elem['value']
+            return new_matching_metadata
+
+    @staticmethod
+    def _encode_matching_metadata(matching_metadata):
+        if matching_metadata:
+            new_matching_metadata = []
+            for k, v in matching_metadata.iteritems():
+                new_matching_metadata.append({'key': k, 'value': v})
+            return new_matching_metadata
+        return matching_metadata
 
     def get_alarms(self, name=None, user=None,
-                   project=None, enabled=True, alarm_id=None):
+                   project=None, enabled=True, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
+        :param name: The Alarm name.
+        :param user: Optional ID for user that owns the resource.
+        :param project: Optional ID for project that owns the resource.
+        :param enabled: Optional boolean to list disable alarm.
+        :param alarm_id: Optional alarm_id to return one alarm.
+        :param pagination: Optional pagination query.
         """
+        if pagination:
+            raise NotImplementedError(_('Pagination not implemented'))
+
         q = {}
         if user is not None:
             q['user_id'] = user
@@ -634,15 +812,17 @@ class Connection(base.Connection):
             a = {}
             a.update(alarm)
             del a['_id']
+            a['matching_metadata'] = \
+                self._decode_matching_metadata(a['matching_metadata'])
             yield models.Alarm(**a)
 
     def update_alarm(self, alarm):
         """update alarm
         """
-        if alarm.alarm_id is None:
-            # This is an insert, generate an id
-            alarm.alarm_id = str(uuid.uuid1())
         data = alarm.as_dict()
+        data['matching_metadata'] = \
+            self._encode_matching_metadata(data['matching_metadata'])
+
         self.db.alarm.update(
             {'alarm_id': alarm.alarm_id},
             {'$set': data},
@@ -650,12 +830,60 @@ class Connection(base.Connection):
 
         stored_alarm = self.db.alarm.find({'alarm_id': alarm.alarm_id})[0]
         del stored_alarm['_id']
+        stored_alarm['matching_metadata'] = \
+            self._decode_matching_metadata(stored_alarm['matching_metadata'])
         return models.Alarm(**stored_alarm)
+
+    create_alarm = update_alarm
 
     def delete_alarm(self, alarm_id):
         """Delete a alarm
         """
         self.db.alarm.remove({'alarm_id': alarm_id})
+
+    def get_alarm_changes(self, alarm_id, on_behalf_of,
+                          user=None, project=None, type=None,
+                          start_timestamp=None, start_timestamp_op=None,
+                          end_timestamp=None, end_timestamp_op=None):
+        """Yields list of AlarmChanges describing alarm history
+        :param alarm_id: ID of alarm to return changes for
+        :param on_behalf_of: ID of tenant to scope changes query (None for
+                             administrative user, indicating all projects)
+        :param user: Optional ID of user to return changes for
+        :param project: Optional ID of project to return changes for
+        :project type: Optional change type
+        :param start_timestamp: Optional modified timestamp start range
+        :param start_timestamp_op: Optional timestamp start range operation
+        :param end_timestamp: Optional modified timestamp end range
+        :param end_timestamp_op: Optional timestamp end range operation
+        """
+        q = dict(alarm_id=alarm_id)
+        if on_behalf_of is not None:
+            q['on_behalf_of'] = on_behalf_of
+        if user is not None:
+            q['user_id'] = user
+        if project is not None:
+            q['project_id'] = project
+        if type is not None:
+            q['type'] = type
+        if start_timestamp or end_timestamp:
+            ts_range = make_timestamp_range(start_timestamp, end_timestamp,
+                                            start_timestamp_op,
+                                            end_timestamp_op)
+            if ts_range:
+                q['timestamp'] = ts_range
+
+        sort = [("timestamp", pymongo.DESCENDING)]
+        for alarm_change in self.db.alarm_history.find(q, sort=sort):
+            ac = {}
+            ac.update(alarm_change)
+            del ac['_id']
+            yield models.AlarmChange(**ac)
+
+    def record_alarm_change(self, alarm_change):
+        """Record alarm change event.
+        """
+        self.db.alarm_history.insert(alarm_change)
 
     @staticmethod
     def record_events(events):

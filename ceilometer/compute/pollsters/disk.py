@@ -21,7 +21,7 @@
 import abc
 import collections
 
-from ceilometer import counter
+from ceilometer import sample
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.openstack.common import log
@@ -73,19 +73,19 @@ class _Base(plugin.ComputePollster):
         return i_cache[instance_name]
 
     @abc.abstractmethod
-    def _get_counter(instance, c_data):
-        """Return one Counter."""
+    def _get_sample(instance, c_data):
+        """Return one Sample."""
 
-    def get_counters(self, manager, cache, instance):
+    def get_samples(self, manager, cache, instance):
         instance_name = util.instance_name(instance)
-        c_data = self._populate_cache(
-            manager.inspector,
-            cache,
-            instance,
-            instance_name,
-        )
         try:
-            yield self._get_counter(instance, c_data)
+            c_data = self._populate_cache(
+                manager.inspector,
+                cache,
+                instance,
+                instance_name,
+            )
+            yield self._get_sample(instance, c_data)
         except Exception as err:
             LOG.warning('Ignoring instance %s: %s',
                         instance_name, err)
@@ -95,11 +95,11 @@ class _Base(plugin.ComputePollster):
 class ReadRequestsPollster(_Base):
 
     @staticmethod
-    def _get_counter(instance, c_data):
-        return util.make_counter_from_instance(
+    def _get_sample(instance, c_data):
+        return util.make_sample_from_instance(
             instance,
             name='disk.read.requests',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='request',
             volume=c_data.r_requests,
         )
@@ -108,11 +108,11 @@ class ReadRequestsPollster(_Base):
 class ReadBytesPollster(_Base):
 
     @staticmethod
-    def _get_counter(instance, c_data):
-        return util.make_counter_from_instance(
+    def _get_sample(instance, c_data):
+        return util.make_sample_from_instance(
             instance,
             name='disk.read.bytes',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='B',
             volume=c_data.r_bytes,
         )
@@ -121,11 +121,11 @@ class ReadBytesPollster(_Base):
 class WriteRequestsPollster(_Base):
 
     @staticmethod
-    def _get_counter(instance, c_data):
-        return util.make_counter_from_instance(
+    def _get_sample(instance, c_data):
+        return util.make_sample_from_instance(
             instance,
             name='disk.write.requests',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='request',
             volume=c_data.w_requests,
         )
@@ -134,11 +134,11 @@ class WriteRequestsPollster(_Base):
 class WriteBytesPollster(_Base):
 
     @staticmethod
-    def _get_counter(instance, c_data):
-        return util.make_counter_from_instance(
+    def _get_sample(instance, c_data):
+        return util.make_sample_from_instance(
             instance,
             name='disk.write.bytes',
-            type=counter.TYPE_CUMULATIVE,
+            type=sample.TYPE_CUMULATIVE,
             unit='B',
             volume=c_data.w_bytes,
         )

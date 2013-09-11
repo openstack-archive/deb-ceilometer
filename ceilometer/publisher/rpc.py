@@ -15,14 +15,13 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""Publish a counter using the preferred RPC mechanism.
+"""Publish a sample using the preferred RPC mechanism.
 """
 
 import hashlib
 import hmac
 import itertools
 import operator
-import uuid
 import urlparse
 
 from oslo.config import cfg
@@ -85,23 +84,23 @@ def verify_signature(message, secret):
     return new_sig == old_sig
 
 
-def meter_message_from_counter(counter, secret, source):
+def meter_message_from_counter(sample, secret):
     """Make a metering message ready to be published or stored.
 
     Returns a dictionary containing a metering message
-    for a notification message and a Counter instance.
+    for a notification message and a Sample instance.
     """
-    msg = {'source': source,
-           'counter_name': counter.name,
-           'counter_type': counter.type,
-           'counter_unit': counter.unit,
-           'counter_volume': counter.volume,
-           'user_id': counter.user_id,
-           'project_id': counter.project_id,
-           'resource_id': counter.resource_id,
-           'timestamp': counter.timestamp,
-           'resource_metadata': counter.resource_metadata,
-           'message_id': str(uuid.uuid1()),
+    msg = {'source': sample.source,
+           'counter_name': sample.name,
+           'counter_type': sample.type,
+           'counter_unit': sample.unit,
+           'counter_volume': sample.volume,
+           'user_id': sample.user_id,
+           'project_id': sample.project_id,
+           'resource_id': sample.resource_id,
+           'timestamp': sample.timestamp,
+           'resource_metadata': sample.resource_metadata,
+           'message_id': sample.id,
            }
     msg['message_signature'] = compute_signature(msg, secret)
     return msg
@@ -137,21 +136,19 @@ class RPCPublisher(publisher.PublisherBase):
                      % self.policy)
             self.policy = 'default'
 
-    def publish_counters(self, context, counters, source):
-        """Publish counters on RPC.
+    def publish_samples(self, context, samples):
+        """Publish samples on RPC.
 
         :param context: Execution context from the service or RPC call.
-        :param counters: Counters from pipeline after transformation.
-        :param source: Counter source.
+        :param samples: Samples from pipeline after transformation.
 
         """
 
         meters = [
             meter_message_from_counter(
-                counter,
-                cfg.CONF.publisher_rpc.metering_secret,
-                source)
-            for counter in counters
+                sample,
+                cfg.CONF.publisher_rpc.metering_secret)
+            for sample in samples
         ]
 
         topic = cfg.CONF.publisher_rpc.metering_topic
@@ -160,7 +157,7 @@ class RPCPublisher(publisher.PublisherBase):
             'version': '1.0',
             'args': {'data': meters},
         }
-        LOG.audit('Publishing %d counters on %s',
+        LOG.audit('Publishing %d samples on %s',
                   len(msg['args']['data']), topic)
         self.local_queue.append((context, topic, msg))
 
@@ -174,13 +171,36 @@ class RPCPublisher(publisher.PublisherBase):
                     'args': {'data': list(meter_list)},
                 }
                 topic_name = topic + '.' + meter_name
-                LOG.audit('Publishing %d counters on %s',
+                LOG.audit('Publishing %d samples on %s',
                           len(msg['args']['data']), topic_name)
                 self.local_queue.append((context, topic_name, msg))
 
         self.flush()
 
     def flush(self):
+        #note(sileht):
+        # IO of the rpc stuff in handled by eventlet,
+        # this is why the self.local_queue, is emptied before processing the
+        # queue and the remaining messages in the queue are added to
+        # self.local_queue after in case of a other call have already added
+        # something in the self.local_queue
+        queue = self.local_queue
+        self.local_queue = []
+        self.local_queue = self._process_queue(queue, self.policy) + \
+            self.local_queue
+        if self.policy == 'queue':
+            self._check_queue_length()
+
+    def _check_queue_length(self):
+        queue_length = len(self.local_queue)
+        if queue_length > self.max_queue_length > 0:
+            count = queue_length - self.max_queue_length
+            self.local_queue = self.local_queue[count:]
+            LOG.warn("Publisher max local_queue length is exceeded, "
+                     "dropping %d oldest samples", count)
+
+    @staticmethod
+    def _process_queue(queue, policy):
         #note(sileht):
         # the behavior of rpc.cast call depends of rabbit_max_retries
         # if rabbit_max_retries <= 0:
@@ -195,33 +215,22 @@ class RPCPublisher(publisher.PublisherBase):
         # the default policy just respect the rabbitmq configuration
         # nothing special is done if rabbit_max_retries <= 0
         # and exception is reraised if rabbit_max_retries > 0
-        while self.local_queue:
-            context, topic, msg = self.local_queue[0]
+        while queue:
+            context, topic, msg = queue[0]
             try:
                 rpc.cast(context, topic, msg)
             except (SystemExit, rpc.common.RPCException):
-                if self.policy == 'queue':
-                    LOG.warn("Failed to publish counters, queue them")
-                    queue_length = len(self.local_queue)
-                    if queue_length > self.max_queue_length > 0:
-                        count = queue_length - self.max_queue_length
-                        self.local_queue = self.local_queue[count:]
-                        LOG.warn("Publisher max queue length is exceeded, "
-                                 "dropping %d oldest counters",
-                                 count)
-                    break
-
-                elif self.policy == 'drop':
-                    counters = sum([len(m['args']['data'])
-                                    for _, _, m in self.local_queue])
-                    LOG.warn(
-                        "Failed to publish %d counters, dropping them",
-                        counters)
-                    self.local_queue = []
-                    break
-                else:
-                    # default, occur only if rabbit_max_retries > 0
-                    self.local_queue = []
-                    raise
+                samples = sum([len(m['args']['data']) for _, _, m in queue])
+                if policy == 'queue':
+                    LOG.warn("Failed to publish %s samples, queue them",
+                             samples)
+                    return queue
+                elif policy == 'drop':
+                    LOG.warn("Failed to publish %d samples, dropping them",
+                             samples)
+                    return []
+                # default, occur only if rabbit_max_retries > 0
+                raise
             else:
-                self.local_queue.pop(0)
+                queue.pop(0)
+        return []
