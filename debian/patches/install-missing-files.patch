@@ -2,9 +2,11 @@ Description: Install missing files
 Author: Thomas Goirand <zigo@debian.org>
 Forwarded: no
 
---- ceilometer.orig/MANIFEST.in	2013-03-18 01:13:43.000000000 +0800
-+++ ceilometer/MANIFEST.in	2013-03-18 01:14:06.000000000 +0800
-@@ -10,3 +10,11 @@
+Index: ceilometer/MANIFEST.in
+===================================================================
+--- ceilometer.orig/MANIFEST.in	2013-09-11 12:54:37.000000000 +0800
++++ ceilometer/MANIFEST.in	2013-09-22 23:01:28.000000000 +0800
+@@ -12,3 +12,11 @@
  recursive-include public *
  recursive-include ceilometer/locale *
  recursive-include ceilometer *.html
