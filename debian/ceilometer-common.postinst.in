@@ -34,7 +34,8 @@ libvirt_user_group () {
 	fi
 }
 
-if [ "$1" = "configure" ]; then
+if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
+	. /usr/share/debconf/confmodule
 	pkgos_adduser nova
 	pkgos_var_user_group ceilometer
 	libvirt_user_group
