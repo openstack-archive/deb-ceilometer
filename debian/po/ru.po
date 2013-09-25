@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer 2013.1.2-4\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
-"POT-Creation-Date: 2013-07-11 01:06+0800\n"
+"POT-Creation-Date: 2013-09-25 16:34+0800\n"
 "PO-Revision-Date: 2013-08-30 08:50+0400\n"
 "Last-Translator: Yuri Kozlov <yuray@komyakino.ru>\n"
 "Language-Team: Russian <debian-l10n-russian@lists.debian.org>\n"
@@ -14,8 +14,8 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<"
-"=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 "X-Generator: Lokalize 1.4\n"
 
 #. Type: boolean
@@ -32,9 +32,9 @@ msgid ""
 "accessible. This is done using \"keystone service-create\" and \"keystone "
 "endpoint-create\". This can be done automatically now."
 msgstr ""
-"Для доступа к службам OpenStack (каждому API) их нужно регистрировать. "
-"Это выполняется с помощью команды «keystone service-create» и «keystone "
-"endpoint-create». Это может быть сделано автоматически прямо сейчас."
+"Для доступа к службам OpenStack (каждому API) их нужно регистрировать. Это "
+"выполняется с помощью команды «keystone service-create» и «keystone endpoint-"
+"create». Это может быть сделано автоматически прямо сейчас."
 
 #. Type: boolean
 #. Description
@@ -43,8 +43,8 @@ msgid ""
 "Note that you will need to have an up and running Keystone server on which "
 "to connect using the Keystone authentication token."
 msgstr ""
-"Заметим, что у вас должен быть работающий сервер Keystone, к которому "
-"будет произведено подключение с помощью токена аутентификации Keystone."
+"Заметим, что у вас должен быть работающий сервер Keystone, к которому будет "
+"произведено подключение с помощью токена аутентификации Keystone."
 
 #. Type: string
 #. Description
@@ -60,8 +60,8 @@ msgid ""
 "can contact Keystone to do the Ceilometer service and endpoint creation."
 msgstr ""
 "Введите IP-адрес сервера Keystone для того, чтобы ceilometer-api могла "
-"подключиться "
-"к Keystone для запуска службы Ceilometer и создания конечной точки."
+"подключиться к Keystone для запуска службы Ceilometer и создания конечной "
+"точки."
 
 #. Type: password
 #. Description
@@ -76,8 +76,8 @@ msgid ""
 "To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
 "authentication token."
 msgstr ""
-"Для настройки собственной конечной точки в Keystone ceilometer-api "
-"требуется токен аутентификации Keystone."
+"Для настройки собственной конечной точки в Keystone ceilometer-api требуется "
+"токен аутентификации Keystone."
 
 #. Type: string
 #. Description
@@ -118,8 +118,58 @@ msgid ""
 "location. Please enter the zone that you wish to use when registering the "
 "endpoint."
 msgstr ""
-"OpenStack поддерживает разделение на зоны доступности, где каждая "
-"область представляет определённое расположение. Введите зону, которую вы "
-"хотите "
+"OpenStack поддерживает разделение на зоны доступности, где каждая область "
+"представляет определённое расположение. Введите зону, которую вы хотите "
 "использовать при регистрации конечной точки."
 
+#. Type: string
+#. Description
+#: ../ceilometer-common.templates:2001
+msgid "IP address of your RabbitMQ host:"
+msgstr ""
+
+#. Type: string
+#. Description
+#. Type: string
+#. Description
+#. Type: password
+#. Description
+#: ../ceilometer-common.templates:2001 ../ceilometer-common.templates:3001
+#: ../ceilometer-common.templates:4001
+msgid ""
+"In order to interoperate with other components of OpenStack, this package "
+"needs to connect to a central RabbitMQ server."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../ceilometer-common.templates:2001
+#, fuzzy
+#| msgid "Please enter the IP address that will be used to contact Ceilometer."
+msgid "Please specify the IP address of that server."
+msgstr ""
+"Введите IP-адрес, который будет использован для подключения к Ceilometer."
+
+#. Type: string
+#. Description
+#: ../ceilometer-common.templates:3001
+msgid "Username for connection to the RabbitMQ server:"
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../ceilometer-common.templates:3001
+msgid "Please specify the username used to connect to the RabbitMQ server."
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../ceilometer-common.templates:4001
+msgid "Password for connection to the RabbitMQ server:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../ceilometer-common.templates:4001
+msgid "Please specify the password used to connect to the RabbitMQ server."
+msgstr ""

@@ -1,1 +1,2 @@
 [type: gettext/rfc822deb] ceilometer-api.templates
+[type: gettext/rfc822deb] ceilometer-common.templates

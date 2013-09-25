@@ -44,6 +44,7 @@ if [ "$1" = "configure" ]; then
 	pkgos_write_new_conf ceilometer policy.json
 	pkgos_write_new_conf ceilometer sources.json
 	pkgos_write_new_conf ceilometer pipeline.yaml
+	pkgos_rabbit_write_conf /etc/ceilometer/ceilometer.conf DEFAULT ceilometer
 	ceilometer-dbsync || true
 fi
 
