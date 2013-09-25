@@ -7,7 +7,7 @@
 # Even minor modifications require translation updates and such
 # changes should be coordinated with translators and reviewers.
 
-Template: ceilometer/rabbit-host
+Template: ceilometer/rabbit_host
 Type: string
 Default: localhost
 _Description: IP address of your RabbitMQ host:
@@ -16,7 +16,7 @@ _Description: IP address of your RabbitMQ host:
  .
  Please specify the IP address of that server.
 
-Template: ceilometer/rabbit-userid
+Template: ceilometer/rabbit_userid
 Type: string
 Default: guest
 _Description: Username for connection to the RabbitMQ server:
@@ -25,7 +25,7 @@ _Description: Username for connection to the RabbitMQ server:
  .
  Please specify the username used to connect to the RabbitMQ server.
 
-Template: ceilometer/rabbit-password
+Template: ceilometer/rabbit_password
 Type: password
 _Description: Password for connection to the RabbitMQ server:
  In order to interoperate with other components of OpenStack, this package
