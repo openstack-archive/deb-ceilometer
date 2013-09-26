@@ -1,2 +1,2 @@
-install-missing-files.patch
 removes-sqlalchemy-restriction.patch
+install-missing-files.patch

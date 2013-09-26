@@ -1,20 +1,13 @@
-Description: Install missing files
+Description: Fixes the MANIFEST.in to install all what's missing
 Author: Thomas Goirand <zigo@debian.org>
 Forwarded: no
+Last-Update: 2013-09-26
 
-Index: ceilometer/MANIFEST.in
-===================================================================
---- ceilometer.orig/MANIFEST.in	2013-09-11 12:54:37.000000000 +0800
-+++ ceilometer/MANIFEST.in	2013-09-22 23:01:28.000000000 +0800
-@@ -12,3 +12,11 @@
+--- ceilometer-2013.2~b3.orig/MANIFEST.in
++++ ceilometer-2013.2~b3/MANIFEST.in
+@@ -11,4 +11,4 @@ recursive-include nova_tests *.py
+ global-exclude *.pyc
  recursive-include public *
  recursive-include ceilometer/locale *
- recursive-include ceilometer *.html
-+include ceilometer/api/v1/static/bootstrap/css/bootstrap-responsive.css
-+include ceilometer/api/v1/static/bootstrap/css/bootstrap.css
-+include ceilometer/api/v1/static/bootstrap/img/glyphicons-halflings-white.png
-+include ceilometer/api/v1/static/bootstrap/img/glyphicons-halflings.png
-+include ceilometer/api/v1/static/bootstrap/js/bootstrap.js
-+include ceilometer/api/v1/static/d3.v2.js
-+include ceilometer/api/v1/static/rickshaw.css
-+include ceilometer/api/v1/static/rickshaw.js
+-recursive-include ceilometer *.html
++recursive-include ceilometer *.html *.css *.png *.js *.ini
