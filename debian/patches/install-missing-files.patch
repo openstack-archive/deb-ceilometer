@@ -10,4 +10,4 @@ Last-Update: 2013-09-26
  recursive-include public *
  recursive-include ceilometer/locale *
 -recursive-include ceilometer *.html
-+recursive-include ceilometer *.html *.css *.png *.js *.ini *.py
++recursive-include ceilometer *.html *.css *.png *.js *.ini *.py *.wsgi
