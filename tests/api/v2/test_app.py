@@ -18,7 +18,6 @@
 # under the License.
 """Test basic ceilometer-api app
 """
-import json
 import os
 
 from oslo.config import cfg
@@ -45,8 +44,10 @@ class TestApp(base.TestCase):
         cfg.CONF.set_override("pipeline_cfg_file",
                               self.path_get("etc/ceilometer/pipeline.yaml"))
         cfg.CONF.set_override('connection', "log://", group="database")
+        cfg.CONF.set_override("auth_uri", None, group=acl.OPT_GROUP_NAME)
+
         api_app = app.setup_app()
-        self.assertEqual(api_app.auth_protocol, 'foottp')
+        self.assertTrue(api_app.auth_uri.startswith('foottp'))
 
     def test_keystone_middleware_parse_conffile(self):
         tmpfile = self.temp_config_file_path()
@@ -61,8 +62,17 @@ class TestApp(base.TestCase):
                                  '--config-file=%s' % tmpfile])
         cfg.CONF.set_override('connection', "log://", group="database")
         api_app = app.setup_app()
-        self.assertEqual(api_app.auth_protocol, 'barttp')
+        self.assertTrue(api_app.auth_uri.startswith('barttp'))
         os.unlink(tmpfile)
+
+
+class TestPecanApp(FunctionalTest):
+    database_connection = tests_db.MongoDBFakeConnectionUrl()
+
+    def test_pecan_extension_guessing_unset(self):
+        # check Pecan does not assume .jpg is an extension
+        response = self.app.get(self.PATH_PREFIX + '/meters/meter.jpg')
+        self.assertEqual(response.content_type, 'application/json')
 
 
 class TestApiMiddleware(FunctionalTest):
@@ -124,16 +134,16 @@ class TestApiMiddleware(FunctionalTest):
         # Ensure translated messages get placed properly into json faults
         self.stubs.Set(gettextutils, 'get_localized_message',
                        self._fake_get_localized_message)
-        response = self.get_json('/alarms/-',
-                                 expect_errors=True,
-                                 headers={"Accept":
-                                          "application/json"}
-                                 )
+        response = self.post_json('/alarms', params={},
+                                  expect_errors=True,
+                                  headers={"Accept":
+                                           "application/json"}
+                                  )
         self.assertEqual(response.status_int, 400)
         self.assertEqual(response.content_type, "application/json")
         self.assertTrue(response.json['error_message'])
-        fault = json.loads(response.json['error_message'])
-        self.assertEqual(fault['faultstring'], self.no_lang_translated_error)
+        self.assertEqual(response.json['error_message']['faultstring'],
+                         self.no_lang_translated_error)
 
     def test_xml_parsable_error_middleware_404(self):
         response = self.get_json('/invalid_path',
@@ -159,11 +169,11 @@ class TestApiMiddleware(FunctionalTest):
         self.stubs.Set(gettextutils, 'get_localized_message',
                        self._fake_get_localized_message)
 
-        response = self.get_json('/alarms/-',
-                                 expect_errors=True,
-                                 headers={"Accept":
-                                          "application/xml,*/*"}
-                                 )
+        response = self.post_json('/alarms', params={},
+                                  expect_errors=True,
+                                  headers={"Accept":
+                                           "application/xml,*/*"}
+                                  )
         self.assertEqual(response.status_int, 400)
         self.assertEqual(response.content_type, "application/xml")
         self.assertEqual(response.xml.tag, 'error_message')
@@ -176,13 +186,13 @@ class TestApiMiddleware(FunctionalTest):
         self.stubs.Set(gettextutils, 'get_localized_message',
                        self._fake_get_localized_message)
 
-        response = self.get_json('/alarms/-',
-                                 expect_errors=True,
-                                 headers={"Accept":
-                                          "application/xml,*/*",
-                                          "Accept-Language":
-                                          "en-US"}
-                                 )
+        response = self.post_json('/alarms', params={},
+                                  expect_errors=True,
+                                  headers={"Accept":
+                                           "application/xml,*/*",
+                                           "Accept-Language":
+                                           "en-US"}
+                                  )
         self.assertEqual(response.status_int, 400)
         self.assertEqual(response.content_type, "application/xml")
         self.assertEqual(response.xml.tag, 'error_message')

@@ -81,7 +81,9 @@ class LibvirtInspector(virt_inspector.Inspector):
         try:
             return self._get_connection().lookupByName(instance_name)
         except Exception as ex:
-            error_code = ex.get_error_code() if libvirt else 'unknown'
+            if not libvirt or not isinstance(ex, libvirt.libvirtError):
+                raise virt_inspector.InspectorException(unicode(ex))
+            error_code = ex.get_error_code()
             msg = ("Error from libvirt while looking up %(instance_name)s: "
                    "[Error Code %(error_code)s] "
                    "%(ex)s" % {'instance_name': instance_name,
@@ -111,15 +113,23 @@ class LibvirtInspector(virt_inspector.Inspector):
         domain = self._lookup_by_name(instance_name)
         tree = etree.fromstring(domain.XMLDesc(0))
         for iface in tree.findall('devices/interface'):
-            name = iface.find('target').get('dev')
-            mac = iface.find('mac').get('address')
+            target = iface.find('target')
+            if target is not None:
+                name = target.get('dev')
+            else:
+                continue
+            mac = iface.find('mac')
+            if mac is not None:
+                mac_address = mac.get('address')
+            else:
+                continue
             fref = iface.find('filterref')
             if fref is not None:
                 fref = fref.get('filter')
 
             params = dict((p.get('name').lower(), p.get('value'))
                           for p in iface.findall('filterref/parameter'))
-            interface = virt_inspector.Interface(name=name, mac=mac,
+            interface = virt_inspector.Interface(name=name, mac=mac_address,
                                                  fref=fref, parameters=params)
             rx_bytes, rx_packets, _, _, \
                 tx_bytes, tx_packets, _, _ = domain.interfaceStats(name)

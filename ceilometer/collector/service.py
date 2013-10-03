@@ -32,7 +32,6 @@ from ceilometer.openstack.common.rpc import service as rpc_service
 
 from ceilometer.openstack.common import timeutils
 from ceilometer import pipeline
-from ceilometer import storage
 from ceilometer.storage import models
 from ceilometer import transformer
 
@@ -60,12 +59,26 @@ cfg.CONF.register_opts(OPTS, group="collector")
 LOG = log.getLogger(__name__)
 
 
-class UDPCollectorService(os_service.Service):
-    """UDP listener for the collector service."""
+class CollectorBase(object):
 
-    def __init__(self):
-        super(UDPCollectorService, self).__init__()
-        self.storage_conn = storage.get_connection(cfg.CONF)
+    DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
+
+    def __init__(self, *args, **kwargs):
+        super(CollectorBase, self).__init__(*args, **kwargs)
+        LOG.debug('loading dispatchers from %s',
+                  self.DISPATCHER_NAMESPACE)
+        self.dispatcher_manager = named.NamedExtensionManager(
+            namespace=self.DISPATCHER_NAMESPACE,
+            names=cfg.CONF.collector.dispatcher,
+            invoke_on_load=True,
+            invoke_args=[cfg.CONF])
+        if not list(self.dispatcher_manager):
+            LOG.warning('Failed to load any dispatchers for %s',
+                        self.DISPATCHER_NAMESPACE)
+
+
+class UDPCollectorService(CollectorBase, os_service.Service):
+    """UDP listener for the collector service."""
 
     def start(self):
         """Bind the UDP socket and handle incoming data."""
@@ -82,20 +95,21 @@ class UDPCollectorService(os_service.Service):
             # enough for anybody.
             data, source = udp.recvfrom(64 * 1024)
             try:
-                counter = msgpack.loads(data)
+                sample = msgpack.loads(data)
             except Exception:
                 LOG.warn(_("UDP: Cannot decode data sent by %s"), str(source))
             else:
                 try:
-                    counter['counter_name'] = counter['name']
-                    counter['counter_volume'] = counter['volume']
-                    counter['counter_unit'] = counter['unit']
-                    counter['counter_type'] = counter['type']
-                    LOG.debug("UDP: Storing %s", str(counter))
-                    self.storage_conn.record_metering_data(counter)
-                except Exception as err:
-                    LOG.debug(_("UDP: Unable to store meter"))
-                    LOG.exception(err)
+                    sample['counter_name'] = sample['name']
+                    sample['counter_volume'] = sample['volume']
+                    sample['counter_unit'] = sample['unit']
+                    sample['counter_type'] = sample['type']
+                    LOG.debug("UDP: Storing %s", str(sample))
+                    self.dispatcher_manager.map(
+                        lambda ext, data: ext.obj.record_metering_data(data),
+                        sample)
+                except Exception:
+                    LOG.exception(_("UDP: Unable to store meter"))
 
     def stop(self):
         self.running = False
@@ -116,10 +130,9 @@ class UnableToSaveEventException(Exception):
     pass
 
 
-class CollectorService(rpc_service.Service):
+class CollectorService(CollectorBase, rpc_service.Service):
 
     COLLECTOR_NAMESPACE = 'ceilometer.collector'
-    DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
 
     def start(self):
         super(CollectorService, self).start()
@@ -148,17 +161,6 @@ class CollectorService(rpc_service.Service):
                         self.COLLECTOR_NAMESPACE)
         self.notification_manager.map(self._setup_subscription)
 
-        LOG.debug('loading dispatchers from %s',
-                  self.DISPATCHER_NAMESPACE)
-        self.dispatcher_manager = named.NamedExtensionManager(
-            namespace=self.DISPATCHER_NAMESPACE,
-            names=cfg.CONF.collector.dispatcher,
-            invoke_on_load=True,
-            invoke_args=[cfg.CONF])
-        if not list(self.dispatcher_manager):
-            LOG.warning('Failed to load any dispatchers for %s',
-                        self.DISPATCHER_NAMESPACE)
-
         # Set ourselves up as a separate worker for the metering data,
         # since the default for service is to use create_consumer().
         self.conn.create_worker(
@@ -168,6 +170,16 @@ class CollectorService(rpc_service.Service):
         )
 
     def _setup_subscription(self, ext, *args, **kwds):
+        """Connect to message bus to get notifications
+
+        Configure the RPC connection to listen for messages on the
+        right exchanges and topics so we receive all of the
+        notifications.
+
+        Use a connection pool so that multiple collector instances can
+        run in parallel to share load and without competing with each
+        other for incoming messages.
+        """
         handler = ext.obj
         ack_on_error = cfg.CONF.collector.ack_on_event_error
         LOG.debug('Event types from %s: %s (ack_on_error=%s)',
@@ -188,12 +200,22 @@ class CollectorService(rpc_service.Service):
                                   (topic, exchange_topic.exchange))
 
     def record_metering_data(self, context, data):
+        """RPC endpoint for messages we send to ourself
+
+        When the notification messages are re-published through the
+        RPC publisher, this method receives them for processing.
+        """
         self.dispatcher_manager.map(self._record_metering_data_for_ext,
                                     context=context,
                                     data=data)
 
     def process_notification(self, notification):
-        """Make a notification processed by an handler."""
+        """RPC endpoint for notification messages
+
+        When another service sends a notification over the message
+        bus, this method receives it. See _setup_subscription().
+
+        """
         LOG.debug('notification %r', notification.get('event_type'))
         self.notification_manager.map(self._process_notification_for_ext,
                                       notification=notification)
@@ -250,9 +272,22 @@ class CollectorService(rpc_service.Service):
 
     @staticmethod
     def _record_metering_data_for_ext(ext, context, data):
+        """Wrapper for calling dispatcher plugin when a sample arrives
+
+        When a message is received by record_metering_data(), it calls
+        this method with each plugin to allow it to process the data.
+
+        """
         ext.obj.record_metering_data(context, data)
 
     def _process_notification_for_ext(self, ext, notification):
+        """Wrapper for calling pipelines when a notification arrives
+
+        When a message is received by process_notification(), it calls
+        this method with each notification plugin to allow all the
+        plugins process the notification.
+
+        """
         with self.pipeline_manager.publisher(context.get_admin_context()) as p:
             # FIXME(dhellmann): Spawn green thread?
             p(list(ext.obj.to_samples(notification)))

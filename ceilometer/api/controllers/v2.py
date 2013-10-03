@@ -2,10 +2,12 @@
 #
 # Copyright © 2012 New Dream Network, LLC (DreamHost)
 # Copyright 2013 IBM Corp.
+# Copyright © 2013 eNovance <licensing@enovance.com>
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#         Angus Salkeld <asalkeld@redhat.com>
-#         Eoghan Glynn <eglynn@redhat.com>
+# Authors: Doug Hellmann <doug.hellmann@dreamhost.com>
+#          Angus Salkeld <asalkeld@redhat.com>
+#          Eoghan Glynn <eglynn@redhat.com>
+#          Julien Danjou <julien@danjou.info>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -20,17 +22,6 @@
 # under the License.
 """Version 2 of the API.
 """
-
-# [GET ] / -- information about this version of the API
-#
-# [GET   ] /resources -- list the resources
-# [GET   ] /resources/<resource> -- information about the resource
-# [GET   ] /meters -- list the meters
-# [POST  ] /meters -- insert a new sample (and meter/resource if needed)
-# [GET   ] /meters/<meter> -- list the samples for this meter
-# [PUT   ] /meters/<meter> -- update the meter (not the samples)
-# [DELETE] /meters/<meter> -- delete the meter and samples
-#
 import ast
 import base64
 import datetime
@@ -38,6 +29,7 @@ import inspect
 import json
 import uuid
 import pecan
+import six
 from pecan import rest
 
 from oslo.config import cfg
@@ -69,8 +61,66 @@ ALARM_API_OPTS = [
 
 cfg.CONF.register_opts(ALARM_API_OPTS, group='alarm')
 
-
+state_kind = ["ok", "alarm", "insufficient data"]
 operation_kind = wtypes.Enum(str, 'lt', 'le', 'eq', 'ne', 'ge', 'gt')
+
+
+class EntityNotFound(Exception):
+    code = 404
+
+    def __init__(self, entity, id):
+        super(EntityNotFound, self).__init__(
+            _("%(entity)s %(id)s Not Found") % {'entity': entity,
+                                                'id': id})
+
+
+class BoundedInt(wtypes.UserType):
+    basetype = int
+    name = 'bounded int'
+
+    def __init__(self, min=None, max=None):
+        self.min = min
+        self.max = max
+
+    @staticmethod
+    def frombasetype(value):
+        return int(value) if value is not None else None
+
+    def validate(self, value):
+        if self.min is not None and value < self.min:
+            error = _('Value %(value)s is invalid (should be greater or equal '
+                      'to %(min)s)') % dict(value=value, min=self.min)
+            pecan.response.translatable_error = error
+            raise wsme.exc.ClientSideError(unicode(error))
+
+        if self.max is not None and value > self.max:
+            error = _('Value %(value)s is invalid (should be lower or equal '
+                      'to %(max)s)') % dict(value=value, max=self.max)
+            pecan.response.translatable_error = error
+            raise wsme.exc.ClientSideError(unicode(error))
+        return value
+
+
+class AdvEnum(wtypes.wsproperty):
+    """Handle default and mandatory for wtypes.Enum
+    """
+    def __init__(self, name, *args, **kwargs):
+        self._name = '_advenum_%s' % name
+        self._default = kwargs.pop('default', None)
+        mandatory = kwargs.pop('mandatory', False)
+        enum = wtypes.Enum(*args, **kwargs)
+        super(AdvEnum, self).__init__(datatype=enum, fget=self._get,
+                                      fset=self._set, mandatory=mandatory)
+
+    def _get(self, parent):
+        if hasattr(parent, self._name):
+            value = getattr(parent, self._name)
+            return value or self._default
+        return self._default
+
+    def _set(self, parent, value):
+        if self.datatype.validate(value):
+            setattr(parent, self._name, value)
 
 
 class _Base(wtypes.Base):
@@ -87,9 +137,11 @@ class _Base(wtypes.Base):
         valid_keys = inspect.getargspec(db_model.__init__)[0]
         if 'self' in valid_keys:
             valid_keys.remove('self')
+        return self.as_dict_from_keys(valid_keys)
 
+    def as_dict_from_keys(self, keys):
         return dict((k, getattr(self, k))
-                    for k in valid_keys
+                    for k in keys
                     if hasattr(self, k) and
                     getattr(self, k) != wsme.Unset)
 
@@ -154,7 +206,10 @@ class Query(_Base):
                    type='string'
                    )
 
-    def _get_value_as_type(self):
+    def as_dict(self):
+        return self.as_dict_from_keys(['field', 'op', 'type', 'value'])
+
+    def _get_value_as_type(self, forced_type=None):
         """Convert metadata value to the specified data type.
 
         This method is called during metadata query to help convert the
@@ -170,23 +225,24 @@ class Query(_Base):
 
         :returns: metadata value converted with the specified data type.
         """
+        type = forced_type or self.type
         try:
             converted_value = self.value
-            if not self.type:
+            if not type:
                 try:
                     converted_value = ast.literal_eval(self.value)
-                except ValueError:
+                except (ValueError, SyntaxError):
                     msg = _('Failed to convert the metadata value %s'
                             ' automatically') % (self.value)
                     LOG.debug(msg)
             else:
-                if self.type == 'integer':
+                if type == 'integer':
                     converted_value = int(self.value)
-                elif self.type == 'float':
+                elif type == 'float':
                     converted_value = float(self.value)
-                elif self.type == 'boolean':
+                elif type == 'boolean':
                     converted_value = strutils.bool_from_string(self.value)
-                elif self.type == 'string':
+                elif type == 'string':
                     converted_value = self.value
                 else:
                     # For now, this method only support integer, float,
@@ -196,28 +252,29 @@ class Query(_Base):
         except ValueError:
             msg = _('Failed to convert the metadata value %(value)s'
                     ' to the expected data type %(type)s.') % \
-                {'value': self.value, 'type': self.type}
-            raise wsme.exc.ClientSideError(msg)
+                {'value': self.value, 'type': type}
+            raise wsme.exc.ClientSideError(unicode(msg))
         except TypeError:
             msg = _('The data type %s is not supported. The supported'
                     ' data type list is: integer, float, boolean and'
-                    ' string.') % (self.type)
-            raise wsme.exc.ClientSideError(msg)
+                    ' string.') % (type)
+            raise wsme.exc.ClientSideError(unicode(msg))
         except Exception:
             msg = _('Unexpected exception converting %(value)s to'
                     ' the expected data type %(type)s.') % \
-                {'value': self.value, 'type': self.type}
-            raise wsme.exc.ClientSideError(msg)
+                {'value': self.value, 'type': type}
+            raise wsme.exc.ClientSideError(unicode(msg))
         return converted_value
 
 
-def _sanitize_query(q, valid_keys):
+def _sanitize_query(q, valid_keys, headers=None):
     '''Check the query to see if:
-    1) the request is comming from admin - then allow full visibility
+    1) the request is coming from admin - then allow full visibility
     2) non-admin - make sure that the query includes the requester's
     project.
     '''
-    auth_project = acl.get_limited_to_project(pecan.request.headers)
+    auth_project = acl.get_limited_to_project(headers or
+                                              pecan.request.headers)
     if auth_project:
         proj_q = [i for i in q if i.field == 'project_id']
         for i in proj_q:
@@ -240,25 +297,17 @@ def _sanitize_query(q, valid_keys):
     return q
 
 
-def _exclude_from(keys, excluded):
-    if keys and excluded:
-        for key in excluded:
-            if key in keys:
-                keys.remove(key)
-
-
-def _query_to_kwargs(query, db_func, internal_keys=[]):
-    # TODO(dhellmann): This function needs tests of its own.
+def _query_to_kwargs(query, db_func, internal_keys=[], headers=None):
     valid_keys = inspect.getargspec(db_func)[0]
-    query = _sanitize_query(query, valid_keys)
+    query = _sanitize_query(query, valid_keys, headers=headers)
     internal_keys.append('self')
-    _exclude_from(valid_keys, internal_keys)
+    valid_keys = set(valid_keys) - set(internal_keys)
     translation = {'user_id': 'user',
                    'project_id': 'project',
                    'resource_id': 'resource'}
     stamp = {}
-    trans = {}
     metaquery = {}
+    kwargs = {}
     for i in query:
         if i.field == 'timestamp':
             if i.op in ('lt', 'le'):
@@ -268,22 +317,31 @@ def _query_to_kwargs(query, db_func, internal_keys=[]):
                 stamp['start_timestamp'] = i.value
                 stamp['start_timestamp_op'] = i.op
             else:
-                LOG.warn('_query_to_kwargs ignoring %r unexpected op %r"' %
-                         (i.field, i.op))
+                raise wsme.exc.InvalidInput('op', i.op,
+                                            'unimplemented operator for %s' %
+                                            i.field)
         else:
-            if i.op != 'eq':
-                LOG.warn('_query_to_kwargs ignoring %r unimplemented op %r' %
-                         (i.field, i.op))
-            elif i.field == 'search_offset':
-                stamp['search_offset'] = i.value
-            elif i.field.startswith('metadata.'):
-                metaquery[i.field] = i._get_value_as_type()
-            elif i.field.startswith('resource_metadata.'):
-                metaquery[i.field[9:]] = i._get_value_as_type()
+            if i.op == 'eq':
+                if i.field == 'search_offset':
+                    stamp['search_offset'] = i.value
+                elif i.field == 'enabled':
+                    kwargs[i.field] = i._get_value_as_type('boolean')
+                elif i.field.startswith('metadata.'):
+                    metaquery[i.field] = i._get_value_as_type()
+                elif i.field.startswith('resource_metadata.'):
+                    metaquery[i.field[9:]] = i._get_value_as_type()
+                else:
+                    key = translation.get(i.field, i.field)
+                    if key not in valid_keys:
+                        msg = ("unrecognized field in query: %s, "
+                               "valid keys: %s") % (query, valid_keys)
+                        raise wsme.exc.UnknownArgument(key, msg)
+                    kwargs[key] = i.value
             else:
-                trans[translation.get(i.field, i.field)] = i.value
+                raise wsme.exc.InvalidInput('op', i.op,
+                                            'unimplemented operator for %s' %
+                                            i.field)
 
-    kwargs = {}
     if metaquery and 'metaquery' in valid_keys:
         kwargs['metaquery'] = metaquery
     if stamp:
@@ -301,14 +359,6 @@ def _query_to_kwargs(query, db_func, internal_keys=[]):
             kwargs['start_timestamp_op'] = stamp['start_timestamp_op']
         if 'end_timestamp_op' in stamp:
             kwargs['end_timestamp_op'] = stamp['end_timestamp_op']
-
-    if trans:
-        for k in trans:
-            if k not in valid_keys:
-                msg = ("unrecognized field in query: %s, valid keys: %s" %
-                       (query, valid_keys))
-                raise wsme.exc.UnknownArgument(k, msg)
-            kwargs[k] = trans[k]
 
     return kwargs
 
@@ -403,7 +453,7 @@ class Sample(_Base):
     """
 
     source = wtypes.text
-    "An identity source ID"
+    "The ID of the source that identifies where the sample comes from"
 
     counter_name = wtypes.text
     "The name of the meter"
@@ -606,9 +656,9 @@ class MeterController(rest.RestController):
         :param body: a list of samples within the request body.
         """
         # Note:
-        #  1) the above validate decorator seems to do nothing.
-        #  2) the mandatory options seems to also do nothing.
-        #  3) the body should already be in a list of Sample's
+        #  1) the above validate decorator seems to do nothing. LP#1220678
+        #  2) the mandatory options seems to also do nothing. LP#1227004
+        #  3) the body should already be in a list of Sample's LP#1233219
 
         samples = [Sample(**b) for b in body]
 
@@ -627,6 +677,11 @@ class MeterController(rest.RestController):
             if s.message_id:
                 raise wsme.exc.InvalidInput('message_id', s.message_id,
                                             'The message_id must not be set')
+
+            if s.counter_type not in sample.TYPES:
+                raise wsme.exc.InvalidInput('counter_type', s.counter_type,
+                                            'The counter type must be: ' +
+                                            ', '.join(sample.TYPES))
 
             s.user_id = (s.user_id or def_user_id)
             s.project_id = (s.project_id or def_project_id)
@@ -658,9 +713,6 @@ class MeterController(rest.RestController):
                 context.get_admin_context()) as publisher:
             publisher(published_samples)
 
-        # TODO(asalkeld) this is not ideal, it would be nice if the publisher
-        # returned the created sample message with message id (or at least the
-        # a list of message_ids).
         return samples
 
     @wsme_pecan.wsexpose([Statistics], [Query], [unicode], int)
@@ -675,7 +727,7 @@ class MeterController(rest.RestController):
         if period and period < 0:
             error = _("Period must be positive.")
             pecan.response.translatable_error = error
-            raise wsme.exc.ClientSideError(error)
+            raise wsme.exc.ClientSideError(unicode(error))
 
         kwargs = _query_to_kwargs(q, storage.SampleFilter.__init__)
         kwargs['meter'] = self._id
@@ -707,9 +759,7 @@ class Meter(_Base):
     name = wtypes.text
     "The unique name for the meter"
 
-    type = wtypes.Enum(str, sample.TYPE_GAUGE,
-                       sample.TYPE_CUMULATIVE,
-                       sample.TYPE_DELTA)
+    type = wtypes.Enum(str, *sample.TYPES)
     "The meter type (see :ref:`measurements`)"
 
     unit = wtypes.text
@@ -723,6 +773,9 @@ class Meter(_Base):
 
     user_id = wtypes.text
     "The ID of the user who last triggered an update to the resource"
+
+    source = wtypes.text
+    "The ID of the source that identifies where the meter comes from"
 
     meter_id = wtypes.text
     "The unique identifier for the meter"
@@ -741,6 +794,7 @@ class Meter(_Base):
                    resource_id='bd9431c1-8d69-4ad3-803a-8d4a6b89fd36',
                    project_id='35b17138-b364-4e6a-a131-8f3099c5be68',
                    user_id='efd87807-12d2-4b38-9c70-5f5c2ac427ff',
+                   source='openstack',
                    )
 
 
@@ -832,14 +886,8 @@ class ResourcesController(rest.RestController):
         authorized_project = acl.get_limited_to_project(pecan.request.headers)
         resources = list(pecan.request.storage_conn.get_resources(
             resource=resource_id, project=authorized_project))
-        # FIXME (flwang): Need to change this to return a 404 error code when
-        # we get a release of WSME that supports it.
         if not resources:
-            error = _("Unknown resource")
-            pecan.response.translatable_error = error
-            raise wsme.exc.InvalidInput("resource_id",
-                                        resource_id,
-                                        error)
+            raise EntityNotFound(_('Resource'), resource_id)
         return Resource.from_db_and_links(resources[0],
                                           self._resource_links(resource_id))
 
@@ -857,6 +905,135 @@ class ResourcesController(rest.RestController):
         return resources
 
 
+class AlarmThresholdRule(_Base):
+    meter_name = wsme.wsattr(wtypes.text, mandatory=True)
+    "The name of the meter"
+
+    #FIXME(sileht): default doesn't work
+    #workaround: default is set in validate method
+    query = wsme.wsattr([Query], default=[])
+    """The query to find the data for computing statistics.
+    Ownership settings are automatically included based on the Alarm owner.
+    """
+
+    period = wsme.wsattr(BoundedInt(min=1), default=60)
+    "The time range in seconds over which query"
+
+    comparison_operator = AdvEnum('comparison_operator', str,
+                                  'lt', 'le', 'eq', 'ne', 'ge', 'gt',
+                                  default='eq')
+    "The comparison against the alarm threshold"
+
+    threshold = wsme.wsattr(float, mandatory=True)
+    "The threshold of the alarm"
+
+    statistic = AdvEnum('statistic', str, 'max', 'min', 'avg', 'sum',
+                        'count', default='avg')
+    "The statistic to compare to the threshold"
+
+    evaluation_periods = wsme.wsattr(BoundedInt(min=1), default=1)
+    "The number of historical periods to evaluate the threshold"
+
+    def __init__(self, query=None, **kwargs):
+        if query:
+            query = [Query(**q) for q in query]
+        super(AlarmThresholdRule, self).__init__(query=query, **kwargs)
+
+    @staticmethod
+    def validate(threshold_rule):
+        #note(sileht): wsme mandatory doesn't work as expected
+        #workaround for https://bugs.launchpad.net/wsme/+bug/1227004
+        for field in ['meter_name', 'threshold']:
+            if not getattr(threshold_rule, field):
+                error = _("threshold_rule/%s is mandatory") % field
+                pecan.response.translatable_error = error
+                raise wsme.exc.ClientSideError(unicode(error))
+
+        #note(sileht): wsme default doesn't work in some case
+        #workaround for https://bugs.launchpad.net/wsme/+bug/1227039
+        if not threshold_rule.query:
+            threshold_rule.query = []
+
+        #note(sileht): _query_to_kwargs implicitly call _sanitize_query
+        #that add project_id in query
+        _query_to_kwargs(threshold_rule.query, storage.SampleFilter.__init__,
+                         internal_keys=['timestamp', 'start', 'start_timestamp'
+                                        'end', 'end_timestamp'])
+        return threshold_rule
+
+    @property
+    def default_description(self):
+        return _(
+            'Alarm when %(meter_name)s is %(comparison_operator)s a '
+            '%(statistic)s of %(threshold)s over %(period)s seconds') % \
+            dict(comparison_operator=self.comparison_operator,
+                 statistic=self.statistic,
+                 threshold=self.threshold,
+                 meter_name=self.meter_name,
+                 period=self.period)
+
+    def as_dict(self):
+        rule = self.as_dict_from_keys(['period', 'comparison_operator',
+                                       'threshold', 'statistic',
+                                       'evaluation_periods', 'meter_name'])
+        rule['query'] = [q.as_dict() for q in self.query]
+        return rule
+
+    @classmethod
+    def sample(cls):
+        return cls(meter_name='cpu_util',
+                   period=60,
+                   evaluation_periods=1,
+                   threshold=300.0,
+                   statistic='avg',
+                   comparison_operator='gt',
+                   query=[{'field': 'resource_id',
+                           'value': '2a4d689b-f0b8-49c1-9eef-87cae58d80db',
+                           'op': 'eq',
+                           'type': 'string'}])
+
+
+class AlarmCombinationRule(_Base):
+    operator = AdvEnum('operator', str, 'or', 'and', default='and')
+    "How to combine the sub-alarms"
+
+    alarm_ids = wsme.wsattr([wtypes.text], mandatory=True)
+    "List of alarm identifiers to combine"
+
+    @property
+    def default_description(self):
+        return _('Combined state of alarms %s') % self.operator.join(
+            self.alarm_ids)
+
+    def as_dict(self):
+        return self.as_dict_from_keys(['operator', 'alarm_ids'])
+
+    @classmethod
+    def sample(cls):
+        return cls(operator='or',
+                   alarm_ids=['739e99cb-c2ec-4718-b900-332502355f38',
+                              '153462d0-a9b8-4b5b-8175-9e4b05e9b856'])
+
+    @staticmethod
+    def validate(combination_rule):
+        #note(sileht): wsme mandatory doesn't works as expected
+        #workaround for https://bugs.launchpad.net/wsme/+bug/1227004
+        if not combination_rule.alarm_ids:
+            error = _("combination_rule/alarm_ids is mandatory")
+            pecan.response.translatable_error = error
+            raise wsme.exc.ClientSideError(unicode(error))
+
+        for id in combination_rule.alarm_ids:
+            auth_project = acl.get_limited_to_project(pecan.request.headers)
+            alarms = list(pecan.request.storage_conn.get_alarms(
+                alarm_id=id, project=auth_project))
+            if len(alarms) < 1:
+                error = _("Alarm %s doesn't exists") % id
+                pecan.response.translatable_error = error
+                raise wsme.exc.ClientSideError(unicode(error))
+        return combination_rule
+
+
 class Alarm(_Base):
     """Representation of an alarm.
     """
@@ -864,79 +1041,103 @@ class Alarm(_Base):
     alarm_id = wtypes.text
     "The UUID of the alarm"
 
-    name = wtypes.text
+    name = wsme.wsattr(wtypes.text, mandatory=True)
     "The name for the alarm"
 
-    description = wtypes.text
+    _description = None  # provide a default
+
+    def get_description(self):
+        rule = getattr(self, '%s_rule' % self.type, None)
+        if not self._description and rule:
+            return six.text_type(rule.default_description)
+        return self._description
+
+    def set_description(self, value):
+        self._description = value
+
+    description = wsme.wsproperty(wtypes.text, get_description,
+                                  set_description)
     "The description of the alarm"
 
-    meter_name = wtypes.text
-    "The name of meter"
+    enabled = wsme.wsattr(bool, default=True)
+    "This alarm is enabled?"
 
+    ok_actions = wsme.wsattr([wtypes.text], default=[])
+    "The actions to do when alarm state change to ok"
+
+    alarm_actions = wsme.wsattr([wtypes.text], default=[])
+    "The actions to do when alarm state change to alarm"
+
+    insufficient_data_actions = wsme.wsattr([wtypes.text], default=[])
+    "The actions to do when alarm state change to insufficient data"
+
+    repeat_actions = wsme.wsattr(bool, default=False)
+    "The actions should be re-triggered on each evaluation cycle"
+
+    type = AdvEnum('type', str, 'threshold', 'combination', mandatory=True)
+    "Explicit type specifier to select which rule to follow below."
+
+    threshold_rule = AlarmThresholdRule
+    "Describe when to trigger the alarm based on computed statistics"
+
+    combination_rule = AlarmCombinationRule
+    """Describe when to trigger the alarm based on combining the state of
+    other alarms"""
+
+    # These settings are ignored in the PUT or POST operations, but are
+    # filled in for GET
     project_id = wtypes.text
     "The ID of the project or tenant that owns the alarm"
 
     user_id = wtypes.text
     "The ID of the user who created the alarm"
 
-    comparison_operator = wtypes.Enum(str, 'lt', 'le', 'eq', 'ne', 'ge', 'gt')
-    "The comparison against the alarm threshold"
-
-    threshold = float
-    "The threshold of the alarm"
-
-    statistic = wtypes.Enum(str, 'max', 'min', 'avg', 'sum', 'count')
-    "The statistic to compare to the threshold"
-
-    enabled = bool
-    "This alarm is enabled?"
-
-    evaluation_periods = int
-    "The number of periods to evaluate the threshold"
-
-    period = int
-    "The time range in seconds over which to evaluate the threshold"
-
     timestamp = datetime.datetime
     "The date of the last alarm definition update"
 
-    state = wtypes.Enum(str, 'ok', 'alarm', 'insufficient data')
+    state = AdvEnum('state', str, *state_kind,
+                    default='insufficient data')
     "The state offset the alarm"
 
     state_timestamp = datetime.datetime
     "The date of the last alarm state changed"
 
-    ok_actions = [wtypes.text]
-    "The actions to do when alarm state change to ok"
-
-    alarm_actions = [wtypes.text]
-    "The actions to do when alarm state change to alarm"
-
-    insufficient_data_actions = [wtypes.text]
-    "The actions to do when alarm state change to insufficient data"
-
-    repeat_actions = bool
-    "The actions should be re-triggered on each evaluation cycle"
-
-    matching_metadata = {wtypes.text: wtypes.text}
-    "The matching_metadata of the alarm"
-
-    def __init__(self, **kwargs):
+    def __init__(self, rule=None, **kwargs):
         super(Alarm, self).__init__(**kwargs)
+
+        if rule:
+            if self.type == 'threshold':
+                self.threshold_rule = AlarmThresholdRule(**rule)
+            elif self.type == 'combination':
+                self.combination_rule = AlarmCombinationRule(**rule)
+
+    @staticmethod
+    def validate(alarm):
+        #note(sileht): wsme mandatory doesn't work as expected
+        #workaround for https://bugs.launchpad.net/wsme/+bug/1227004
+        for field in ['name', 'type']:
+            if not getattr(alarm, field):
+                error = _("%s is mandatory") % field
+                pecan.response.translatable_error = error
+                raise wsme.exc.ClientSideError(unicode(error))
+
+        if alarm.threshold_rule and alarm.combination_rule:
+            error = _("threshold_rule and combination_rule "
+                      "cannot be set at the same time")
+            pecan.response.translatable_error = error
+            raise wsme.exc.ClientSideError(unicode(error))
+        return alarm
 
     @classmethod
     def sample(cls):
         return cls(alarm_id=None,
                    name="SwiftObjectAlarm",
                    description="An alarm",
-                   meter_name="storage.objects",
-                   comparison_operator="gt",
-                   threshold=200,
-                   statistic="avg",
+                   type='threshold',
+                   threshold_rule=None,
+                   combination_rule=None,
                    user_id="c96c887c216949acbdfbd8b494863567",
                    project_id="c96c887c216949acbdfbd8b494863567",
-                   evaluation_periods=2,
-                   period=240,
                    enabled=True,
                    timestamp=datetime.datetime.utcnow(),
                    state="ok",
@@ -944,10 +1145,16 @@ class Alarm(_Base):
                    ok_actions=["http://site:8000/ok"],
                    alarm_actions=["http://site:8000/alarm"],
                    insufficient_data_actions=["http://site:8000/nodata"],
-                   matching_metadata={"key_name":
-                                      "key_value"},
                    repeat_actions=False,
                    )
+
+    def as_dict(self, db_model):
+        d = super(Alarm, self).as_dict(db_model)
+        for k in d:
+            if k.endswith('_rule'):
+                del d[k]
+        d['rule'] = getattr(self, "%s_rule" % self.type).as_dict()
+        return d
 
 
 class AlarmChange(_Base):
@@ -1000,6 +1207,7 @@ class AlarmController(rest.RestController):
 
     _custom_actions = {
         'history': ['GET'],
+        'state': ['PUT', 'GET'],
     }
 
     def __init__(self, alarm_id):
@@ -1011,20 +1219,14 @@ class AlarmController(rest.RestController):
         auth_project = acl.get_limited_to_project(pecan.request.headers)
         alarms = list(self.conn.get_alarms(alarm_id=self._id,
                                            project=auth_project))
-        # FIXME (flwang): Need to change this to return a 404 error code when
-        # we get a release of WSME that supports it.
         if len(alarms) < 1:
-            error = _("Unknown alarm")
-            pecan.response.translatable_error = error
-            raise wsme.exc.ClientSideError(error)
+            raise EntityNotFound(_('Alarm'), self._id)
         return alarms[0]
 
     def _record_change(self, data, now, on_behalf_of=None, type=None):
         if not cfg.CONF.alarm.record_history:
             return
-        type = type or (storage.models.AlarmChange.STATE_TRANSITION
-                        if data.get('state')
-                        else storage.models.AlarmChange.RULE_CHANGE)
+        type = type or storage.models.AlarmChange.RULE_CHANGE
         detail = json.dumps(utils.stringify_timestamps(data))
         user_id = pecan.request.headers.get('X-User-Id')
         project_id = pecan.request.headers.get('X-Project-Id')
@@ -1050,20 +1252,40 @@ class AlarmController(rest.RestController):
     @wsme_pecan.wsexpose(Alarm, wtypes.text, body=Alarm)
     def put(self, data):
         """Modify this alarm."""
-        # merge the new values from kwargs into the current
-        # alarm "alarm_in".
+        # Ensure alarm exists
         alarm_in = self._alarm()
+
         now = timeutils.utcnow()
-        change = data.as_dict(storage.models.Alarm)
-        data.state_timestamp = wsme.Unset
+
         data.alarm_id = self._id
-        kwargs = data.as_dict(storage.models.Alarm)
-        for k, v in kwargs.iteritems():
-            setattr(alarm_in, k, v)
-            if k == 'state':
-                alarm_in.state_timestamp = now
+        user, project = acl.get_limited_to(pecan.request.headers)
+        data.user_id = user or data.user_id or alarm_in.user_id
+        data.project_id = project or data.project_id or alarm_in.project_id
+        data.timestamp = now
+        if alarm_in.state != data.state:
+            data.state_timestamp = now
+        else:
+            data.state_timestamp = alarm_in.state_timestamp
+
+        #note(sileht): workaround for
+        #https://bugs.launchpad.net/wsme/+bug/1220678
+        Alarm.validate(data)
+
+        old_alarm = Alarm.from_db_model(alarm_in).as_dict(storage.models.Alarm)
+        updated_alarm = data.as_dict(storage.models.Alarm)
+        try:
+            alarm_in = storage.models.Alarm(**updated_alarm)
+        except Exception:
+            LOG.exception("Error while putting alarm: %s" % updated_alarm)
+            error = _("Alarm incorrect")
+            pecan.response.translatable_error = error
+            raise wsme.exc.ClientSideError(unicode(error))
 
         alarm = self.conn.update_alarm(alarm_in)
+
+        change = dict((k, v) for k, v in updated_alarm.items()
+                      if v != old_alarm[k] and k not in
+                      ['timestamp', 'state_timestamp'])
         self._record_change(change, now, on_behalf_of=alarm.project_id)
         return Alarm.from_db_model(alarm)
 
@@ -1095,6 +1317,28 @@ class AlarmController(rest.RestController):
         return [AlarmChange.from_db_model(ac)
                 for ac in conn.get_alarm_changes(self._id, auth_project,
                                                  **kwargs)]
+
+    @wsme_pecan.wsexpose(wtypes.text, body=wtypes.text)
+    def put_state(self, state):
+        """Set the state of this alarm."""
+        if state not in state_kind:
+            error = _("state invalid")
+            pecan.response.translatable_error = error
+            raise wsme.exc.ClientSideError(unicode(error))
+        now = timeutils.utcnow()
+        alarm = self._alarm()
+        alarm.state = state
+        alarm.state_timestamp = now
+        alarm = self.conn.update_alarm(alarm)
+        change = {'state': alarm.state}
+        self._record_change(change, now, on_behalf_of=alarm.project_id,
+                            type=storage.models.AlarmChange.STATE_TRANSITION)
+        return alarm.state
+
+    @wsme_pecan.wsexpose(wtypes.text)
+    def get_state(self):
+        alarm = self._alarm()
+        return alarm.state
 
 
 class AlarmsController(rest.RestController):
@@ -1131,14 +1375,22 @@ class AlarmsController(rest.RestController):
     def post(self, data):
         """Create a new alarm."""
         conn = pecan.request.storage_conn
-
         now = timeutils.utcnow()
+
         data.alarm_id = str(uuid.uuid4())
-        data.user_id = pecan.request.headers.get('X-User-Id')
-        data.project_id = pecan.request.headers.get('X-Project-Id')
-        data.state_timestamp = wsme.Unset
-        change = data.as_dict(storage.models.Alarm)
+        user, project = acl.get_limited_to(pecan.request.headers)
+        data.user_id = (user or data.user_id or
+                        pecan.request.headers.get('X-User-Id'))
+        data.project_id = (project or data.project_id or
+                           pecan.request.headers.get('X-Project-Id'))
         data.timestamp = now
+        data.state_timestamp = now
+
+        #note(sileht): workaround for
+        #https://bugs.launchpad.net/wsme/+bug/1220678
+        Alarm.validate(data)
+
+        change = data.as_dict(storage.models.Alarm)
 
         # make sure alarms are unique by name per project.
         alarms = list(conn.get_alarms(name=data.name,
@@ -1146,16 +1398,15 @@ class AlarmsController(rest.RestController):
         if len(alarms) > 0:
             error = _("Alarm with that name exists")
             pecan.response.translatable_error = error
-            raise wsme.exc.ClientSideError(error)
+            raise wsme.exc.ClientSideError(unicode(error))
 
         try:
-            kwargs = data.as_dict(storage.models.Alarm)
-            alarm_in = storage.models.Alarm(**kwargs)
-        except Exception as ex:
-            LOG.exception(ex)
+            alarm_in = storage.models.Alarm(**change)
+        except Exception:
+            LOG.exception("Error while posting alarm: %s" % change)
             error = _("Alarm incorrect")
             pecan.response.translatable_error = error
-            raise wsme.exc.ClientSideError(error)
+            raise wsme.exc.ClientSideError(unicode(error))
 
         alarm = conn.create_alarm(alarm_in)
         self._record_creation(conn, change, alarm.alarm_id, now)

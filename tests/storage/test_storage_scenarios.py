@@ -36,6 +36,28 @@ load_tests = testscenarios.load_tests_apply_scenarios
 
 
 class DBTestBase(tests_db.TestBase):
+    def create_and_store_sample(self, timestamp=datetime.datetime.utcnow(),
+                                metadata={
+                                    'display_name': 'test-server',
+                                    'tag': 'self.counter'
+                                },
+                                name='instance',
+                                sample_type=sample.TYPE_CUMULATIVE, unit='',
+                                volume=1, user_id='user-id',
+                                project_id='project-id',
+                                resource_id='resource-id', source=None):
+        s = sample.Sample(
+            name, sample_type, unit=unit, volume=volume, user_id=user_id,
+            project_id=project_id, resource_id=resource_id,
+            timestamp=timestamp,
+            resource_metadata=metadata, source=source
+        )
+        msg = rpc.meter_message_from_counter(
+            s, cfg.CONF.publisher_rpc.metering_secret
+        )
+        self.conn.record_metering_data(msg)
+        return msg
+
     def setUp(self):
         super(DBTestBase, self).setUp()
         self.prepare_data()
@@ -48,6 +70,7 @@ class DBTestBase(tests_db.TestBase):
         original_timestamps = [(2012, 7, 2, 10, 40), (2012, 7, 2, 10, 41),
                                (2012, 7, 2, 10, 41), (2012, 7, 2, 10, 42),
                                (2012, 7, 2, 10, 43)]
+
         timestamps_for_test_samples_default_order = [(2012, 7, 2, 10, 44),
                                                      (2011, 5, 30, 18, 3),
                                                      (2012, 12, 1, 1, 25),
@@ -57,114 +80,46 @@ class DBTestBase(tests_db.TestBase):
                           timestamps_for_test_samples_default_order)
 
         self.msgs = []
-        c = sample.Sample(
-            'instance',
-            sample.TYPE_CUMULATIVE,
-            unit='',
-            volume=1,
-            user_id='user-id',
-            project_id='project-id',
-            resource_id='resource-id',
+
+        self.msgs.append(self.create_and_store_sample(
             timestamp=datetime.datetime(2012, 7, 2, 10, 39),
-            resource_metadata={'display_name': 'test-server',
-                               'tag': 'self.counter',
-                               },
-            source='test-1',
+            source='test-1')
         )
-        self.msg0 = rpc.meter_message_from_counter(
-            c,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-        self.conn.record_metering_data(self.msg0)
-        self.msgs.append(self.msg0)
-
-        self.counter = sample.Sample(
-            'instance',
-            sample.TYPE_CUMULATIVE,
-            unit='',
-            volume=1,
-            user_id='user-id',
-            project_id='project-id',
-            resource_id='resource-id',
+        self.msgs.append(self.create_and_store_sample(
             timestamp=datetime.datetime(*timestamp_list[0]),
-            resource_metadata={'display_name': 'test-server',
-                               'tag': 'self.counter',
-                               },
-            source='test-1',
+            source='test-1')
         )
-        self.msg1 = rpc.meter_message_from_counter(
-            self.counter,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-        self.conn.record_metering_data(self.msg1)
-        self.msgs.append(self.msg1)
-
-        self.counter2 = sample.Sample(
-            'instance',
-            sample.TYPE_CUMULATIVE,
-            unit='',
-            volume=1,
-            user_id='user-id',
-            project_id='project-id',
-            resource_id='resource-id-alternate',
+        self.msgs.append(self.create_and_store_sample(
             timestamp=datetime.datetime(*timestamp_list[1]),
-            resource_metadata={'display_name': 'test-server',
-                               'tag': 'self.counter2',
-                               },
-            source='test-2',
-        )
-        self.msg2 = rpc.meter_message_from_counter(
-            self.counter2,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-        self.conn.record_metering_data(self.msg2)
-        self.msgs.append(self.msg2)
-
-        self.counter3 = sample.Sample(
-            'instance',
-            sample.TYPE_CUMULATIVE,
-            unit='',
-            volume=1,
-            user_id='user-id-alternate',
-            project_id='project-id',
             resource_id='resource-id-alternate',
+            metadata={'display_name': 'test-server', 'tag': 'self.counter2'},
+            source='test-2')
+        )
+        self.msgs.append(self.create_and_store_sample(
             timestamp=datetime.datetime(*timestamp_list[2]),
-            resource_metadata={'display_name': 'test-server',
-                               'tag': 'self.counter3',
-                               },
-            source='test-3',
+            resource_id='resource-id-alternate',
+            user_id='user-id-alternate',
+            metadata={'display_name': 'test-server', 'tag': 'self.counter3'},
+            source='test-3')
         )
-        self.msg3 = rpc.meter_message_from_counter(
-            self.counter3,
-            cfg.CONF.publisher_rpc.metering_secret,
-        )
-        self.conn.record_metering_data(self.msg3)
-        self.msgs.append(self.msg3)
 
         start_idx = 3
         end_idx = len(timestamp_list)
 
         for i, ts in zip(range(start_idx - 1, end_idx - 1),
                          timestamp_list[start_idx:end_idx]):
-            c = sample.Sample(
-                'instance',
-                sample.TYPE_CUMULATIVE,
-                unit='',
-                volume=1,
-                user_id='user-id-%s' % i,
-                project_id='project-id-%s' % i,
-                resource_id='resource-id-%s' % i,
-                timestamp=datetime.datetime(*ts),
-                resource_metadata={'display_name': 'test-server',
-                                   'tag': 'counter-%s' % i},
-                source='test',
+            self.msgs.append(
+                self.create_and_store_sample(
+                    timestamp=datetime.datetime(*ts),
+                    user_id='user-id-%s' % i,
+                    project_id='project-id-%s' % i,
+                    resource_id='resource-id-%s' % i,
+                    metadata={
+                        'display_name': 'test-server',
+                        'tag': 'counter-%s' % i
+                    },
+                    source='test')
             )
-            msg = rpc.meter_message_from_counter(
-                c,
-                cfg.CONF.publisher_rpc.metering_secret,
-            )
-            self.conn.record_metering_data(msg)
-            self.msgs.append(msg)
 
 
 class UserTest(DBTestBase,
@@ -179,7 +134,7 @@ class UserTest(DBTestBase,
 
     def test_get_users_by_source(self):
         users = self.conn.get_users(source='test-1')
-        assert list(users) == ['user-id']
+        self.assertEqual(list(users), ['user-id'])
 
 
 class ProjectTest(DBTestBase,
@@ -195,7 +150,7 @@ class ProjectTest(DBTestBase,
     def test_get_projects_by_source(self):
         projects = self.conn.get_projects(source='test-1')
         expected = ['project-id']
-        assert list(projects) == expected
+        self.assertEqual(list(projects), expected)
 
 
 class ResourceTest(DBTestBase,
@@ -204,13 +159,6 @@ class ResourceTest(DBTestBase,
     def test_get_resources(self):
         expected_first_sample_timestamp = datetime.datetime(2012, 7, 2, 10, 39)
         expected_last_sample_timestamp = datetime.datetime(2012, 7, 2, 10, 40)
-
-        #note(sileht): This is not normal, all backends should
-        # the same data...
-        if cfg.CONF.database.connection.startswith('db2://'):
-            expected_first_sample_timestamp = None
-            expected_last_sample_timestamp = None
-
         msgs_sources = [msg['source'] for msg in self.msgs]
         resources = list(self.conn.get_resources())
         self.assertEqual(len(resources), 9)
@@ -221,11 +169,11 @@ class ResourceTest(DBTestBase,
                              expected_first_sample_timestamp)
             self.assertEqual(resource.last_sample_timestamp,
                              expected_last_sample_timestamp)
-            assert resource.resource_id == 'resource-id'
-            assert resource.project_id == 'project-id'
+            self.assertEqual(resource.resource_id, 'resource-id')
+            self.assertEqual(resource.project_id, 'project-id')
             self.assertIn(resource.source, msgs_sources)
-            assert resource.user_id == 'user-id'
-            assert resource.metadata['display_name'] == 'test-server'
+            self.assertEqual(resource.user_id, 'user-id')
+            self.assertEqual(resource.metadata['display_name'], 'test-server')
             self.assertIn(models.ResourceMeter('instance', 'cumulative', ''),
                           resource.meter)
             break
@@ -279,53 +227,54 @@ class ResourceTest(DBTestBase,
         resources = list(self.conn.get_resources(start_timestamp=start_ts,
                                                  end_timestamp=end_ts))
         resource_ids = [r.resource_id for r in resources]
-        assert set(resource_ids) == set(['resource-id-2'])
+        self.assertEqual(set(resource_ids), set(['resource-id-2']))
 
         resources = list(self.conn.get_resources(start_timestamp=start_ts,
                                                  end_timestamp=end_ts,
                                                  start_timestamp_op='ge',
                                                  end_timestamp_op='lt'))
         resource_ids = [r.resource_id for r in resources]
-        assert set(resource_ids) == set(['resource-id-2'])
+        self.assertEqual(set(resource_ids), set(['resource-id-2']))
 
         resources = list(self.conn.get_resources(start_timestamp=start_ts,
                                                  end_timestamp=end_ts,
                                                  start_timestamp_op='gt',
                                                  end_timestamp_op='lt'))
         resource_ids = [r.resource_id for r in resources]
-        assert len(resource_ids) == 0
+        self.assertEqual(len(resource_ids), 0)
 
         resources = list(self.conn.get_resources(start_timestamp=start_ts,
                                                  end_timestamp=end_ts,
                                                  start_timestamp_op='gt',
                                                  end_timestamp_op='le'))
         resource_ids = [r.resource_id for r in resources]
-        assert set(resource_ids) == set(['resource-id-3'])
+        self.assertEqual(set(resource_ids), set(['resource-id-3']))
 
         resources = list(self.conn.get_resources(start_timestamp=start_ts,
                                                  end_timestamp=end_ts,
                                                  start_timestamp_op='ge',
                                                  end_timestamp_op='le'))
         resource_ids = [r.resource_id for r in resources]
-        assert set(resource_ids) == set(['resource-id-2', 'resource-id-3'])
+        self.assertEqual(set(resource_ids),
+                         set(['resource-id-2', 'resource-id-3']))
 
     def test_get_resources_by_source(self):
         resources = list(self.conn.get_resources(source='test-1'))
-        assert len(resources) == 1
+        self.assertEqual(len(resources), 1)
         ids = set(r.resource_id for r in resources)
-        assert ids == set(['resource-id'])
+        self.assertEqual(ids, set(['resource-id']))
 
     def test_get_resources_by_user(self):
         resources = list(self.conn.get_resources(user='user-id'))
-        assert len(resources) == 2
+        self.assertEqual(len(resources), 2)
         ids = set(r.resource_id for r in resources)
-        assert ids == set(['resource-id', 'resource-id-alternate'])
+        self.assertEqual(ids, set(['resource-id', 'resource-id-alternate']))
 
     def test_get_resources_by_project(self):
         resources = list(self.conn.get_resources(project='project-id'))
-        assert len(resources) == 2
+        self.assertEqual(len(resources), 2)
         ids = set(r.resource_id for r in resources)
-        assert ids == set(['resource-id', 'resource-id-alternate'])
+        self.assertEqual(ids, set(['resource-id', 'resource-id-alternate']))
 
     def test_get_resources_by_metaquery(self):
         q = {'metadata.display_name': 'test-server'}
@@ -335,6 +284,22 @@ class ResourceTest(DBTestBase,
     def test_get_resources_by_empty_metaquery(self):
         resources = list(self.conn.get_resources(metaquery={}))
         self.assertEqual(len(resources), 9)
+
+    def test_get_resources_most_recent_metadata_all(self):
+        resources = self.conn.get_resources()
+        expected_tags = ['self.counter', 'self.counter3', 'counter-2',
+                         'counter-3', 'counter-4', 'counter-5', 'counter-6',
+                         'counter-7', 'counter-8']
+
+        for resource in resources:
+            self.assertIn(resource.metadata['tag'], expected_tags)
+
+    def test_get_resources_most_recent_metadata_single(self):
+        resource = list(
+            self.conn.get_resources(resource='resource-id-alternate')
+        )[0]
+        expected_tag = 'self.counter3'
+        self.assertEqual(resource.metadata['tag'], expected_tag)
 
 
 class ResourceTestPagination(DBTestBase,
@@ -379,6 +344,57 @@ class ResourceTestPagination(DBTestBase,
                          [i.resource_id for i in results])
 
 
+class ResourceTestOrdering(DBTestBase,
+                           tests_db.MixinTestsWithBackendScenarios):
+    def prepare_data(self):
+        sample_timings = [('resource-id-1', [(2013, 8, 10, 10, 43),
+                                             (2013, 8, 10, 10, 44),
+                                             (2013, 8, 10, 10, 42),
+                                             (2013, 8, 10, 10, 49),
+                                             (2013, 8, 10, 10, 47)]),
+                          ('resource-id-2', [(2013, 8, 10, 10, 43),
+                                             (2013, 8, 10, 10, 48),
+                                             (2013, 8, 10, 10, 42),
+                                             (2013, 8, 10, 10, 48),
+                                             (2013, 8, 10, 10, 47)]),
+                          ('resource-id-3', [(2013, 8, 10, 10, 43),
+                                             (2013, 8, 10, 10, 44),
+                                             (2013, 8, 10, 10, 50),
+                                             (2013, 8, 10, 10, 49),
+                                             (2013, 8, 10, 10, 47)])]
+
+        counter = 0
+        for resource, timestamps in sample_timings:
+            for timestamp in timestamps:
+                self.create_and_store_sample(
+                    timestamp=datetime.datetime(*timestamp),
+                    resource_id=resource,
+                    user_id=str(counter % 2),
+                    project_id=str(counter % 3),
+                    metadata={
+                        'display_name': 'test-server',
+                        'tag': 'sample-%s' % counter
+                    },
+                    source='test'
+                )
+                counter += 1
+
+    def test_get_resources_ordering_all(self):
+        resources = list(self.conn.get_resources())
+        expected = set([
+            ('resource-id-1', 'sample-3'),
+            ('resource-id-2', 'sample-8'),
+            ('resource-id-3', 'sample-12')
+        ])
+        received = set([(r.resource_id, r.metadata['tag']) for r in resources])
+        self.assertEqual(received, expected)
+
+    def test_get_resources_ordering_single(self):
+        resource = list(self.conn.get_resources(resource='resource-id-2'))[0]
+        self.assertEqual(resource.resource_id, 'resource-id-2')
+        self.assertEqual(resource.metadata['tag'], 'sample-8')
+
+
 class MeterTest(DBTestBase,
                 tests_db.MixinTestsWithBackendScenarios):
 
@@ -391,11 +407,11 @@ class MeterTest(DBTestBase,
 
     def test_get_meters_by_user(self):
         results = list(self.conn.get_meters(user='user-id'))
-        assert len(results) == 1
+        self.assertEqual(len(results), 1)
 
     def test_get_meters_by_project(self):
         results = list(self.conn.get_meters(project='project-id'))
-        assert len(results) == 2
+        self.assertEqual(len(results), 2)
 
     def test_get_meters_by_metaquery(self):
         q = {'metadata.display_name': 'test-server'}
@@ -483,7 +499,7 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_samples(f))
         self.assertEqual(len(results), 3)
         for meter in results:
-            assert meter.as_dict() in [self.msg0, self.msg1, self.msg2]
+            self.assertIn(meter.as_dict(), self.msgs[:3])
 
     def test_get_samples_by_user_limit(self):
         f = storage.SampleFilter(user='user-id')
@@ -500,8 +516,7 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_samples(f))
         assert results
         for meter in results:
-            assert meter.as_dict() in [self.msg0, self.msg1,
-                                       self.msg2, self.msg3]
+            self.assertIn(meter.as_dict(), self.msgs[:4])
 
     def test_get_samples_by_resource(self):
         f = storage.SampleFilter(user='user-id', resource='resource-id')
@@ -509,7 +524,7 @@ class RawSampleTest(DBTestBase,
         assert results
         meter = results[1]
         assert meter is not None
-        self.assertEqual(meter.as_dict(), self.msg0)
+        self.assertEqual(meter.as_dict(), self.msgs[0])
 
     def test_get_samples_by_metaquery(self):
         q = {'metadata.display_name': 'test-server'}
@@ -517,7 +532,7 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_samples(f))
         assert results
         for meter in results:
-            assert meter.as_dict() in self.msgs
+            self.assertIn(meter.as_dict(), self.msgs)
 
     def test_get_samples_by_start_time(self):
         timestamp = datetime.datetime(2012, 7, 2, 10, 41)
@@ -527,17 +542,17 @@ class RawSampleTest(DBTestBase,
         )
 
         results = list(self.conn.get_samples(f))
-        assert len(results) == 1
-        assert results[0].timestamp == timestamp
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].timestamp, timestamp)
 
         f.start_timestamp_op = 'ge'
         results = list(self.conn.get_samples(f))
-        assert len(results) == 1
-        assert results[0].timestamp == timestamp
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].timestamp, timestamp)
 
         f.start_timestamp_op = 'gt'
         results = list(self.conn.get_samples(f))
-        assert len(results) == 0
+        self.assertEqual(len(results), 0)
 
     def test_get_samples_by_end_time(self):
         timestamp = datetime.datetime(2012, 7, 2, 10, 40)
@@ -568,32 +583,32 @@ class RawSampleTest(DBTestBase,
         )
 
         results = list(self.conn.get_samples(f))
-        assert len(results) == 1
-        assert results[0].timestamp == start_ts
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].timestamp, start_ts)
 
         f.start_timestamp_op = 'gt'
         f.end_timestamp_op = 'lt'
         results = list(self.conn.get_samples(f))
-        assert len(results) == 0
+        self.assertEqual(len(results), 0)
 
         f.start_timestamp_op = 'ge'
         f.end_timestamp_op = 'lt'
         results = list(self.conn.get_samples(f))
-        assert len(results) == 1
-        assert results[0].timestamp == start_ts
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].timestamp, start_ts)
 
         f.start_timestamp_op = 'gt'
         f.end_timestamp_op = 'le'
         results = list(self.conn.get_samples(f))
-        assert len(results) == 1
-        assert results[0].timestamp == end_ts
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].timestamp, end_ts)
 
         f.start_timestamp_op = 'ge'
         f.end_timestamp_op = 'le'
         results = list(self.conn.get_samples(f))
-        assert len(results) == 2
-        assert results[0].timestamp == end_ts
-        assert results[1].timestamp == start_ts
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].timestamp, end_ts)
+        self.assertEqual(results[1].timestamp, start_ts)
 
     def test_get_samples_by_name(self):
         f = storage.SampleFilter(user='user-id', meter='no-such-meter')
@@ -701,12 +716,12 @@ class StatisticsTest(DBTestBase,
         self.assertEqual(results.duration,
                          (datetime.datetime(2012, 9, 25, 12, 32)
                           - datetime.datetime(2012, 9, 25, 10, 30)).seconds)
-        assert results.count == 3
-        assert results.unit == 'GiB'
-        assert results.min == 8
-        assert results.max == 10
-        assert results.sum == 27
-        assert results.avg == 9
+        self.assertEqual(results.count, 3)
+        self.assertEqual(results.unit, 'GiB')
+        self.assertEqual(results.min, 8)
+        self.assertEqual(results.max, 10)
+        self.assertEqual(results.sum, 27)
+        self.assertEqual(results.avg, 9)
 
     def test_no_period_in_query(self):
         f = storage.SampleFilter(
@@ -714,15 +729,15 @@ class StatisticsTest(DBTestBase,
             meter='volume.size',
         )
         results = list(self.conn.get_meter_statistics(f))[0]
-        assert results.period == 0
+        self.assertEqual(results.period, 0)
 
     def test_period_is_int(self):
         f = storage.SampleFilter(
             meter='volume.size',
         )
         results = list(self.conn.get_meter_statistics(f))[0]
-        assert(isinstance(results.period, int))
-        assert results.count == 6
+        self.assertIs(type(results.period), int)
+        self.assertEqual(results.count, 6)
 
     def test_by_user_period(self):
         f = storage.SampleFilter(
@@ -834,12 +849,12 @@ class StatisticsTest(DBTestBase,
         )
         results = list(self.conn.get_meter_statistics(f))[0]
         self.assertEqual(results.duration, 0)
-        assert results.count == 1
-        assert results.unit == 'GiB'
-        assert results.min == 6
-        assert results.max == 6
-        assert results.sum == 6
-        assert results.avg == 6
+        self.assertEqual(results.count, 1)
+        self.assertEqual(results.unit, 'GiB')
+        self.assertEqual(results.min, 6)
+        self.assertEqual(results.max, 6)
+        self.assertEqual(results.sum, 6)
+        self.assertEqual(results.avg, 6)
 
     def test_one_resource(self):
         f = storage.SampleFilter(
@@ -850,12 +865,12 @@ class StatisticsTest(DBTestBase,
         self.assertEqual(results.duration,
                          (datetime.datetime(2012, 9, 25, 12, 32)
                           - datetime.datetime(2012, 9, 25, 10, 30)).seconds)
-        assert results.count == 3
-        assert results.unit == 'GiB'
-        assert results.min == 5
-        assert results.max == 7
-        assert results.sum == 18
-        assert results.avg == 6
+        self.assertEqual(results.count, 3)
+        self.assertEqual(results.unit, 'GiB')
+        self.assertEqual(results.min, 5)
+        self.assertEqual(results.max, 7)
+        self.assertEqual(results.sum, 18)
+        self.assertEqual(results.avg, 6)
 
 
 class StatisticsGroupByTest(DBTestBase,
@@ -1445,6 +1460,316 @@ class StatisticsGroupByTest(DBTestBase,
         # with a query filter and period grouping.
         pass
 
+    def test_group_by_start_timestamp_after(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            start=datetime.datetime(2013, 8, 1, 17, 28, 1),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      groupby=['project_id']))
+
+        self.assertEqual(results, [])
+
+    def test_group_by_end_timestamp_before(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            end=datetime.datetime(2013, 8, 1, 10, 10, 59),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      groupby=['project_id']))
+
+        self.assertEqual(results, [])
+
+    def test_group_by_start_timestamp(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            start=datetime.datetime(2013, 8, 1, 14, 58),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      groupby=['project_id']))
+        self.assertEqual(len(results), 2)
+        groupby_list = [r.groupby for r in results]
+        groupby_keys_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.keys())
+        groupby_vals_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.values())
+        self.assertEqual(groupby_keys_set, set(['project_id']))
+        self.assertEqual(groupby_vals_set, set(['project-1', 'project-2']))
+
+        for r in results:
+            if r.groupby == {'project_id': 'project-1'}:
+                self.assertEqual(r.count, 2)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 2)
+                self.assertEqual(r.sum, 4)
+                self.assertEqual(r.avg, 2)
+            elif r.groupby == {'project_id': 'project-2'}:
+                self.assertEqual(r.count, 2)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 4)
+                self.assertEqual(r.sum, 6)
+                self.assertEqual(r.avg, 3)
+
+    def test_group_by_end_timestamp(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            end=datetime.datetime(2013, 8, 1, 11, 45),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      groupby=['project_id']))
+        self.assertEqual(len(results), 1)
+        groupby_list = [r.groupby for r in results]
+        groupby_keys_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.keys())
+        groupby_vals_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.values())
+        self.assertEqual(groupby_keys_set, set(['project_id']))
+        self.assertEqual(groupby_vals_set, set(['project-1']))
+
+        for r in results:
+            if r.groupby == {'project_id': 'project-1'}:
+                self.assertEqual(r.count, 3)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 1)
+                self.assertEqual(r.max, 4)
+                self.assertEqual(r.sum, 6)
+                self.assertEqual(r.avg, 2)
+
+    def test_group_by_start_end_timestamp(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            start=datetime.datetime(2013, 8, 1, 8, 17, 3),
+            end=datetime.datetime(2013, 8, 1, 23, 59, 59),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      groupby=['project_id']))
+        self.assertEqual(len(results), 2)
+        groupby_list = [r.groupby for r in results]
+        groupby_keys_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.keys())
+        groupby_vals_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.values())
+        self.assertEqual(groupby_keys_set, set(['project_id']))
+        self.assertEqual(groupby_vals_set, set(['project-1', 'project-2']))
+
+        for r in results:
+            if r.groupby == {'project_id': 'project-1'}:
+                self.assertEqual(r.count, 5)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 1)
+                self.assertEqual(r.max, 4)
+                self.assertEqual(r.sum, 10)
+                self.assertEqual(r.avg, 2)
+            elif r.groupby == {'project_id': 'project-2'}:
+                self.assertEqual(r.count, 2)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 4)
+                self.assertEqual(r.sum, 6)
+                self.assertEqual(r.avg, 3)
+
+    def test_group_by_start_end_timestamp_with_query_filter(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            project='project-1',
+            start=datetime.datetime(2013, 8, 1, 11, 1),
+            end=datetime.datetime(2013, 8, 1, 20, 0),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      groupby=['resource_id']))
+        groupby_list = [r.groupby for r in results]
+        groupby_keys_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.keys())
+        groupby_vals_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.values())
+        self.assertEqual(groupby_keys_set, set(['resource_id']))
+        self.assertEqual(groupby_vals_set, set(['resource-1', 'resource-3']))
+
+        for r in results:
+            if r.groupby == {'resource_id': 'resource-1'}:
+                self.assertEqual(r.count, 2)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 2)
+                self.assertEqual(r.sum, 4)
+                self.assertEqual(r.avg, 2)
+            elif r.groupby == {'resource_id': 'resource-3'}:
+                self.assertEqual(r.count, 1)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 4)
+                self.assertEqual(r.max, 4)
+                self.assertEqual(r.sum, 4)
+                self.assertEqual(r.avg, 4)
+
+    def test_group_by_start_end_timestamp_with_period(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            start=datetime.datetime(2013, 8, 1, 14, 0),
+            end=datetime.datetime(2013, 8, 1, 17, 0),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      period=3600,
+                                                      groupby=['project_id']))
+        self.assertEqual(len(results), 3)
+        groupby_list = [r.groupby for r in results]
+        groupby_keys_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.keys())
+        groupby_vals_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.values())
+        self.assertEqual(groupby_keys_set, set(['project_id']))
+        self.assertEqual(groupby_vals_set, set(['project-1', 'project-2']))
+        period_start_set = set([r.period_start for r in results])
+        period_start_valid = set([datetime.datetime(2013, 8, 1, 14, 0),
+                                  datetime.datetime(2013, 8, 1, 15, 0),
+                                  datetime.datetime(2013, 8, 1, 16, 0)])
+        self.assertEqual(period_start_set, period_start_valid)
+
+        for r in results:
+            if (r.groupby == {'project_id': 'project-1'} and
+                    r.period_start == datetime.datetime(2013, 8, 1, 14, 0)):
+                self.assertEqual(r.count, 1)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 2)
+                self.assertEqual(r.sum, 2)
+                self.assertEqual(r.avg, 2)
+                self.assertEqual(r.duration, 0)
+                self.assertEqual(r.duration_start,
+                                 datetime.datetime(2013, 8, 1, 14, 59))
+                self.assertEqual(r.duration_end,
+                                 datetime.datetime(2013, 8, 1, 14, 59))
+                self.assertEqual(r.period, 3600)
+                self.assertEqual(r.period_end,
+                                 datetime.datetime(2013, 8, 1, 15, 0))
+            elif (r.groupby == {'project_id': 'project-1'} and
+                    r.period_start == datetime.datetime(2013, 8, 1, 16, 0)):
+                self.assertEqual(r.count, 1)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 2)
+                self.assertEqual(r.sum, 2)
+                self.assertEqual(r.avg, 2)
+                self.assertEqual(r.duration, 0)
+                self.assertEqual(r.duration_start,
+                                 datetime.datetime(2013, 8, 1, 16, 10))
+                self.assertEqual(r.duration_end,
+                                 datetime.datetime(2013, 8, 1, 16, 10))
+                self.assertEqual(r.period, 3600)
+                self.assertEqual(r.period_end,
+                                 datetime.datetime(2013, 8, 1, 17, 0))
+            elif (r.groupby == {'project_id': 'project-2'} and
+                    r.period_start == datetime.datetime(2013, 8, 1, 15, 0)):
+                self.assertEqual(r.count, 1)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 2)
+                self.assertEqual(r.sum, 2)
+                self.assertEqual(r.avg, 2)
+                self.assertEqual(r.duration, 0)
+                self.assertEqual(r.duration_start,
+                                 datetime.datetime(2013, 8, 1, 15, 37))
+                self.assertEqual(r.duration_end,
+                                 datetime.datetime(2013, 8, 1, 15, 37))
+                self.assertEqual(r.period, 3600)
+                self.assertEqual(r.period_end,
+                                 datetime.datetime(2013, 8, 1, 16, 0))
+            else:
+                self.assertNotEqual([r.groupby, r.period_start],
+                                    [{'project_id': 'project-1'},
+                                     datetime.datetime(2013, 8, 1, 15, 0)])
+                self.assertNotEqual([r.groupby, r.period_start],
+                                    [{'project_id': 'project-2'},
+                                     datetime.datetime(2013, 8, 1, 14, 0)])
+                self.assertNotEqual([r.groupby, r.period_start],
+                                    [{'project_id': 'project-2'},
+                                     datetime.datetime(2013, 8, 1, 16, 0)])
+
+    def test_group_by_start_end_timestamp_with_query_filter_and_period(self):
+        f = storage.SampleFilter(
+            meter='instance',
+            source='source-1',
+            start=datetime.datetime(2013, 8, 1, 10, 0),
+            end=datetime.datetime(2013, 8, 1, 18, 0),
+        )
+        results = list(self.conn.get_meter_statistics(f,
+                                                      period=7200,
+                                                      groupby=['project_id']))
+        self.assertEqual(len(results), 3)
+        groupby_list = [r.groupby for r in results]
+        groupby_keys_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.keys())
+        groupby_vals_set = set(x for sub_dict in groupby_list
+                               for x in sub_dict.values())
+        self.assertEqual(groupby_keys_set, set(['project_id']))
+        self.assertEqual(groupby_vals_set, set(['project-1', 'project-2']))
+        period_start_set = set([r.period_start for r in results])
+        period_start_valid = set([datetime.datetime(2013, 8, 1, 10, 0),
+                                  datetime.datetime(2013, 8, 1, 14, 0),
+                                  datetime.datetime(2013, 8, 1, 16, 0)])
+        self.assertEqual(period_start_set, period_start_valid)
+
+        for r in results:
+            if (r.groupby == {'project_id': 'project-1'} and
+                    r.period_start == datetime.datetime(2013, 8, 1, 10, 0)):
+                self.assertEqual(r.count, 2)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 1)
+                self.assertEqual(r.max, 1)
+                self.assertEqual(r.sum, 2)
+                self.assertEqual(r.avg, 1)
+                self.assertEqual(r.duration, 1740)
+                self.assertEqual(r.duration_start,
+                                 datetime.datetime(2013, 8, 1, 10, 11))
+                self.assertEqual(r.duration_end,
+                                 datetime.datetime(2013, 8, 1, 10, 40))
+                self.assertEqual(r.period, 7200)
+                self.assertEqual(r.period_end,
+                                 datetime.datetime(2013, 8, 1, 12, 0))
+            elif (r.groupby == {'project_id': 'project-1'} and
+                    r.period_start == datetime.datetime(2013, 8, 1, 14, 0)):
+                self.assertEqual(r.count, 1)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 2)
+                self.assertEqual(r.max, 2)
+                self.assertEqual(r.sum, 2)
+                self.assertEqual(r.avg, 2)
+                self.assertEqual(r.duration, 0)
+                self.assertEqual(r.duration_start,
+                                 datetime.datetime(2013, 8, 1, 14, 59))
+                self.assertEqual(r.duration_end,
+                                 datetime.datetime(2013, 8, 1, 14, 59))
+                self.assertEqual(r.period, 7200)
+                self.assertEqual(r.period_end,
+                                 datetime.datetime(2013, 8, 1, 16, 0))
+            elif (r.groupby == {'project_id': 'project-2'} and
+                    r.period_start == datetime.datetime(2013, 8, 1, 16, 0)):
+                self.assertEqual(r.count, 1)
+                self.assertEqual(r.unit, 's')
+                self.assertEqual(r.min, 4)
+                self.assertEqual(r.max, 4)
+                self.assertEqual(r.sum, 4)
+                self.assertEqual(r.avg, 4)
+                self.assertEqual(r.duration, 0)
+                self.assertEqual(r.duration_start,
+                                 datetime.datetime(2013, 8, 1, 17, 28))
+                self.assertEqual(r.duration_end,
+                                 datetime.datetime(2013, 8, 1, 17, 28))
+                self.assertEqual(r.period, 7200)
+                self.assertEqual(r.period_end,
+                                 datetime.datetime(2013, 8, 1, 18, 0))
+            else:
+                self.assertNotEqual([r.groupby, r.period_start],
+                                    [{'project_id': 'project-1'},
+                                     datetime.datetime(2013, 8, 1, 16, 0)])
+                self.assertNotEqual([r.groupby, r.period_start],
+                                    [{'project_id': 'project-2'},
+                                     datetime.datetime(2013, 8, 1, 10, 0)])
+                self.assertNotEqual([r.groupby, r.period_start],
+                                    [{'project_id': 'project-2'},
+                                     datetime.datetime(2013, 8, 1, 14, 0)])
+
 
 class CounterDataTypeTest(DBTestBase,
                           tests_db.MixinTestsWithBackendScenarios):
@@ -1527,26 +1852,87 @@ class CounterDataTypeTest(DBTestBase,
 
 class AlarmTestBase(DBTestBase):
     def add_some_alarms(self):
-        alarms = [models.Alarm('r3d', 'red-alert',
-                               'test.one', 'eq', 36, 'count',
-                               'me', 'and-da-boys',
-                               evaluation_periods=1,
-                               period=60,
+        alarms = [models.Alarm(alarm_id='r3d',
+                               enabled=True,
+                               type='threshold',
+                               name='red-alert',
+                               description='my red-alert',
+                               timestamp=None,
+                               user_id='me',
+                               project_id='and-da-boys',
+                               state="insufficient data",
+                               state_timestamp=None,
+                               ok_actions=[],
                                alarm_actions=['http://nowhere/alarms'],
-                               matching_metadata={'key': 'value'}),
-                  models.Alarm('0r4ng3', 'orange-alert',
-                               'test.fourty', 'gt', 75, 'avg',
-                               'me', 'and-da-boys',
-                               period=60,
+                               insufficient_data_actions=[],
+                               repeat_actions=False,
+                               rule=dict(comparison_operator='eq',
+                                         threshold=36,
+                                         statistic='count',
+                                         evaluation_periods=1,
+                                         period=60,
+                                         meter_name='test.one',
+                                         query=[{'field': 'key',
+                                                 'op': 'eq',
+                                                 'value': 'value',
+                                                 'type': 'string'}]),
+                               ),
+                  models.Alarm(alarm_id='0r4ng3',
+                               enabled=True,
+                               type='threshold',
+                               name='orange-alert',
+                               description='a orange',
+                               timestamp=None,
+                               user_id='me',
+                               project_id='and-da-boys',
+                               state="insufficient data",
+                               state_timestamp=None,
+                               ok_actions=[],
                                alarm_actions=['http://nowhere/alarms'],
-                               matching_metadata={'key2': 'value2'}),
-                  models.Alarm('y3ll0w', 'yellow-alert',
-                               'test.five', 'lt', 10, 'min',
-                               'me', 'and-da-boys',
+                               insufficient_data_actions=[],
+                               repeat_actions=False,
+                               rule=dict(comparison_operator='gt',
+                                         threshold=75,
+                                         statistic='avg',
+                                         evaluation_periods=1,
+                                         period=60,
+                                         meter_name='test.fourty',
+                                         query=[{'field': 'key2',
+                                                 'op': 'eq',
+                                                 'value': 'value2',
+                                                 'type': 'string'}]),
+                               ),
+                  models.Alarm(alarm_id='y3ll0w',
+                               enabled=False,
+                               type='threshold',
+                               name='yellow-alert',
+                               description='yellow',
+                               timestamp=None,
+                               user_id='me',
+                               project_id='and-da-boys',
+                               state="insufficient data",
+                               state_timestamp=None,
+                               ok_actions=[],
                                alarm_actions=['http://nowhere/alarms'],
-                               matching_metadata=
-                               {'key2': 'value2',
-                                'user_metadata.key3': 'value3'})]
+                               insufficient_data_actions=[],
+                               repeat_actions=False,
+                               rule=dict(comparison_operator='lt',
+                                         threshold=10,
+                                         statistic='min',
+                                         evaluation_periods=1,
+                                         period=60,
+                                         meter_name='test.five',
+                                         query=[{'field': 'key2',
+                                                 'op': 'eq',
+                                                 'value': 'value2',
+                                                 'type': 'string'},
+                                                {'field':
+                                                 'user_metadata.key3',
+                                                 'op': 'eq',
+                                                 'value': 'value3',
+                                                 'type': 'string'}]),
+                               )]
+
         for a in alarms:
             self.conn.create_alarm(a)
 
@@ -1558,44 +1944,69 @@ class AlarmTest(AlarmTestBase,
         alarms = list(self.conn.get_alarms())
         self.assertEqual([], alarms)
 
-    def test_add(self):
+    def test_list(self):
         self.add_some_alarms()
         alarms = list(self.conn.get_alarms())
         self.assertEqual(len(alarms), 3)
 
-    def test_defaults(self):
+    def test_list_enabled(self):
         self.add_some_alarms()
-        yellow = list(self.conn.get_alarms(name='yellow-alert'))[0]
+        alarms = list(self.conn.get_alarms(enabled=True))
+        self.assertEqual(len(alarms), 2)
 
-        self.assertEqual(yellow.evaluation_periods, 1)
-        self.assertEqual(yellow.period, 60)
-        self.assertEqual(yellow.enabled, True)
-        self.assertEqual(yellow.description,
-                         'Alarm when test.five is lt '
-                         'a min of 10 over 60 seconds')
-        self.assertEqual(yellow.state, models.Alarm.ALARM_INSUFFICIENT_DATA)
-        self.assertEqual(yellow.ok_actions, [])
-        self.assertEqual(yellow.insufficient_data_actions, [])
-        self.assertEqual(yellow.matching_metadata,
-                         {'key2': 'value2', 'user_metadata.key3': 'value3'})
+    def test_list_disabled(self):
+        self.add_some_alarms()
+        alarms = list(self.conn.get_alarms(enabled=False))
+        self.assertEqual(len(alarms), 1)
+
+    def test_add(self):
+        self.add_some_alarms()
+        alarms = list(self.conn.get_alarms())
+        self.assertEqual(len(alarms), 3)
+        self.assertEqual(alarms[0].rule['meter_name'], 'test.one')
+        self.assertEqual(alarms[1].rule['meter_name'], 'test.fourty')
+        self.assertEqual(alarms[2].rule['meter_name'], 'test.five')
 
     def test_update(self):
         self.add_some_alarms()
         orange = list(self.conn.get_alarms(name='orange-alert'))[0]
         orange.enabled = False
         orange.state = models.Alarm.ALARM_INSUFFICIENT_DATA
-        orange.matching_metadata = {'new': 'value',
-                                    'user_metadata.new2': 'value4'}
+        query = [{'field': 'metadata.group',
+                  'op': 'eq',
+                  'value': 'test.updated',
+                  'type': 'string'}]
+        orange.rule['query'] = query
+        orange.rule['meter_name'] = 'new_meter_name'
         updated = self.conn.update_alarm(orange)
         self.assertEqual(updated.enabled, False)
         self.assertEqual(updated.state, models.Alarm.ALARM_INSUFFICIENT_DATA)
-        self.assertEqual(updated.matching_metadata,
-                         {'new': 'value', 'user_metadata.new2': 'value4'})
+        self.assertEqual(updated.rule['query'], query)
+        self.assertEqual(updated.rule['meter_name'], 'new_meter_name')
 
     def test_update_llu(self):
-        llu = models.Alarm('llu', 'llu',
-                           'meter_name', 'lt', 34, 'max',
-                           'bla', 'ffo')
+        llu = models.Alarm(alarm_id='llu',
+                           enabled=True,
+                           type='threshold',
+                           name='llu',
+                           description='llu',
+                           timestamp=None,
+                           user_id='bla',
+                           project_id='ffo',
+                           state="insufficient data",
+                           state_timestamp=None,
+                           ok_actions=[],
+                           alarm_actions=[],
+                           insufficient_data_actions=[],
+                           repeat_actions=False,
+                           rule=dict(comparison_operator='lt',
+                                     threshold=34,
+                                     statistic='max',
+                                     evaluation_periods=1,
+                                     period=60,
+                                     meter_name='llt',
+                                     query=[])
+                           )
         updated = self.conn.update_alarm(llu)
         updated.state = models.Alarm.ALARM_OK
         updated.description = ':)'
@@ -1678,9 +2089,9 @@ class EventTest(EventTestBase):
         m = [models.Event("1", "Foo", now, None),
              models.Event("1", "Zoo", now, [])]
         problem_events = self.conn.record_events(m)
-        self.assertEquals(1, len(problem_events))
+        self.assertEqual(1, len(problem_events))
         bad = problem_events[0]
-        self.assertEquals(models.Event.DUPLICATE, bad[0])
+        self.assertEqual(models.Event.DUPLICATE, bad[0])
 
     def test_save_events_no_traits(self):
         now = datetime.datetime.utcnow()

@@ -3,6 +3,7 @@
 # Copyright © 2013 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
+# Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -19,11 +20,10 @@
 import datetime
 import operator
 
-from oslo.config import cfg
-
+from ceilometer.alarm import evaluator
+from ceilometer.alarm.evaluator import OK, ALARM, UNKNOWN
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
-from ceilometerclient import client as ceiloclient
 from ceilometer.openstack.common.gettextutils import _
 
 LOG = log.getLogger(__name__)
@@ -37,15 +37,8 @@ COMPARATORS = {
     'ne': operator.ne,
 }
 
-UNKNOWN = 'insufficient data'
-OK = 'ok'
-ALARM = 'alarm'
 
-
-class Evaluator(object):
-    """This class implements the basic alarm threshold evaluation
-       logic.
-    """
+class ThresholdEvaluator(evaluator.Evaluator):
 
     # the sliding evaluation window is extended to allow
     # for reporting/ingestion lag
@@ -55,45 +48,12 @@ class Evaluator(object):
     # avoid unknown state
     quorum = 1
 
-    def __init__(self, notifier=None):
-        self.alarms = []
-        self.notifier = notifier
-        self.api_client = None
-
-    def assign_alarms(self, alarms):
-        """Assign alarms to be evaluated."""
-        self.alarms = alarms
-
-    @property
-    def _client(self):
-        """Construct or reuse an authenticated API client."""
-        if not self.api_client:
-            auth_config = cfg.CONF.service_credentials
-            creds = dict(
-                os_auth_url=auth_config.os_auth_url,
-                os_tenant_name=auth_config.os_tenant_name,
-                os_password=auth_config.os_password,
-                os_username=auth_config.os_username,
-                cacert=auth_config.os_cacert,
-                endpoint_type=auth_config.os_endpoint_type,
-            )
-            self.api_client = ceiloclient.get_client(2, **creds)
-        return self.api_client
-
-    @staticmethod
-    def _constraints(alarm):
-        """Assert the constraints on the statistics query."""
-        constraints = []
-        for (field, value) in alarm.matching_metadata.iteritems():
-            constraints.append(dict(field=field, op='eq', value=value))
-        return constraints
-
     @classmethod
     def _bound_duration(cls, alarm, constraints):
         """Bound the duration of the statistics query."""
         now = timeutils.utcnow()
-        window = (alarm.period *
-                  (alarm.evaluation_periods + cls.look_back))
+        window = (alarm.rule['period'] *
+                  (alarm.rule['evaluation_periods'] + cls.look_back))
         start = now - datetime.timedelta(seconds=window)
         LOG.debug(_('query stats from %(start)s to '
                     '%(now)s') % {'start': start, 'now': now})
@@ -111,7 +71,7 @@ class Evaluator(object):
         LOG.debug(_('sanitize stats %s') % statistics)
         # in practice statistics are always sorted by period start, not
         # strictly required by the API though
-        statistics = statistics[:alarm.evaluation_periods]
+        statistics = statistics[:alarm.rule['evaluation_periods']]
         LOG.debug(_('pruned statistics to %d') % len(statistics))
         return statistics
 
@@ -119,31 +79,12 @@ class Evaluator(object):
         """Retrieve statistics over the current window."""
         LOG.debug(_('stats query %s') % query)
         try:
-            return self._client.statistics.list(alarm.meter_name,
-                                                q=query,
-                                                period=alarm.period)
+            return self._client.statistics.list(
+                meter_name=alarm.rule['meter_name'], q=query,
+                period=alarm.rule['period'])
         except Exception:
             LOG.exception(_('alarm stats retrieval failed'))
             return []
-
-    def _refresh(self, alarm, state, reason):
-        """Refresh alarm state."""
-        try:
-            previous = alarm.state
-            if previous != state:
-                LOG.info(_('alarm %(id)s transitioning to %(state)s because '
-                           '%(reason)s') % {'id': alarm.alarm_id,
-                                            'state': state,
-                                            'reason': reason})
-
-                self._client.alarms.update(alarm.alarm_id, **dict(state=state))
-            alarm.state = state
-            if self.notifier:
-                self.notifier.notify(alarm, previous, reason)
-        except Exception:
-            # retry will occur naturally on the next evaluation
-            # cycle (unless alarm state reverts in the meantime)
-            LOG.exception(_('alarm state update failed'))
 
     def _sufficient(self, alarm, statistics):
         """Ensure there is sufficient data for evaluation,
@@ -151,7 +92,8 @@ class Evaluator(object):
         """
         sufficient = len(statistics) >= self.quorum
         if not sufficient and alarm.state != UNKNOWN:
-            reason = _('%d datapoints are unknown') % alarm.evaluation_periods
+            reason = _('%d datapoints are unknown') % alarm.rule[
+                'evaluation_periods']
             self._refresh(alarm, UNKNOWN, reason)
         return sufficient
 
@@ -160,7 +102,7 @@ class Evaluator(object):
         """Fabricate reason string."""
         count = len(statistics)
         disposition = 'inside' if state == OK else 'outside'
-        last = getattr(statistics[-1], alarm.statistic)
+        last = getattr(statistics[-1], alarm.rule['statistic'])
         transition = alarm.state != state
         if transition:
             return (_('Transition to %(state)s due to %(count)d samples'
@@ -201,40 +143,27 @@ class Evaluator(object):
             reason = self._reason(alarm, statistics, distilled, state)
             self._refresh(alarm, state, reason)
 
-    def evaluate(self):
-        """Evaluate the alarms assigned to this evaluator."""
+    def evaluate(self, alarm):
+        query = self._bound_duration(
+            alarm,
+            alarm.rule['query']
+        )
 
-        LOG.info(_('initiating evaluation cycle on %d alarms') %
-                 len(self.alarms))
+        statistics = self._sanitize(
+            alarm,
+            self._statistics(alarm, query)
+        )
 
-        for alarm in self.alarms:
+        if self._sufficient(alarm, statistics):
+            def _compare(stat):
+                op = COMPARATORS[alarm.rule['comparison_operator']]
+                value = getattr(stat, alarm.rule['statistic'])
+                limit = alarm.rule['threshold']
+                LOG.debug(_('comparing value %(value)s against threshold'
+                            ' %(limit)s') %
+                          {'value': value, 'limit': limit})
+                return op(value, limit)
 
-            if not alarm.enabled:
-                LOG.debug(_('skipping alarm %s') % alarm.alarm_id)
-                continue
-            LOG.debug(_('evaluating alarm %s') % alarm.alarm_id)
-
-            query = self._bound_duration(
-                alarm,
-                self._constraints(alarm)
-            )
-
-            statistics = self._sanitize(
-                alarm,
-                self._statistics(alarm, query)
-            )
-
-            if self._sufficient(alarm, statistics):
-
-                def _compare(stat):
-                    op = COMPARATORS[alarm.comparison_operator]
-                    value = getattr(stat, alarm.statistic)
-                    limit = alarm.threshold
-                    LOG.debug(_('comparing value %(value)s against threshold'
-                                ' %(limit)s') %
-                              {'value': value, 'limit': limit})
-                    return op(value, limit)
-
-                self._transition(alarm,
-                                 statistics,
-                                 list(map(_compare, statistics)))
+            self._transition(alarm,
+                             statistics,
+                             map(_compare, statistics))

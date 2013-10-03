@@ -35,6 +35,7 @@ from ceilometer.storage import base
 from ceilometer.storage import models as api_models
 from ceilometer.storage.sqlalchemy import migration
 from ceilometer.storage.sqlalchemy.models import Alarm
+from ceilometer.storage.sqlalchemy.models import AlarmChange
 from ceilometer.storage.sqlalchemy.models import Base
 from ceilometer.storage.sqlalchemy.models import Event
 from ceilometer.storage.sqlalchemy.models import Meter
@@ -45,7 +46,6 @@ from ceilometer.storage.sqlalchemy.models import Trait
 from ceilometer.storage.sqlalchemy.models import UniqueName
 from ceilometer.storage.sqlalchemy.models import User
 from ceilometer import utils
-
 
 LOG = log.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def make_query_from_filter(query, sample_filter, require_meter=True):
     if sample_filter.meter:
         query = query.filter(Meter.counter_name == sample_filter.meter)
     elif require_meter:
-        raise RuntimeError('Missing required meter specifier')
+        raise RuntimeError(_('Missing required meter specifier'))
     if sample_filter.source:
         query = query.filter(Meter.sources.any(id=sample_filter.source))
     if sample_filter.start:
@@ -134,7 +134,7 @@ def make_query_from_filter(query, sample_filter, require_meter=True):
         query = query.filter_by(resource_id=sample_filter.resource)
 
     if sample_filter.metaquery:
-        raise NotImplementedError('metaquery not implemented')
+        raise NotImplementedError(_('metaquery not implemented'))
 
     return query
 
@@ -289,35 +289,75 @@ class Connection(base.Connection):
         :param pagination: Optional pagination query.
         """
 
+        # We probably want to raise these early, since we don't know from here
+        # if they will be handled. We don't want extra wait or work for it to
+        # just fail.
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
+        if metaquery:
+            raise NotImplementedError(_('metaquery not implemented'))
 
+        # (thomasm) We need to get the max timestamp first, since that's the
+        # most accurate. We also need to filter down in the subquery to
+        # constrain what we have to JOIN on later.
         session = sqlalchemy_session.get_session()
-        query = session.query(
-            Meter,
-            func.min(Meter.timestamp),
-            func.max(Meter.timestamp),
+
+        ts_subquery = session.query(
+            Meter.resource_id,
+            func.max(Meter.timestamp).label("max_ts"),
+            func.min(Meter.timestamp).label("min_ts")
         ).group_by(Meter.resource_id)
-        if user is not None:
-            query = query.filter(Meter.user_id == user)
-        if source is not None:
-            query = query.filter(Meter.sources.any(id=source))
+
+        # Here are the basic 'eq' operation filters for the sample data.
+        for column, value in [(Meter.resource_id, resource),
+                              (Meter.user_id, user),
+                              (Meter.project_id, project)]:
+            if value:
+                ts_subquery = ts_subquery.filter(column == value)
+
+        if source:
+            ts_subquery = ts_subquery.filter(
+                Meter.sources.any(id=source))
+
+        # Here we limit the samples being used to a specific time period,
+        # if requested.
         if start_timestamp:
             if start_timestamp_op == 'gt':
-                query = query.filter(Meter.timestamp > start_timestamp)
+                ts_subquery = ts_subquery.filter(
+                    Meter.timestamp > start_timestamp
+                )
             else:
-                query = query.filter(Meter.timestamp >= start_timestamp)
+                ts_subquery = ts_subquery.filter(
+                    Meter.timestamp >= start_timestamp
+                )
         if end_timestamp:
             if end_timestamp_op == 'le':
-                query = query.filter(Meter.timestamp <= end_timestamp)
+                ts_subquery = ts_subquery.filter(
+                    Meter.timestamp <= end_timestamp
+                )
             else:
-                query = query.filter(Meter.timestamp < end_timestamp)
-        if project is not None:
-            query = query.filter(Meter.project_id == project)
-        if resource is not None:
-            query = query.filter(Meter.resource_id == resource)
-        if metaquery:
-            raise NotImplementedError('metaquery not implemented')
+                ts_subquery = ts_subquery.filter(
+                    Meter.timestamp < end_timestamp
+                )
+        ts_subquery = ts_subquery.subquery()
+
+        # Now we need to get the max Meter.id out of the leftover results, to
+        # break any ties.
+        agg_subquery = session.query(
+            func.max(Meter.id).label("max_id"),
+            ts_subquery
+        ).filter(
+            Meter.resource_id == ts_subquery.c.resource_id,
+            Meter.timestamp == ts_subquery.c.max_ts
+        ).group_by(Meter.resource_id).subquery()
+
+        query = session.query(
+            Meter,
+            agg_subquery.c.min_ts,
+            agg_subquery.c.max_ts
+        ).filter(
+            Meter.id == agg_subquery.c.max_id
+        )
 
         for meter, first_ts, last_ts in query.all():
             yield api_models.Resource(
@@ -353,6 +393,8 @@ class Connection(base.Connection):
 
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
+        if metaquery:
+            raise NotImplementedError(_('metaquery not implemented'))
 
         session = sqlalchemy_session.get_session()
 
@@ -388,8 +430,6 @@ class Connection(base.Connection):
             query = query.filter(Resource.id == resource)
         if project is not None:
             query = query.filter(Resource.project_id == project)
-        if metaquery:
-            raise NotImplementedError('metaquery not implemented')
 
         for resource, meter in query.all():
             yield api_models.Meter(
@@ -501,7 +541,7 @@ class Connection(base.Connection):
             for group in groupby:
                 if group not in ['user_id', 'project_id', 'resource_id']:
                     raise NotImplementedError(
-                        "Unable to group by these fields")
+                        _("Unable to group by these fields"))
 
         if not period:
             for res in self._make_stats_query(sample_filter, groupby):
@@ -541,28 +581,23 @@ class Connection(base.Connection):
     def _row_to_alarm_model(row):
         return api_models.Alarm(alarm_id=row.id,
                                 enabled=row.enabled,
+                                type=row.type,
                                 name=row.name,
                                 description=row.description,
                                 timestamp=row.timestamp,
-                                meter_name=row.meter_name,
                                 user_id=row.user_id,
                                 project_id=row.project_id,
-                                comparison_operator=row.comparison_operator,
-                                threshold=row.threshold,
-                                statistic=row.statistic,
-                                evaluation_periods=row.evaluation_periods,
-                                period=row.period,
                                 state=row.state,
                                 state_timestamp=row.state_timestamp,
                                 ok_actions=row.ok_actions,
                                 alarm_actions=row.alarm_actions,
                                 insufficient_data_actions=
                                 row.insufficient_data_actions,
-                                matching_metadata=row.matching_metadata,
+                                rule=row.rule,
                                 repeat_actions=row.repeat_actions)
 
     def get_alarms(self, name=None, user=None,
-                   project=None, enabled=True, alarm_id=None, pagination=None):
+                   project=None, enabled=None, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -629,11 +664,33 @@ class Connection(base.Connection):
             session.query(Alarm).filter(Alarm.id == alarm_id).delete()
             session.flush()
 
+    @staticmethod
+    def _row_to_alarm_change_model(row):
+        return api_models.AlarmChange(event_id=row.event_id,
+                                      alarm_id=row.alarm_id,
+                                      type=row.type,
+                                      detail=row.detail,
+                                      user_id=row.user_id,
+                                      project_id=row.project_id,
+                                      on_behalf_of=row.on_behalf_of,
+                                      timestamp=row.timestamp)
+
     def get_alarm_changes(self, alarm_id, on_behalf_of,
                           user=None, project=None, type=None,
                           start_timestamp=None, start_timestamp_op=None,
                           end_timestamp=None, end_timestamp_op=None):
         """Yields list of AlarmChanges describing alarm history
+
+        Changes are always sorted in reverse order of occurence, given
+        the importance of currency.
+
+        Segregation for non-administrative users is done on the basis
+        of the on_behalf_of parameter. This allows such users to have
+        visibility on both the changes initiated by themselves directly
+        (generally creation, rule changes, or deletion) and also on those
+        changes initiated on their behalf by the alarming service (state
+        transitions after alarm thresholds are crossed).
+
         :param alarm_id: ID of alarm to return changes for
         :param on_behalf_of: ID of tenant to scope changes query (None for
                              administrative user, indicating all projects)
@@ -645,12 +702,44 @@ class Connection(base.Connection):
         :param end_timestamp: Optional modified timestamp end range
         :param end_timestamp_op: Optional timestamp end range operation
         """
-        raise NotImplementedError('Alarm history not implemented')
+        session = sqlalchemy_session.get_session()
+        query = session.query(AlarmChange)
+        query = query.filter(AlarmChange.alarm_id == alarm_id)
+
+        if on_behalf_of is not None:
+            query = query.filter(AlarmChange.on_behalf_of == on_behalf_of)
+        if user is not None:
+            query = query.filter(AlarmChange.user_id == user)
+        if project is not None:
+            query = query.filter(AlarmChange.project_id == project)
+        if type is not None:
+            query = query.filter(AlarmChange.type == type)
+        if start_timestamp:
+            if start_timestamp_op == 'gt':
+                query = query.filter(AlarmChange.timestamp > start_timestamp)
+            else:
+                query = query.filter(AlarmChange.timestamp >= start_timestamp)
+        if end_timestamp:
+            if end_timestamp_op == 'le':
+                query = query.filter(AlarmChange.timestamp <= end_timestamp)
+            else:
+                query = query.filter(AlarmChange.timestamp < end_timestamp)
+
+        query = query.order_by(desc(AlarmChange.timestamp))
+        return (self._row_to_alarm_change_model(x) for x in query.all())
 
     def record_alarm_change(self, alarm_change):
         """Record alarm change event.
         """
-        raise NotImplementedError('Alarm history not implemented')
+        session = sqlalchemy_session.get_session()
+        with session.begin():
+            session.merge(User(id=alarm_change['user_id']))
+            session.merge(Project(id=alarm_change['project_id']))
+            session.merge(Project(id=alarm_change['on_behalf_of']))
+            alarm_change_row = AlarmChange(event_id=alarm_change['event_id'])
+            alarm_change_row.update(alarm_change)
+            session.add(alarm_change_row)
+            session.flush()
 
     @staticmethod
     def _get_unique(session, key):

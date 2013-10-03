@@ -65,6 +65,10 @@ CLI_OPTIONS = [
                default=os.environ.get('OS_AUTH_URL',
                                       'http://localhost:5000/v2.0'),
                help='Auth URL to use for openstack service access'),
+    cfg.StrOpt('os-region-name',
+               deprecated_group="DEFAULT",
+               default=os.environ.get('OS_REGION_NAME', None),
+               help='Region name to use for openstack service endpoints'),
     cfg.StrOpt('os-endpoint-type',
                default=os.environ.get('OS_ENDPOINT_TYPE', 'publicURL'),
                help='Type of endpoint in Identity service catalog to use for '
@@ -75,8 +79,7 @@ cfg.CONF.register_cli_opts(CLI_OPTIONS, group="service_credentials")
 
 def prepare_service(argv=None):
     eventlet.monkey_patch()
-    gettextutils.install('ceilometer', True)
-    gettextutils.enable_lazy()
+    gettextutils.install('ceilometer', lazy=False)
     rpc.set_defaults(control_exchange='ceilometer')
     cfg.set_defaults(log.log_opts,
                      default_log_levels=['amqplib=WARN',

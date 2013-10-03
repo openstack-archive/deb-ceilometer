@@ -23,7 +23,6 @@
 import calendar
 import copy
 import operator
-import urlparse
 import weakref
 
 import bson.code
@@ -145,21 +144,22 @@ class ConnectionPool(object):
         self._pool = {}
 
     def connect(self, url):
-        if url in self._pool:
-            client = self._pool.get(url)()
+        connection_options = pymongo.uri_parser.parse_uri(url)
+        del connection_options['database']
+        del connection_options['username']
+        del connection_options['password']
+        del connection_options['collection']
+        pool_key = tuple(connection_options)
+
+        if pool_key in self._pool:
+            client = self._pool.get(pool_key)()
             if client:
                 return client
         LOG.info('connecting to MongoDB on %s', url)
-        url_parsed = urlparse.urlparse(url)
-        if url_parsed.path.startswith('/ceilometer_for_tox_testing_'):
-            #note(sileht): this is a workaround for running tests without reach
-            #the maximum allowed connection of mongod in gate
-            #this only work with pymongo >= 2.6, this is not in the
-            #requirements file because is not needed for normal use of mongo
-            client = pymongo.MongoClient(url, safe=True, max_pool_size=None)
-        else:
-            client = pymongo.MongoClient(url, safe=True)
-        self._pool[url] = weakref.ref(client)
+        client = pymongo.MongoClient(
+            url,
+            safe=True)
+        self._pool[pool_key] = weakref.ref(client)
         return client
 
 
@@ -298,6 +298,9 @@ class Connection(base.Connection):
         return value;
     }""")
 
+    SORT_OPERATION_MAPPING = {'desc': (pymongo.DESCENDING, '$lt'),
+                              'asc': (pymongo.ASCENDING, '$gt')}
+
     def __init__(self, conf):
         url = conf.database.connection
 
@@ -313,6 +316,9 @@ class Connection(base.Connection):
 
         connection_options = pymongo.uri_parser.parse_uri(url)
         self.db = getattr(self.conn, connection_options['database'])
+        if connection_options.get('username'):
+            self.db.authenticate(connection_options['username'],
+                                 connection_options['password'])
 
         # NOTE(jd) Upgrading is just about creating index, so let's do this
         # on connection to be sure at least the TTL is correcly updated if
@@ -485,15 +491,7 @@ class Connection(base.Connection):
         :return: sort parameters, query to use
         """
         all_sort = []
-        sort_mapping = {'desc': (pymongo.DESCENDING, '$lt'),
-                        'asc': (pymongo.ASCENDING, '$gt')
-                        }
-        _sort_dir, _sort_flag = sort_mapping.get(sort_dir,
-                                                 sort_mapping['desc'])
-
-        for _sort_key in sort_keys:
-            _all_sort = (_sort_key, _sort_dir)
-            all_sort.append(_all_sort)
+        all_sort, _op = cls._build_sort_instructions(sort_keys, sort_dir)
 
         if marker is not None:
             sort_criteria_list = []
@@ -501,13 +499,34 @@ class Connection(base.Connection):
             for i in range(0, len(sort_keys)):
                 sort_criteria_list.append(cls._recurse_sort_keys(
                                           sort_keys[:(len(sort_keys) - i)],
-                                          marker, _sort_flag))
+                                          marker, _op))
 
             metaquery = {"$or": sort_criteria_list}
         else:
             metaquery = {}
 
         return all_sort, metaquery
+
+    @classmethod
+    def _build_sort_instructions(cls, sort_keys=[], sort_dir='desc'):
+        """Returns a sort_instruction and paging operator.
+
+        Sort instructions are used in the query to determine what attributes
+        to sort on and what direction to use.
+        :param q: The query dict passed in.
+        :param sort_keys: array of attributes by which results be sorted.
+        :param sort_dir: direction in which results be sorted (asc, desc).
+        :return: sort instructions and paging operator
+        """
+        sort_instructions = []
+        _sort_dir, operation = cls.SORT_OPERATION_MAPPING.get(
+            sort_dir, cls.SORT_OPERATION_MAPPING['desc'])
+
+        for _sort_key in sort_keys:
+            _instruction = (_sort_key, _sort_dir)
+            sort_instructions.append(_instruction)
+
+        return sort_instructions, operation
 
     @classmethod
     def paginate_query(cls, q, db_collection, limit=None, marker=None,
@@ -612,8 +631,12 @@ class Connection(base.Connection):
             if ts_range:
                 q['timestamp'] = ts_range
 
+        sort_keys = base._handle_sort_key('resource')
+        sort_instructions = self._build_sort_instructions(sort_keys)[0]
+
         aggregate = self.db.meter.aggregate([
             {"$match": q},
+            {"$sort": dict(sort_instructions)},
             {"$group": {
                 "_id": "$resource_id",
                 "user_id": {"$first": "$user_id"},
@@ -766,7 +789,8 @@ class Connection(base.Connection):
     @staticmethod
     def _decode_matching_metadata(matching_metadata):
         if isinstance(matching_metadata, dict):
-            #note(sileht): keep compatibility with old db format
+            #note(sileht): keep compatibility with alarm
+            #with matching_metadata as a dict
             return matching_metadata
         else:
             new_matching_metadata = {}
@@ -774,17 +798,59 @@ class Connection(base.Connection):
                 new_matching_metadata[elem['key']] = elem['value']
             return new_matching_metadata
 
-    @staticmethod
-    def _encode_matching_metadata(matching_metadata):
-        if matching_metadata:
-            new_matching_metadata = []
-            for k, v in matching_metadata.iteritems():
-                new_matching_metadata.append({'key': k, 'value': v})
-            return new_matching_metadata
-        return matching_metadata
+    @classmethod
+    def _ensure_encapsulated_rule_format(cls, alarm):
+        """This ensure the alarm returned by the storage have the correct
+        format. The previous format looks like:
+        {
+            'alarm_id': '0ld-4l3rt',
+            'enabled': True,
+            'name': 'old-alert',
+            'description': 'old-alert',
+            'timestamp': None,
+            'meter_name': 'cpu',
+            'user_id': 'me',
+            'project_id': 'and-da-boys',
+            'comparison_operator': 'lt',
+            'threshold': 36,
+            'statistic': 'count',
+            'evaluation_periods': 1,
+            'period': 60,
+            'state': "insufficient data",
+            'state_timestamp': None,
+            'ok_actions': [],
+            'alarm_actions': ['http://nowhere/alarms'],
+            'insufficient_data_actions': [],
+            'repeat_actions': False,
+            'matching_metadata': {'key': 'value'}
+            # or 'matching_metadata': [{'key': 'key', 'value': 'value'}]
+        }
+        """
+
+        if isinstance(alarm.get('rule'), dict):
+            return
+
+        alarm['type'] = 'threshold'
+        alarm['rule'] = {}
+        alarm['matching_metadata'] = cls._decode_matching_metadata(
+            alarm['matching_metadata'])
+        for field in ['period', 'evaluation_periods', 'threshold',
+                      'statistic', 'comparison_operator', 'meter_name']:
+            if field in alarm:
+                alarm['rule'][field] = alarm[field]
+                del alarm[field]
+
+        query = []
+        for key in alarm['matching_metadata']:
+            query.append({'field': key,
+                          'op': 'eq',
+                          'value': alarm['matching_metadata'][key],
+                          'type': 'string'})
+        del alarm['matching_metadata']
+        alarm['rule']['query'] = query
 
     def get_alarms(self, name=None, user=None,
-                   project=None, enabled=True, alarm_id=None, pagination=None):
+                   project=None, enabled=None, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
         :param name: The Alarm name.
         :param user: Optional ID for user that owns the resource.
@@ -812,16 +878,13 @@ class Connection(base.Connection):
             a = {}
             a.update(alarm)
             del a['_id']
-            a['matching_metadata'] = \
-                self._decode_matching_metadata(a['matching_metadata'])
+            self._ensure_encapsulated_rule_format(a)
             yield models.Alarm(**a)
 
     def update_alarm(self, alarm):
         """update alarm
         """
         data = alarm.as_dict()
-        data['matching_metadata'] = \
-            self._encode_matching_metadata(data['matching_metadata'])
 
         self.db.alarm.update(
             {'alarm_id': alarm.alarm_id},
@@ -830,8 +893,7 @@ class Connection(base.Connection):
 
         stored_alarm = self.db.alarm.find({'alarm_id': alarm.alarm_id})[0]
         del stored_alarm['_id']
-        stored_alarm['matching_metadata'] = \
-            self._decode_matching_metadata(stored_alarm['matching_metadata'])
+        self._ensure_encapsulated_rule_format(stored_alarm)
         return models.Alarm(**stored_alarm)
 
     create_alarm = update_alarm
@@ -846,6 +908,17 @@ class Connection(base.Connection):
                           start_timestamp=None, start_timestamp_op=None,
                           end_timestamp=None, end_timestamp_op=None):
         """Yields list of AlarmChanges describing alarm history
+
+        Changes are always sorted in reverse order of occurence, given
+        the importance of currency.
+
+        Segregation for non-administrative users is done on the basis
+        of the on_behalf_of parameter. This allows such users to have
+        visibility on both the changes initiated by themselves directly
+        (generally creation, rule changes, or deletion) and also on those
+        changes initiated on their behalf by the alarming service (state
+        transitions after alarm thresholds are crossed).
+
         :param alarm_id: ID of alarm to return changes for
         :param on_behalf_of: ID of tenant to scope changes query (None for
                              administrative user, indicating all projects)

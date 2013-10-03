@@ -21,16 +21,20 @@
 """DB2 storage backend
 """
 
+from __future__ import division
 import copy
-import urlparse
 import weakref
+import itertools
 
 import bson.code
 import bson.objectid
+import datetime
 import pymongo
+import sys
 
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -138,21 +142,22 @@ class ConnectionPool(object):
         self._pool = {}
 
     def connect(self, url):
-        if url in self._pool:
-            client = self._pool.get(url)()
+        connection_options = pymongo.uri_parser.parse_uri(url)
+        del connection_options['database']
+        del connection_options['username']
+        del connection_options['password']
+        del connection_options['collection']
+        pool_key = tuple(connection_options)
+
+        if pool_key in self._pool:
+            client = self._pool.get(pool_key)()
             if client:
                 return client
-        LOG.info('connecting to DB2 on %s', url)
-        url_parsed = urlparse.urlparse(url)
-        if url_parsed.path.startswith('/ceilometer_for_tox_testing_'):
-            #note(sileht): this is a workaround for running tests without reach
-            #the maximum allowed connection of mongod in gate
-            #this only work with pymongo >= 2.6, this is not in the
-            #requirements file because is not needed for normal use of mongo
-            client = pymongo.MongoClient(url, safe=True, max_pool_size=None)
-        else:
-            client = pymongo.MongoClient(url, safe=True)
-        self._pool[url] = weakref.ref(client)
+        LOG.info('connecting to MongoDB on %s', url)
+        client = pymongo.MongoClient(
+            url,
+            safe=True)
+        self._pool[pool_key] = weakref.ref(client)
         return client
 
 
@@ -178,6 +183,10 @@ class Connection(base.Connection):
                'duration_start': 1,
                'duration_end': 1,
                }
+
+    SORT_OPERATION_MAP = {'desc': pymongo.DESCENDING, 'asc': pymongo.ASCENDING}
+
+    SECONDS_IN_A_DAY = 86400
 
     def __init__(self, conf):
         url = conf.database.connection
@@ -205,8 +214,32 @@ class Connection(base.Connection):
 
         connection_options = pymongo.uri_parser.parse_uri(url)
         self.db = getattr(self.conn, connection_options['database'])
+        if connection_options.get('username'):
+            self.db.authenticate(connection_options['username'],
+                                 connection_options['password'])
 
         self.upgrade()
+
+    @classmethod
+    def _build_sort_instructions(cls, sort_keys=[], sort_dir='desc'):
+        """Returns a sort_instruction.
+
+        Sort instructions are used in the query to determine what attributes
+        to sort on and what direction to use.
+        :param q: The query dict passed in.
+        :param sort_keys: array of attributes by which results be sorted.
+        :param sort_dir: direction in which results be sorted (asc, desc).
+        :return: sort parameters
+        """
+        sort_instructions = []
+        _sort_dir = cls.SORT_OPERATION_MAP.get(
+            sort_dir, cls.SORT_OPERATION_MAP['desc'])
+
+        for _sort_key in sort_keys:
+            _instruction = (_sort_key, _sort_dir)
+            sort_instructions.append(_instruction)
+
+        return sort_instructions
 
     def upgrade(self, version=None):
         # Establish indexes
@@ -264,6 +297,7 @@ class Connection(base.Connection):
         # removal of all the empty dbs created during the test runs since
         # test run is against mongodb on Jenkins
         self.conn.drop_database(self.db)
+        self.conn.close()
 
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
@@ -392,30 +426,36 @@ class Connection(base.Connection):
             if ts_range:
                 q['timestamp'] = ts_range
 
-        resource_ids = self.db.meter.find(q).distinct('resource_id')
-        if self._using_mongodb:
-            q = {'_id': {'$in': resource_ids}}
-        else:
-            q = {'_id': {'$in': [m['_id'] for m in resource_ids]}}
+        sort_keys = base._handle_sort_key('resource', 'timestamp')
+        sort_keys.insert(0, 'resource_id')
+        sort_instructions = self._build_sort_instructions(sort_keys=sort_keys,
+                                                          sort_dir='desc')
+        resource = lambda x: x['resource_id']
+        meters = self.db.meter.find(q, sort=sort_instructions)
+        for resource_id, r_meters in itertools.groupby(meters, key=resource):
+            resource_meters = []
+            # Because we have to know first/last timestamp, and we need a full
+            # list of references to the resource's meters, we need a tuple
+            # here.
+            r_meters = tuple(r_meters)
+            for meter in r_meters:
+                resource_meters.append(models.ResourceMeter(
+                    counter_name=meter['counter_name'],
+                    counter_type=meter['counter_type'],
+                    counter_unit=meter.get('counter_unit', ''))
+                )
+            latest_meter = r_meters[0]
+            last_ts = latest_meter['timestamp']
+            first_ts = r_meters[-1]['timestamp']
 
-        for resource in self.db.resource.find(q):
-            yield models.Resource(
-                resource_id=resource['_id'],
-                project_id=resource['project_id'],
-                first_sample_timestamp=None,
-                last_sample_timestamp=None,
-                source=resource['source'],
-                user_id=resource['user_id'],
-                metadata=resource['metadata'],
-                meter=[
-                    models.ResourceMeter(
-                        counter_name=meter['counter_name'],
-                        counter_type=meter['counter_type'],
-                        counter_unit=meter.get('counter_unit', ''),
-                    )
-                    for meter in resource['meter']
-                ],
-            )
+            yield models.Resource(resource_id=latest_meter['resource_id'],
+                                  project_id=latest_meter['project_id'],
+                                  first_sample_timestamp=first_ts,
+                                  last_sample_timestamp=last_ts,
+                                  source=latest_meter['source'],
+                                  user_id=latest_meter['user_id'],
+                                  metadata=latest_meter['resource_metadata'],
+                                  meter=resource_meters)
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}, pagination=None):
@@ -488,42 +528,81 @@ class Connection(base.Connection):
         statistics described by the query parameters.
 
         The filter must have a meter value set.
-
         """
-        if self._using_mongodb:
-            raise NotImplementedError("Statistics not implemented.")
-
-        if groupby:
-            raise NotImplementedError("Group by not implemented.")
+        if (groupby and
+                set(groupby) - set(['user_id', 'project_id',
+                                    'resource_id', 'source'])):
+            raise NotImplementedError("Unable to group by these fields")
 
         q = make_query_from_filter(sample_filter)
 
         if period:
-            raise NotImplementedError('Statistics for period not implemented.')
+            if sample_filter.start:
+                period_start = sample_filter.start
+            else:
+                period_start = self.db.meter.find(
+                    limit=1, sort=[('timestamp',
+                                    pymongo.ASCENDING)])[0]['timestamp']
 
-        results = self.db.meter.aggregate([
-            {'$match': q},
-            {'$group': self.GROUP},
-            {'$project': self.PROJECT},
-        ])
-
-        # Since there is no period grouping, there should be only one set in
-        # the results
-        rslt = results['result'][0]
-
-        duration = rslt['duration_end'] - rslt['duration_start']
-        if hasattr(duration, 'total_seconds'):
-            rslt['duration'] = duration.total_seconds()
+        if groupby:
+            sort_keys = ['counter_name'] + groupby + ['timestamp']
         else:
-            rslt['duration'] = duration.days * 3600 + duration.seconds
+            sort_keys = ['counter_name', 'timestamp']
 
-        rslt['period_start'] = rslt['duration_start']
-        rslt['period_end'] = rslt['duration_end']
-        # Period is not supported, set it to zero
-        rslt['period'] = 0
-        rslt['groupby'] = None
+        sort_instructions = self._build_sort_instructions(sort_keys=sort_keys,
+                                                          sort_dir='asc')
+        meters = self.db.meter.find(q, sort=sort_instructions)
 
-        return [models.Statistics(**(rslt))]
+        def _group_key(meter):
+            # the method to define a key for groupby call
+            key = {}
+            for y in sort_keys:
+                if y == 'timestamp' and period:
+                    key[y] = (timeutils.delta_seconds(period_start,
+                                                      meter[y]) // period)
+                elif y != 'timestamp':
+                    key[y] = meter[y]
+            return key
+
+        def _to_offset(periods):
+            return {'days': (periods * period) // self.SECONDS_IN_A_DAY,
+                    'seconds': (periods * period) % self.SECONDS_IN_A_DAY}
+
+        for key, grouped_meters in itertools.groupby(meters, key=_group_key):
+            stat = models.Statistics(None, sys.maxint, -sys.maxint, 0, 0, 0,
+                                     0, 0, 0, 0, 0, 0, None)
+
+            for meter in grouped_meters:
+                stat.unit = meter.get('counter_unit', '')
+                m_volume = meter.get('counter_volume')
+                if stat.min > m_volume:
+                    stat.min = m_volume
+                if stat.max < m_volume:
+                    stat.max = m_volume
+                stat.sum += m_volume
+                stat.count += 1
+                if stat.duration_start == 0:
+                    stat.duration_start = meter['timestamp']
+                stat.duration_end = meter['timestamp']
+                if groupby and not stat.groupby:
+                    stat.groupby = {}
+                    for group_key in groupby:
+                        stat.groupby[group_key] = meter[group_key]
+
+            stat.duration = timeutils.delta_seconds(stat.duration_start,
+                                                    stat.duration_end)
+            stat.avg = stat.sum / stat.count
+            if period:
+                stat.period = period
+                periods = key.get('timestamp')
+                stat.period_start = period_start + \
+                    datetime.timedelta(**(_to_offset(periods)))
+                stat.period_end = period_start + \
+                    datetime.timedelta(**(_to_offset(periods + 1)))
+            else:
+                stat.period_start = stat.duration_start
+                stat.period_end = stat.duration_end
+            yield stat
 
     @staticmethod
     def _decode_matching_metadata(matching_metadata):
@@ -536,17 +615,58 @@ class Connection(base.Connection):
                 new_matching_metadata[elem['key']] = elem['value']
             return new_matching_metadata
 
-    @staticmethod
-    def _encode_matching_metadata(matching_metadata):
-        if matching_metadata:
-            new_matching_metadata = []
-            for k, v in matching_metadata.iteritems():
-                new_matching_metadata.append({'key': k, 'value': v})
-            return new_matching_metadata
-        return matching_metadata
+    @classmethod
+    def _ensure_encapsulated_rule_format(cls, alarm):
+        """This ensure the alarm returned by the storage have the correct
+        format. The previous format looks like:
+        {
+            'alarm_id': '0ld-4l3rt',
+            'enabled': True,
+            'name': 'old-alert',
+            'description': 'old-alert',
+            'timestamp': None,
+            'meter_name': 'cpu',
+            'user_id': 'me',
+            'project_id': 'and-da-boys',
+            'comparison_operator': 'lt',
+            'threshold': 36,
+            'statistic': 'count',
+            'evaluation_periods': 1,
+            'period': 60,
+            'state': "insufficient data",
+            'state_timestamp': None,
+            'ok_actions': [],
+            'alarm_actions': ['http://nowhere/alarms'],
+            'insufficient_data_actions': [],
+            'repeat_actions': False,
+            'matching_metadata': {'key': 'value'}
+            # or 'matching_metadata': [{'key': 'key', 'value': 'value'}]
+        }
+        """
+
+        if isinstance(alarm.get('rule'), dict):
+            return
+
+        alarm['type'] = 'threshold'
+        alarm['rule'] = {}
+        alarm['matching_metadata'] = cls._decode_matching_metadata(
+            alarm['matching_metadata'])
+        for field in ['period', 'evaluation_period', 'threshold',
+                      'statistic', 'comparison_operator', 'meter_name']:
+            if field in alarm:
+                alarm['rule'][field] = alarm[field]
+                del alarm[field]
+
+        query = []
+        for key in alarm['matching_metadata']:
+            query.append({'field': key,
+                          'op': 'eq',
+                          'value': alarm['matching_metadata'][key]})
+        del alarm['matching_metadata']
+        alarm['rule']['query'] = query
 
     def get_alarms(self, name=None, user=None,
-                   project=None, enabled=True, alarm_id=None, pagination=None):
+                   project=None, enabled=None, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
@@ -576,17 +696,13 @@ class Connection(base.Connection):
             a = {}
             a.update(alarm)
             del a['_id']
-            a['matching_metadata'] = \
-                self._decode_matching_metadata(a['matching_metadata'])
+            self._ensure_encapsulated_rule_format(a)
             yield models.Alarm(**a)
 
     def update_alarm(self, alarm):
         """update alarm
         """
         data = alarm.as_dict()
-        data['matching_metadata'] = \
-            self._encode_matching_metadata(data['matching_metadata'])
-
         self.db.alarm.update(
             {'alarm_id': alarm.alarm_id},
             {'$set': data},
@@ -594,8 +710,7 @@ class Connection(base.Connection):
 
         stored_alarm = self.db.alarm.find({'alarm_id': alarm.alarm_id})[0]
         del stored_alarm['_id']
-        stored_alarm['matching_metadata'] = \
-            self._decode_matching_metadata(stored_alarm['matching_metadata'])
+        self._ensure_encapsulated_rule_format(stored_alarm)
         return models.Alarm(**stored_alarm)
 
     create_alarm = update_alarm
@@ -610,6 +725,17 @@ class Connection(base.Connection):
                           start_timestamp=None, start_timestamp_op=None,
                           end_timestamp=None, end_timestamp_op=None):
         """Yields list of AlarmChanges describing alarm history
+
+        Changes are always sorted in reverse order of occurence, given
+        the importance of currency.
+
+        Segregation for non-administrative users is done on the basis
+        of the on_behalf_of parameter. This allows such users to have
+        visibility on both the changes initiated by themselves directly
+        (generally creation, rule changes, or deletion) and also on those
+        changes initiated on their behalf by the alarming service (state
+        transitions after alarm thresholds are crossed).
+
         :param alarm_id: ID of alarm to return changes for
         :param on_behalf_of: ID of tenant to scope changes query (None for
                              administrative user, indicating all projects)
