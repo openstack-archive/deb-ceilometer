@@ -1,8 +1,8 @@
-ceilometer (2013.2~b3-1) unstable; urgency=low
+ceilometer (2013.2~rc1-1) unstable; urgency=low
 
   * Added some Should-Start / Should-Stop so that Ceilometer starts after Mongo
     and RabbitMQ.
-  * New upstream pre-release 2013.2.b2.
+  * New upstream pre-release 2013.2.rc1.
   * Added build-depends: python-ceilometerclient (>= 1.0.2).
 
  -- Thomas Goirand <zigo@debian.org>  Sat, 29 Jun 2013 01:45:17 +0800
