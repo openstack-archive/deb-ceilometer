@@ -1,11 +1,49 @@
-ceilometer (2013.2~rc1-1) unstable; urgency=low
+ceilometer (2013.2~rc1-1) experimental; urgency=low
+
+  * New upstream pre-release 2013.2.rc1.
+
+ -- Thomas Goirand <zigo@debian.org>  Sat, 29 Jun 2013 01:45:17 +0800
+
+ceilometer (2013.1.3-2) unstable; urgency=low
+
+  * Added new Debconf translations:
+    - FR (Closes: #722418).
+    - DA (Closes: #721548).
+    - RU (Closes: #721302).
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 25 Sep 2013 16:19:22 +0800
+
+ceilometer (2013.1.3-1) unstable; urgency=low
+
+  * New upstream point release.
+  * Added several Debconf translations:
+    - Italian, thanks to Beatrice Torracca (Closes: #719709).
+    - Japanese, thanks to victory (Closes: #719722).
+    - Portuguese, thanks to the Traduz team (Closes: #720382).
+    - Czech, thanks to Michal Šimůnek (Closes: #721218).
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 30 Aug 2013 11:19:44 +0800
+
+ceilometer (2013.1.2-4) unstable; urgency=low
+
+  * Ran debconf-updatepo.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 11 Jul 2013 01:07:43 +0800
+
+ceilometer (2013.1.2-3) unstable; urgency=low
+
+  * Added debian-l10n-english review (Closes #708747).
+  * Do not fail on directory removal on purge (Closes: #710910).
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 10 Jul 2013 14:17:03 +0800
+
+ceilometer (2013.1.2-2) unstable; urgency=low
 
   * Added some Should-Start / Should-Stop so that Ceilometer starts after Mongo
     and RabbitMQ.
-  * New upstream pre-release 2013.2.rc1.
-  * Added build-depends: python-ceilometerclient (>= 1.0.2).
+  * Removed version-depends for sqlalchemy.
 
- -- Thomas Goirand <zigo@debian.org>  Sat, 29 Jun 2013 01:45:17 +0800
+ -- Thomas Goirand <zigo@debian.org>  Sat, 22 Jun 2013 15:50:03 +0800
 
 ceilometer (2013.1.2-1) unstable; urgency=low
 
