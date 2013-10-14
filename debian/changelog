@@ -1,6 +1,7 @@
 ceilometer (2013.2~rc2-1) experimental; urgency=low
 
   * New upstream pre-release.
+  * Increased python-keystoneclient (build-)depends to 0.4.0.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 14 Oct 2013 16:47:55 +0800
 
