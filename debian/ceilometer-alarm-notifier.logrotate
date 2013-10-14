@@ -1,0 +1,7 @@
+/var/log/ceilometer/ceilometer-alarm-notifier.log {
+    daily
+    missingok
+    compress
+    delaycompress
+    notifempty
+}
