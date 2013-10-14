@@ -27,6 +27,7 @@ from ceilometer import sample
 from ceilometer.api import acl
 from ceilometer.publisher import rpc
 from ceilometer.tests import db as tests_db
+from ceilometer.openstack.common import timeutils
 
 from .base import FunctionalTest
 
@@ -37,12 +38,8 @@ VALID_TOKEN2 = '4562138218392832'
 
 
 class FakeMemcache(object):
-    def __init__(self):
-        self.set_key = None
-        self.set_value = None
-        self.token_expiration = None
-
-    def get(self, key):
+    @staticmethod
+    def get(key):
         if key == "tokens/%s" % VALID_TOKEN:
             dt = datetime.datetime.now() + datetime.timedelta(minutes=5)
             return json.dumps(({'access': {
@@ -55,7 +52,7 @@ class FakeMemcache(object):
                     'roles': [
                         {'name': 'admin'},
                     ]},
-            }}, dt.strftime("%s")))
+            }}, timeutils.isotime(dt)))
         if key == "tokens/%s" % VALID_TOKEN2:
             dt = datetime.datetime.now() + datetime.timedelta(minutes=5)
             return json.dumps(({'access': {
@@ -68,11 +65,11 @@ class FakeMemcache(object):
                     'roles': [
                         {'name': 'Member'},
                     ]},
-            }}, dt.strftime("%s")))
+            }}, timeutils.isotime(dt)))
 
-    def set(self, key, value, **kwargs):
-        self.set_value = value
-        self.set_key = key
+    @staticmethod
+    def set(key, value, **kwargs):
+        pass
 
 
 class TestAPIACL(FunctionalTest,
@@ -194,9 +191,7 @@ class TestAPIACL(FunctionalTest,
                              q=[{'field': 'project_id',
                                  'value': 'project-wrong',
                                  }])
-        #TODO(asalkeld) revert this with wsme-0.5b3+
-#        self.assertEqual(data.status_int, 401)
-        self.assertEqual(data.status_int, 400)
+        self.assertEqual(data.status_int, 401)
 
     def test_non_admin_two_projects(self):
         data = self.get_json('/meters',
@@ -210,6 +205,4 @@ class TestAPIACL(FunctionalTest,
                                 {'field': 'project_id',
                                  'value': 'project-naughty',
                                  }])
-        #TODO(asalkeld) revert this with wsme-0.5b3+
-#        self.assertEqual(data.status_int, 401)
-        self.assertEqual(data.status_int, 400)
+        self.assertEqual(data.status_int, 401)
