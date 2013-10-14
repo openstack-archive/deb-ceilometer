@@ -1,3 +1,9 @@
+ceilometer (2013.2~rc2-1) experimental; urgency=low
+
+  * New upstream pre-release.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 14 Oct 2013 16:47:55 +0800
+
 ceilometer (2013.2~rc1-1) experimental; urgency=low
 
   * New upstream pre-release 2013.2.rc1.
