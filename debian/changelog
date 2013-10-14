@@ -1,3 +1,9 @@
+ceilometer (2013.2~rc2-2) UNRELEASED; urgency=low
+
+  * Added the 2 new services: alarm-evaluator and alarm-notifier.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 14 Oct 2013 23:52:15 +0800
+
 ceilometer (2013.2~rc2-1) experimental; urgency=low
 
   * New upstream pre-release.
