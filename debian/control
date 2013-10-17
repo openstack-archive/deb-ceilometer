@@ -60,7 +60,7 @@ Build-Depends-Indep: alembic (>= 0.4.2),
                      python-testtools (>= 0.9.29),
                      python-unittest2,
                      python-webob (>= 1.2.3),
-                     python-wsme (>= 0.5b5),
+                     python-wsme (>= 0.5b6),
                      python-yaml,
                      testrepository (>= 0.0.13)
 Standards-Version: 3.9.4
@@ -100,7 +100,7 @@ Depends: alembic (>= 0.4.2),
          python-stevedore (>= 0.9),
          python-swiftclient (>= 1:1.6.0),
          python-webob (>= 1.2.3),
-         python-wsme (>= 0.5b5),
+         python-wsme (>= 0.5b6),
          python-yaml,
          ${misc:Depends},
          ${python:Depends}
