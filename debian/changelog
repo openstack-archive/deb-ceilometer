@@ -1,3 +1,9 @@
+ceilometer (2013.2-2) UNRELEASED; urgency=low
+
+  * Added configuration of the keystone_authtoken through Debconf.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 28 Oct 2013 22:34:50 +0800
+
 ceilometer (2013.2-1) unstable; urgency=low
 
   * New upstream release.

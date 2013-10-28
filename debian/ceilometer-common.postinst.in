@@ -46,6 +46,7 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 	pkgos_write_new_conf ceilometer sources.json
 	pkgos_write_new_conf ceilometer pipeline.yaml
 	pkgos_rabbit_write_conf /etc/ceilometer/ceilometer.conf DEFAULT ceilometer
+	pkgos_write_admin_creds /etc/ceilometer/ceilometer.conf keystone_authtoken glance
 	ceilometer-dbsync || true
 fi
 
