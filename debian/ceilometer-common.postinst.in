@@ -12,7 +12,7 @@ libvirt_user_group () {
 		LIBVIRT_GROUP=libvirt
 	fi
 
-	if ! getent group libvirt >/dev/null; then
+	if ! getent group ${LIBVIRT_GROUP} >/dev/null; then
 		addgroup --system ${LIBVIRT_GROUP}
 	fi
 

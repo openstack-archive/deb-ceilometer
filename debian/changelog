@@ -1,6 +1,8 @@
 ceilometer (2013.2-2) UNRELEASED; urgency=low
 
   * Added configuration of the keystone_authtoken through Debconf.
+  * Fixed ${LIBVIRT_GROUP} instead of just libvirt in postinst to have it work
+    as well on Ubuntu.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 28 Oct 2013 22:34:50 +0800
 
