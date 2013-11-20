@@ -1,4 +1,4 @@
-ceilometer (2013.2-2) UNRELEASED; urgency=low
+ceilometer (2013.2-2) unstable; urgency=low
 
   * Added configuration of the keystone_authtoken through Debconf.
   * Fixed ${LIBVIRT_GROUP} instead of just libvirt in postinst to have it work
