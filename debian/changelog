@@ -1,3 +1,9 @@
+ceilometer (2013.2-3) UNRELEASED; urgency=low
+
+  * Added missing (build-)depends: python-six (>= 1.4.1).
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 26 Nov 2013 22:37:47 +0800
+
 ceilometer (2013.2-2) unstable; urgency=low
 
   * Added configuration of the keystone_authtoken through Debconf.
