@@ -1,4 +1,4 @@
-ceilometer (2013.2-3) UNRELEASED; urgency=low
+ceilometer (2013.2-3) unstable; urgency=medium
 
   * Added missing (build-)depends: python-six (>= 1.4.1).
 
