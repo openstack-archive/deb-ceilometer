@@ -4,10 +4,10 @@
 # Yuri Kozlov <yuray@komyakino.ru>, 2013.
 msgid ""
 msgstr ""
-"Project-Id-Version: ceilometer 2013.1.2-4\n"
+"Project-Id-Version: ceilometer 2013.2-1\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
-"POT-Creation-Date: 2013-10-28 22:32+0800\n"
-"PO-Revision-Date: 2013-08-30 08:50+0400\n"
+"POT-Creation-Date: 2013-09-25 16:34+0800\n"
+"PO-Revision-Date: 2013-11-17 08:46+0400\n"
 "Last-Translator: Yuri Kozlov <yuray@komyakino.ru>\n"
 "Language-Team: Russian <debian-l10n-russian@lists.debian.org>\n"
 "Language: ru\n"
@@ -126,7 +126,7 @@ msgstr ""
 #. Description
 #: ../ceilometer-common.templates:2001
 msgid "IP address of your RabbitMQ host:"
-msgstr ""
+msgstr "IP-адрес узла RabbitMQ:"
 
 #. Type: string
 #. Description
@@ -140,110 +140,37 @@ msgid ""
 "In order to interoperate with other components of OpenStack, this package "
 "needs to connect to a central RabbitMQ server."
 msgstr ""
+"Для взаимодействия с другими компонентами OpenStack, этому пакету "
+"необходимо подключаться к центральному серверу RabbitMQ."
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:2001
-#, fuzzy
 #| msgid "Please enter the IP address that will be used to contact Ceilometer."
 msgid "Please specify the IP address of that server."
-msgstr ""
-"Введите IP-адрес, который будет использован для подключения к Ceilometer."
+msgstr "Укажите IP-адрес этого сервера."
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:3001
 msgid "Username for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "Имя пользователя для подключения к серверу RabbitMQ:"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:3001
 msgid "Please specify the username used to connect to the RabbitMQ server."
-msgstr ""
+msgstr "Введите имя пользователя для подключения к серверу RabbitMQ."
 
 #. Type: password
 #. Description
 #: ../ceilometer-common.templates:4001
 msgid "Password for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "Пароль для подключения к серверу RabbitMQ:"
 
 #. Type: password
 #. Description
 #: ../ceilometer-common.templates:4001
 msgid "Please specify the password used to connect to the RabbitMQ server."
-msgstr ""
+msgstr "Введите пароль для подключения к серверу RabbitMQ."
 
-#. Type: string
-#. Description
-#: ../ceilometer-common.templates:5001
-msgid "Authentication server hostname:"
-msgstr ""
-
-#. Type: string
-#. Description
-#: ../ceilometer-common.templates:5001
-msgid ""
-"Please specify the hostname of the authentication server for Ceilometer. "
-"Typically this is also the hostname of the OpenStack Identity Service "
-"(Keystone)."
-msgstr ""
-
-#. Type: string
-#. Description
-#. Translators: a "tenant" in OpenStack world is
-#. an entity that contains one or more username/password couples.
-#. It's typically the tenant that will be used for billing. Having more than one
-#. username/password is very helpful in larger organization.
-#. You're advised to either keep "tenant" without translating it
-#. or keep it parenthezised. Example for French:
-#. locataire ("tenant")
-#: ../ceilometer-common.templates:6001
-msgid "Authentication server tenant name:"
-msgstr ""
-
-#. Type: string
-#. Description
-#. Translators: a "tenant" in OpenStack world is
-#. an entity that contains one or more username/password couples.
-#. It's typically the tenant that will be used for billing. Having more than one
-#. username/password is very helpful in larger organization.
-#. You're advised to either keep "tenant" without translating it
-#. or keep it parenthezised. Example for French:
-#. locataire ("tenant")
-#: ../ceilometer-common.templates:6001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
-msgid "Please specify the authentication server tenant name."
-msgstr ""
-"Введите IP-адрес, который будет использован для подключения к Ceilometer."
-
-#. Type: string
-#. Description
-#: ../ceilometer-common.templates:7001
-msgid "Authentication server username:"
-msgstr ""
-
-#. Type: string
-#. Description
-#: ../ceilometer-common.templates:7001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
-msgid "Please specify the username to use with the authentication server."
-msgstr ""
-"Введите IP-адрес, который будет использован для подключения к Ceilometer."
-
-#. Type: password
-#. Description
-#: ../ceilometer-common.templates:8001
-msgid "Authentication server password:"
-msgstr ""
-
-#. Type: password
-#. Description
-#: ../ceilometer-common.templates:8001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
-msgid "Please specify the password to use with the authentication server."
-msgstr ""
-"Введите IP-адрес, который будет использован для подключения к Ceilometer."

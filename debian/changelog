@@ -4,6 +4,9 @@ ceilometer (2013.2-4) unstable; urgency=low
     URL in logs (Closes: #730227).
   * Switches from msgpack-python to python-msgpack in dependencies, as the
     package has been renamed (Closes: #730874).
+  * Updates some debconf translations, with warm thanks to:
+    - French, Julien Patriarca <leatherface@debian.org> (Closes: #728771).
+    - Russian, Yuri Kozlov <yuray@komyakino.ru> (Closes: #729774).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 04 Dec 2013 19:41:05 +0800
 
