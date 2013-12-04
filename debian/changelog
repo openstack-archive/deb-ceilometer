@@ -1,3 +1,9 @@
+ceilometer (2013.2-5) unstable; urgency=medium
+
+  * Adds call to ceilometer-expirer every day.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 05 Dec 2013 00:30:09 +0800
+
 ceilometer (2013.2-4) unstable; urgency=low
 
   * CVE-2013-6384: applied upstream patch mongodb, db2: do not print full
