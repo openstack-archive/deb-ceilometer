@@ -1,1 +1,2 @@
 removes-sqlalchemy-restriction.patch
+CVE-2013-6384_mongodb_db2_do_not_print_full_URL_in_logs.patch

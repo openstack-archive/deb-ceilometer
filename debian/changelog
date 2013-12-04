@@ -1,3 +1,10 @@
+ceilometer (2013.2-4) unstable; urgency=low
+
+  * CVE-2013-6384: applied upstream patch mongodb, db2: do not print full
+    URL in logs (Closes: #730227).
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 04 Dec 2013 19:41:05 +0800
+
 ceilometer (2013.2-3) unstable; urgency=medium
 
   * Added missing (build-)depends: python-six (>= 1.4.1).
