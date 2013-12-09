@@ -1,6 +1,8 @@
 ceilometer (2014.1~b1-1) experimental; urgency=low
 
   * New upstream release (Icehouse beta 1).
+  * Removes now applied upstream CVE-2013-6384 patch, refreshes
+    removes-sqlalchemy-restriction.patch
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 09 Dec 2013 17:09:32 +0800
 
