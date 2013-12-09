@@ -23,16 +23,16 @@
 
 from __future__ import division
 import copy
-import weakref
+import datetime
 import itertools
+import sys
+import weakref
 
 import bson.code
 import bson.objectid
-import datetime
 import pymongo
-import sys
 
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import storage
@@ -153,7 +153,8 @@ class ConnectionPool(object):
             client = self._pool.get(pool_key)()
             if client:
                 return client
-        LOG.info('connecting to MongoDB on %s', url)
+        LOG.info(_('Connecting to DB2 on %s'),
+                 connection_options['nodelist'])
         client = pymongo.MongoClient(
             url,
             safe=True)

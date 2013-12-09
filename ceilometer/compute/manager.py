@@ -22,9 +22,10 @@ from stevedore import extension
 from ceilometer import agent
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer import nova_client
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import service as os_service
 from ceilometer.openstack.common.rpc import service as rpc_service
+from ceilometer.openstack.common import service as os_service
 from ceilometer import service
 
 LOG = log.getLogger(__name__)
@@ -39,7 +40,7 @@ class PollingTask(agent.PollingTask):
                 cache = {}
                 for pollster in self.pollsters:
                     try:
-                        LOG.info("Polling pollster %s", pollster.name)
+                        LOG.info(_("Polling pollster %s"), pollster.name)
                         samples = list(pollster.obj.get_samples(
                             self.manager,
                             cache,
@@ -47,15 +48,16 @@ class PollingTask(agent.PollingTask):
                         ))
                         publisher(samples)
                     except Exception as err:
-                        LOG.warning('Continue after error from %s: %s',
-                                    pollster.name, err)
+                        LOG.warning(_(
+                            'Continue after error from %(name)s: %(error)s')
+                            % ({'name': pollster.name, 'error': err}))
                         LOG.exception(err)
 
     def poll_and_publish(self):
         try:
             instances = self.manager.nv.instance_get_all_by_host(cfg.CONF.host)
         except Exception as err:
-            LOG.exception('Unable to retrieve instances: %s', err)
+            LOG.exception(_('Unable to retrieve instances: %s') % err)
         else:
             self.poll_and_publish_instances(instances)
 
@@ -74,19 +76,6 @@ class AgentManager(agent.AgentManager):
 
     def create_polling_task(self):
         return PollingTask(self)
-
-    def setup_notifier_task(self):
-        """For nova notifier usage."""
-        task = PollingTask(self)
-        for pollster in self.pollster_manager.extensions:
-            task.add(
-                pollster,
-                self.pipeline_manager.pipelines)
-        self.notifier_task = task
-
-    def poll_instance(self, context, instance):
-        """Poll one instance."""
-        self.notifier_task.poll_and_publish_instances([instance])
 
     @property
     def inspector(self):

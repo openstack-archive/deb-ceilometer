@@ -19,12 +19,12 @@
 
 import abc
 
-from oslo.config import cfg
-
 from ceilometerclient import client as ceiloclient
+from oslo.config import cfg
+import six
 
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common.gettextutils import _
 
 LOG = log.getLogger(__name__)
 
@@ -33,10 +33,9 @@ OK = 'ok'
 ALARM = 'alarm'
 
 
+@six.add_metaclass(abc.ABCMeta)
 class Evaluator(object):
     """Base class for alarm rule evaluator plugins."""
-
-    __metaclass__ = abc.ABCMeta
 
     def __init__(self, notifier):
         self.notifier = notifier
@@ -80,4 +79,8 @@ class Evaluator(object):
 
     @abc.abstractmethod
     def evaluate(self, alarm):
-        pass
+        '''interface definition
+
+        evaluate an alarm
+        alarm Alarm: an instance of the Alarm
+        '''

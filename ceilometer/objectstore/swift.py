@@ -19,18 +19,17 @@
 """
 
 from __future__ import absolute_import
+import urlparse
 
+from keystoneclient import exceptions
 from oslo.config import cfg
 from swiftclient import client as swift
-from keystoneclient import exceptions
 
-from ceilometer import sample
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import plugin
-
-from urlparse import urljoin
+from ceilometer import sample
 
 
 LOG = log.getLogger(__name__)
@@ -67,7 +66,7 @@ class _Base(plugin.PollsterBase):
             LOG.debug(_("Swift endpoint not found"))
             raise StopIteration()
 
-        for t in cache['tenants']:
+        for t in cache[self.CACHE_KEY_TENANT]:
             yield (t.id, swift.head_account(self._neaten_url(endpoint, t.id),
                                             ksclient.auth_token))
 
@@ -75,7 +74,8 @@ class _Base(plugin.PollsterBase):
     def _neaten_url(endpoint, tenant_id):
         """Transform the registered url to standard and valid format.
         """
-        return urljoin(endpoint, '/v1/' + cfg.CONF.reseller_prefix + tenant_id)
+        return urlparse.urljoin(endpoint,
+                                '/v1/' + cfg.CONF.reseller_prefix + tenant_id)
 
 
 class ObjectsPollster(_Base):

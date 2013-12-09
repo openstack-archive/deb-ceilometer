@@ -20,11 +20,10 @@
  Installing Manually
 =====================
 
-Installing the Collector
-========================
-
+Installing the notification agent
+======================================
 .. index::
-   double: installing; collector
+   double: installing; agent-notification
 
 1. If you want to be able to retrieve image samples, you need to instruct
    Glance to send notifications to the bus by changing ``notifier_strategy``
@@ -64,23 +63,30 @@ Installing the Collector
    And adding ``ceilometer`` in the ``pipeline`` of that same file, right
    before ``proxy-server``.
 
-4. Install MongoDB.
+   Additionally, if you want to store extra metadata from headers, you need
+   to set ``metadata_headers`` so it would look like::
 
-   Follow the instructions to install the MongoDB_ package for your
-   operating system, then start the service.
+     [filter:ceilometer]
+     use = egg:ceilometer#swift
+     metadata_headers = X-FOO, X-BAR
 
-5. Clone the ceilometer git repository to the management server::
+   .. note::
+
+        Please make sure that ceilometer's logging directory (if it's configured)
+        is read and write accessible for the user swift is started by.
+
+4. Clone the ceilometer git repository to the management server::
 
    $ cd /opt/stack
    $ git clone https://git.openstack.org/openstack/ceilometer.git
 
-6. As a user with ``root`` permissions or ``sudo`` privileges, run the
+5. As a user with ``root`` permissions or ``sudo`` privileges, run the
    ceilometer installer::
 
    $ cd ceilometer
    $ sudo python setup.py install
 
-7. Copy the sample configuration files from the source tree
+6. Copy the sample configuration files from the source tree
    to their final location.
 
    ::
@@ -90,7 +96,7 @@ Installing the Collector
       $ cp etc/ceilometer/*.yaml /etc/ceilometer
       $ cp etc/ceilometer/ceilometer.conf.sample /etc/ceilometer/ceilometer.conf
 
-8. Edit ``/etc/ceilometer/ceilometer.conf``
+7. Edit ``/etc/ceilometer/ceilometer.conf``
 
    1. Configure RPC
 
@@ -119,13 +125,88 @@ Installing the Collector
    Refer to :doc:`/configuration` for details about any other options
    you might want to modify before starting the service.
 
-9. Start the collector.
+8. Start the notification daemon.
+
+   ::
+
+     $ ceilometer-agent-notification
+
+   .. note::
+
+      The default development configuration of the collector logs to
+      stderr, so you may want to run this step using a screen session
+      or other tool for maintaining a long-running program in the
+      background.
+
+
+Installing the collector
+========================
+
+.. index::
+   double: installing; collector
+
+1. Install MongoDB.
+
+   Follow the instructions to install the MongoDB_ package for your
+   operating system, then start the service.
+
+2. Clone the ceilometer git repository to the management server::
+
+   $ cd /opt/stack
+   $ git clone https://git.openstack.org/openstack/ceilometer.git
+
+3. As a user with ``root`` permissions or ``sudo`` privileges, run the
+   ceilometer installer::
+
+   $ cd ceilometer
+   $ sudo python setup.py install
+
+4. Copy the sample configuration files from the source tree
+   to their final location.
+
+   ::
+
+      $ mkdir -p /etc/ceilometer
+      $ cp etc/ceilometer/*.json /etc/ceilometer
+      $ cp etc/ceilometer/*.yaml /etc/ceilometer
+      $ cp etc/ceilometer/ceilometer.conf.sample /etc/ceilometer/ceilometer.conf
+
+5. Edit ``/etc/ceilometer/ceilometer.conf``
+
+   1. Configure RPC
+
+      Set the RPC-related options correctly so ceilometer's daemons
+      can communicate with each other and receive notifications from
+      the other projects.
+
+      In particular, look for the ``*_control_exchange`` options and
+      make sure the names are correct. If you did not change the
+      ``control_exchange`` settings for the other components, the
+      defaults should be correct.
+
+      .. note::
+
+         Ceilometer makes extensive use of the messaging bus, but has
+         not yet been tested with ZeroMQ. We recommend using Rabbit or
+         qpid for now.
+
+   2. Set the ``metering_secret`` value.
+
+      Set the ``metering_secret`` value to a large, random, value. Use
+      the same value in all ceilometer configuration files, on all
+      nodes, so that messages passing between the nodes can be
+      validated.
+
+   Refer to :doc:`/configuration` for details about any other options
+   you might want to modify before starting the service.
+
+6. Start the collector.
 
    ::
 
      $ ceilometer-collector
 
-   .. note:: 
+   .. note::
 
       The default development configuration of the collector logs to
       stderr, so you may want to run this step using a screen session
@@ -423,8 +504,8 @@ configured in ceilometer configuration file. These two dispatchers are
 shipped in the Ceilometer egg and defined in the entry_points as follows::
 
    [ceilometer.dispatcher]
-   file = ceilometer.collector.dispatcher.file:FileDispatcher
-   database = ceilometer.collector.dispatcher.database:DatabaseDispatcher
+   file = ceilometer.dispatcher.file:FileDispatcher
+   database = ceilometer.dispatcher.database:DatabaseDispatcher
 
 To use both dispatchers on a Ceilometer collector service, add the following
 line in file ceilometer.conf::

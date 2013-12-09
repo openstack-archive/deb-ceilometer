@@ -16,23 +16,19 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-
-from sqlalchemy import String
-from sqlalchemy import Text
 from sqlalchemy import MetaData
+from sqlalchemy import String
 from sqlalchemy import Table
-
-
-meta = MetaData()
+from sqlalchemy import Text
 
 
 def upgrade(migrate_engine):
-    meta.bind = migrate_engine
+    meta = MetaData(bind=migrate_engine)
     alm_hist = Table('alarm_history', meta, autoload=True)
     alm_hist.c.detail.alter(type=Text)
 
 
 def downgrade(migrate_engine):
-    meta.bind = migrate_engine
+    meta = MetaData(bind=migrate_engine)
     alm_hist = Table('alarm_history', meta, autoload=True)
     alm_hist.c.detail.alter(type=String(255))

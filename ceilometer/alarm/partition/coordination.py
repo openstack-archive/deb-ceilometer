@@ -21,9 +21,9 @@ import random
 import uuid
 
 from ceilometer.alarm import rpc as rpc_alarm
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
-from ceilometer.openstack.common.gettextutils import _
 
 
 LOG = log.getLogger(__name__)
@@ -240,8 +240,8 @@ class PartitionCoordinator(object):
             # nothing to distribute, but check anyway if overtaken
             still_ahead = self.this < self.oldest
         self.last_alarms = set(alarms)
-        LOG.info('%(this)s not overtaken as master? %(still_ahead)s' %
-                 dict(this=self.this, still_ahead=still_ahead))
+        LOG.info(_('%(this)s not overtaken as master? %(still_ahead)s') %
+                ({'this': self.this, 'still_ahead': still_ahead}))
         return still_ahead
 
     def check_mastership(self, eval_interval, api_client):

@@ -16,12 +16,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from collections import defaultdict
+import collections
 
-from ceilometer import sample
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
+from ceilometer import sample
 from ceilometer import transformer
 
 LOG = log.getLogger(__name__)
@@ -34,7 +34,7 @@ class Namespace(object):
        to yield false when used in a boolean expression.
     """
     def __init__(self, seed):
-        self.__dict__ = defaultdict(lambda: Namespace({}))
+        self.__dict__ = collections.defaultdict(lambda: Namespace({}))
         self.__dict__.update(seed)
         for k, v in self.__dict__.iteritems():
             if isinstance(v, dict):
@@ -98,10 +98,10 @@ class ScalingTransformer(transformer.TransformerBase):
 
     def handle_sample(self, context, s):
         """Handle a sample, converting if necessary."""
-        LOG.debug('handling sample %s', (s,))
+        LOG.debug(_('handling sample %s'), (s,))
         if (self.source.get('unit', s.unit) == s.unit):
             s = self._convert(s)
-            LOG.debug(_('converted to: %s') % (s,))
+            LOG.debug(_('converted to: %s'), (s,))
         return s
 
 
@@ -120,7 +120,7 @@ class RateOfChangeTransformer(ScalingTransformer):
 
     def handle_sample(self, context, s):
         """Handle a sample, converting if necessary."""
-        LOG.debug('handling sample %s', (s,))
+        LOG.debug(_('handling sample %s'), (s,))
         key = s.name + s.resource_id
         prev = self.cache.get(key)
         timestamp = timeutils.parse_isotime(s.timestamp)
@@ -141,9 +141,9 @@ class RateOfChangeTransformer(ScalingTransformer):
                               if time_delta else 0.0)
 
             s = self._convert(s, rate_of_change)
-            LOG.debug(_('converted to: %s') % (s,))
+            LOG.debug(_('converted to: %s'), (s,))
         else:
-            LOG.warn(_('dropping sample with no predecessor: %s') %
+            LOG.warn(_('dropping sample with no predecessor: %s'),
                      (s,))
             s = None
         return s

@@ -18,15 +18,15 @@
 """Storage backend management
 """
 
-
 import urlparse
 
 from oslo.config import cfg
 from stevedore import driver
 
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
-from ceilometer import utils
 from ceilometer import service
+from ceilometer import utils
 
 
 LOG = log.getLogger(__name__)
@@ -68,8 +68,9 @@ def get_engine(conf):
         conf.set_override('connection', conf.database_connection,
                           group='database')
     engine_name = urlparse.urlparse(conf.database.connection).scheme
-    LOG.debug('looking for %r driver in %r',
-              engine_name, STORAGE_ENGINE_NAMESPACE)
+    LOG.debug(_('looking for %(name)r driver in %(namespace)r') % (
+              {'name': engine_name,
+               'namespace': STORAGE_ENGINE_NAMESPACE}))
     mgr = driver.DriverManager(STORAGE_ENGINE_NAMESPACE,
                                engine_name,
                                invoke_on_load=True)
@@ -117,7 +118,7 @@ class EventFilter(object):
 
     :param start: UTC start datetime (mandatory)
     :param end: UTC end datetime (mandatory)
-    :param event_name: the name of the event. None for all.
+    :param event_type: the name of the event. None for all.
     :param traits: the trait filter dict, all of which are optional
                     {'key': <key>,
                     't_string': <value>,
@@ -127,10 +128,10 @@ class EventFilter(object):
                    currently, only one trait dict is supported.
     """
 
-    def __init__(self, start, end, event_name=None, traits={}):
+    def __init__(self, start, end, event_type=None, traits={}):
         self.start = utils.sanitize_timestamp(start)
         self.end = utils.sanitize_timestamp(end)
-        self.event_name = event_name
+        self.event_type = event_type
         self.traits = traits
 
 
@@ -141,7 +142,7 @@ def dbsync():
 
 def expirer():
     service.prepare_service()
-    LOG.debug("Clearing expired metering data")
+    LOG.debug(_("Clearing expired metering data"))
     storage_conn = get_connection(cfg.CONF)
     storage_conn.clear_expired_metering_data(
         cfg.CONF.database.time_to_live)

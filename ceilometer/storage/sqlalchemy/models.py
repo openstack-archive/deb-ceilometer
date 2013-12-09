@@ -23,7 +23,7 @@ import urlparse
 
 from oslo.config import cfg
 from sqlalchemy import Column, Integer, String, Table, ForeignKey, DateTime, \
-    Index, UniqueConstraint
+    Index, UniqueConstraint, BigInteger
 from sqlalchemy import Float, Boolean, Text
 from sqlalchemy.dialects.mysql import DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
@@ -141,6 +141,54 @@ class Source(Base):
     id = Column(String(255), primary_key=True)
 
 
+class MetaText(Base):
+    """Metering text metadata."""
+
+    __tablename__ = 'metadata_text'
+    __table_args__ = (
+        Index('ix_meta_text_key', 'meta_key'),
+    )
+    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    meta_key = Column(String(255), primary_key=True)
+    value = Column(Text)
+
+
+class MetaBool(Base):
+    """Metering boolean metadata."""
+
+    __tablename__ = 'metadata_bool'
+    __table_args__ = (
+        Index('ix_meta_bool_key', 'meta_key'),
+    )
+    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    meta_key = Column(String(255), primary_key=True)
+    value = Column(Boolean)
+
+
+class MetaBigInt(Base):
+    """Metering integer metadata."""
+
+    __tablename__ = 'metadata_int'
+    __table_args__ = (
+        Index('ix_meta_int_key', 'meta_key'),
+    )
+    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    meta_key = Column(String(255), primary_key=True)
+    value = Column(BigInteger, default=False)
+
+
+class MetaFloat(Base):
+    """Metering float metadata."""
+
+    __tablename__ = 'metadata_float'
+    __table_args__ = (
+        Index('ix_meta_float_key', 'meta_key'),
+    )
+    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    meta_key = Column(String(255), primary_key=True)
+    value = Column(Float, default=False)
+
+
 class Meter(Base):
     """Metering data."""
 
@@ -241,47 +289,70 @@ class AlarmChange(Base):
     timestamp = Column(DateTime, default=timeutils.utcnow)
 
 
-class UniqueName(Base):
-    """Key names should only be stored once.
-    """
-    __tablename__ = 'unique_name'
-    __table_args__ = (
-        Index('ix_unique_name_key', 'key'),
-    )
+class EventType(Base):
+    """Types of event records."""
+    __tablename__ = 'event_type'
 
     id = Column(Integer, primary_key=True)
-    key = Column(String(255))
+    desc = Column(String(255), unique=True)
 
-    def __init__(self, key):
-        self.key = key
+    def __init__(self, event_type):
+        self.desc = event_type
 
     def __repr__(self):
-        return "<UniqueName: %s>" % self.key
+        return "<EventType: %s>" % self.desc
 
 
 class Event(Base):
     __tablename__ = 'event'
     __table_args__ = (
-        Index('unique_name_id', 'unique_name_id'),
         Index('ix_event_message_id', 'message_id'),
-        Index('ix_event_generated', 'generated'),
+        Index('ix_event_type_id', 'event_type_id'),
+        Index('ix_event_generated', 'generated')
     )
     id = Column(Integer, primary_key=True)
     message_id = Column(String(50), unique=True)
     generated = Column(Float(asdecimal=True))
 
-    unique_name_id = Column(Integer, ForeignKey('unique_name.id'))
-    unique_name = relationship("UniqueName", backref=backref('unique_name',
-                               order_by=id))
+    event_type_id = Column(Integer, ForeignKey('event_type.id'))
+    event_type = relationship("EventType", backref=backref('event_type'))
 
-    def __init__(self, message_id, event, generated):
+    def __init__(self, message_id, event_type, generated):
         self.message_id = message_id
-        self.unique_name = event
+        self.event_type = event_type
         self.generated = generated
 
     def __repr__(self):
-        return "<Event %d('Event: %s %s, Generated: %s')>" % \
-               (self.id, self.message_id, self.unique_name, self.generated)
+        return "<Event %d('Event: %s %s, Generated: %s')>" % (self.id,
+                                                              self.message_id,
+                                                              self.event_type,
+                                                              self.generated)
+
+
+class TraitType(Base):
+    """Types of event traits. A trait type includes a description
+    and a data type. Uniqueness is enforced compositely on the
+    data_type and desc fields. This is to accommodate cases, such as
+    'generated', which, depending on the corresponding event,
+    could be a date, a boolean, or a float.
+
+    """
+    __tablename__ = 'trait_type'
+    __table_args__ = (
+        UniqueConstraint('desc', 'data_type', name='tt_unique'),
+        Index('ix_trait_type', 'desc')
+    )
+
+    id = Column(Integer, primary_key=True)
+    desc = Column(String(255))
+    data_type = Column(Integer)
+
+    def __init__(self, desc, data_type):
+        self.desc = desc
+        self.data_type = data_type
+
+    def __repr__(self):
+        return "<TraitType: %s:%d>" % (self.desc, self.data_type)
 
 
 class Trait(Base):
@@ -290,15 +361,13 @@ class Trait(Base):
         Index('ix_trait_t_int', 't_int'),
         Index('ix_trait_t_string', 't_string'),
         Index('ix_trait_t_datetime', 't_datetime'),
-        Index('ix_trait_t_type', 't_type'),
         Index('ix_trait_t_float', 't_float'),
     )
     id = Column(Integer, primary_key=True)
 
-    name_id = Column(Integer, ForeignKey('unique_name.id'))
-    name = relationship("UniqueName", backref=backref('name', order_by=id))
+    trait_type_id = Column(Integer, ForeignKey('trait_type.id'))
+    trait_type = relationship("TraitType", backref=backref('trait_type'))
 
-    t_type = Column(Integer)
     t_string = Column(String(255), nullable=True, default=None)
     t_float = Column(Float, nullable=True, default=None)
     t_int = Column(Integer, nullable=True, default=None)
@@ -312,10 +381,9 @@ class Trait(Base):
                   api_models.Trait.INT_TYPE: 't_int',
                   api_models.Trait.DATETIME_TYPE: 't_datetime'}
 
-    def __init__(self, name, event, t_type, t_string=None, t_float=None,
-                 t_int=None, t_datetime=None):
-        self.name = name
-        self.t_type = t_type
+    def __init__(self, trait_type, event, t_string=None,
+                 t_float=None, t_int=None, t_datetime=None):
+        self.trait_type = trait_type
         self.t_string = t_string
         self.t_float = t_float
         self.t_int = t_int
@@ -323,17 +391,31 @@ class Trait(Base):
         self.event = event
 
     def get_value(self):
-        if self.t_type == api_models.Trait.INT_TYPE:
+        if self.trait_type is None:
+            dtype = None
+        else:
+            dtype = self.trait_type.data_type
+
+        if dtype == api_models.Trait.INT_TYPE:
             return self.t_int
-        if self.t_type == api_models.Trait.FLOAT_TYPE:
+        if dtype == api_models.Trait.FLOAT_TYPE:
             return self.t_float
-        if self.t_type == api_models.Trait.DATETIME_TYPE:
+        if dtype == api_models.Trait.DATETIME_TYPE:
             return utils.decimal_to_dt(self.t_datetime)
-        if self.t_type == api_models.Trait.TEXT_TYPE:
+        if dtype == api_models.Trait.TEXT_TYPE:
             return self.t_string
+
         return None
 
     def __repr__(self):
-        return "<Trait(%s) %d=%s/%s/%s/%s on %s>" % (self.name, self.t_type,
-               self.t_string, self.t_float, self.t_int, self.t_datetime,
-               self.event)
+        name = self.trait_type.name if self.trait_type else None
+        data_type = self.trait_type.data_type if self.trait_type\
+            else api_models.Trait.NONE_TYPE
+
+        return "<Trait(%s) %d=%s/%s/%s/%s on %s>" % (name,
+                                                     data_type,
+                                                     self.t_string,
+                                                     self.t_float,
+                                                     self.t_int,
+                                                     self.t_datetime,
+                                                     self.event)

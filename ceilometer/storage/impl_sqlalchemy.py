@@ -18,33 +18,25 @@
 """SQLAlchemy storage backend."""
 
 from __future__ import absolute_import
-
 import datetime
 import operator
 import os
-from sqlalchemy import func
+import types
+
+from sqlalchemy import and_
 from sqlalchemy import desc
+from sqlalchemy import func
 from sqlalchemy.orm import aliased
 
 from ceilometer.openstack.common.db import exception as dbexc
 import ceilometer.openstack.common.db.sqlalchemy.session as sqlalchemy_session
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import base
 from ceilometer.storage import models as api_models
 from ceilometer.storage.sqlalchemy import migration
-from ceilometer.storage.sqlalchemy.models import Alarm
-from ceilometer.storage.sqlalchemy.models import AlarmChange
-from ceilometer.storage.sqlalchemy.models import Base
-from ceilometer.storage.sqlalchemy.models import Event
-from ceilometer.storage.sqlalchemy.models import Meter
-from ceilometer.storage.sqlalchemy.models import Project
-from ceilometer.storage.sqlalchemy.models import Resource
-from ceilometer.storage.sqlalchemy.models import Source
-from ceilometer.storage.sqlalchemy.models import Trait
-from ceilometer.storage.sqlalchemy.models import UniqueName
-from ceilometer.storage.sqlalchemy.models import User
+from ceilometer.storage.sqlalchemy import models
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
@@ -100,7 +92,40 @@ class SQLAlchemyStorage(base.StorageEngine):
         return Connection(conf)
 
 
-def make_query_from_filter(query, sample_filter, require_meter=True):
+META_TYPE_MAP = {bool: models.MetaBool,
+                 str: models.MetaText,
+                 unicode: models.MetaText,
+                 types.NoneType: models.MetaText,
+                 int: models.MetaBigInt,
+                 long: models.MetaBigInt,
+                 float: models.MetaFloat}
+
+
+def apply_metaquery_filter(session, query, metaquery):
+    """Apply provided metaquery filter to existing query.
+
+    :param session: session used for original query
+    :param query: Query instance
+    :param metaquery: dict with metadata to match on.
+    """
+
+    for k, v in metaquery.iteritems():
+        key = k[9:]  # strip out 'metadata.' prefix
+        try:
+            _model = META_TYPE_MAP[type(v)]
+        except KeyError:
+            raise NotImplementedError(_('Query on %(key)s is of %(value)s '
+                                        'type and is not supported') %
+                                      {"key": k, "value": type(v)})
+        else:
+            meta_q = session.query(_model).\
+                filter(and_(_model.meta_key == key,
+                            _model.value == v)).subquery()
+            query = query.filter_by(id=meta_q.c.id)
+    return query
+
+
+def make_query_from_filter(session, query, sample_filter, require_meter=True):
     """Return a query dictionary based on the settings in the filter.
 
     :param filter: SampleFilter instance
@@ -109,23 +134,23 @@ def make_query_from_filter(query, sample_filter, require_meter=True):
     """
 
     if sample_filter.meter:
-        query = query.filter(Meter.counter_name == sample_filter.meter)
+        query = query.filter(models.Meter.counter_name == sample_filter.meter)
     elif require_meter:
         raise RuntimeError(_('Missing required meter specifier'))
     if sample_filter.source:
-        query = query.filter(Meter.sources.any(id=sample_filter.source))
+        query = query.filter(models.Meter.sources.any(id=sample_filter.source))
     if sample_filter.start:
         ts_start = sample_filter.start
         if sample_filter.start_timestamp_op == 'gt':
-            query = query.filter(Meter.timestamp > ts_start)
+            query = query.filter(models.Meter.timestamp > ts_start)
         else:
-            query = query.filter(Meter.timestamp >= ts_start)
+            query = query.filter(models.Meter.timestamp >= ts_start)
     if sample_filter.end:
         ts_end = sample_filter.end
         if sample_filter.end_timestamp_op == 'le':
-            query = query.filter(Meter.timestamp <= ts_end)
+            query = query.filter(models.Meter.timestamp <= ts_end)
         else:
-            query = query.filter(Meter.timestamp < ts_end)
+            query = query.filter(models.Meter.timestamp < ts_end)
     if sample_filter.user:
         query = query.filter_by(user_id=sample_filter.user)
     if sample_filter.project:
@@ -134,7 +159,8 @@ def make_query_from_filter(query, sample_filter, require_meter=True):
         query = query.filter_by(resource_id=sample_filter.resource)
 
     if sample_filter.metaquery:
-        raise NotImplementedError(_('metaquery not implemented'))
+        query = apply_metaquery_filter(session, query,
+                                       sample_filter.metaquery)
 
     return query
 
@@ -155,11 +181,46 @@ class Connection(base.Connection):
     def clear(self):
         session = sqlalchemy_session.get_session()
         engine = session.get_bind()
-        for table in reversed(Base.metadata.sorted_tables):
+        for table in reversed(models.Base.metadata.sorted_tables):
             engine.execute(table.delete())
 
     @staticmethod
-    def record_metering_data(data):
+    def _create_or_update(session, model_class, _id, source=None, **kwargs):
+        if not _id:
+            return None
+
+        try:
+            # create a nested session for the case of two call of
+            # record_metering_data run in parallel to not fail the
+            # record of this sample
+            # (except for sqlite, that doesn't support nested
+            # transaction and doesn't have concurrency problem)
+            nested = session.connection().dialect.name != 'sqlite'
+
+            # raise dbexc.DBDuplicateEntry manually for sqlite
+            # to not break the current session
+            if not nested and session.query(model_class).get(str(_id)):
+                raise dbexc.DBDuplicateEntry()
+
+            with session.begin(nested=nested,
+                               subtransactions=not nested):
+                obj = model_class(id=str(_id))
+                session.add(obj)
+        except dbexc.DBDuplicateEntry:
+            # requery the object from the db if this is an other
+            # parallel/previous call of record_metering_data that
+            # have successfully created this object
+            obj = session.query(model_class).get(str(_id))
+
+        # update the object
+        if source and not filter(lambda x: x.id == source.id, obj.sources):
+            obj.sources.append(source)
+        for k in kwargs:
+            setattr(obj, k, kwargs[k])
+        return obj
+
+    @classmethod
+    def record_metering_data(cls, data):
         """Write the data to the backend storage system.
 
         :param data: a dictionary such as returned by
@@ -167,44 +228,24 @@ class Connection(base.Connection):
         """
         session = sqlalchemy_session.get_session()
         with session.begin():
-            if data['source']:
-                source = session.query(Source).get(data['source'])
-                if not source:
-                    source = Source(id=data['source'])
-                    session.add(source)
-            else:
-                source = None
-
-            # create/update user && project, add/update their sources list
-            if data['user_id']:
-                user = session.merge(User(id=str(data['user_id'])))
-                if not filter(lambda x: x.id == source.id, user.sources):
-                    user.sources.append(source)
-            else:
-                user = None
-
-            if data['project_id']:
-                project = session.merge(Project(id=str(data['project_id'])))
-                if not filter(lambda x: x.id == source.id, project.sources):
-                    project.sources.append(source)
-            else:
-                project = None
-
             # Record the updated resource metadata
             rmetadata = data['resource_metadata']
-
-            resource = session.merge(Resource(id=str(data['resource_id'])))
-            if not filter(lambda x: x.id == source.id, resource.sources):
-                resource.sources.append(source)
-            resource.project = project
-            resource.user = user
-            # Current metadata being used and when it was last updated.
-            resource.resource_metadata = rmetadata
+            source = cls._create_or_update(session, models.Source,
+                                           data['source'])
+            user = cls._create_or_update(session, models.User, data['user_id'],
+                                         source)
+            project = cls._create_or_update(session, models.Project,
+                                            data['project_id'], source)
+            resource = cls._create_or_update(session, models.Resource,
+                                             data['resource_id'], source,
+                                             user=user, project=project,
+                                             resource_metadata=rmetadata)
 
             # Record the raw data for the meter.
-            meter = Meter(counter_type=data['counter_type'],
-                          counter_unit=data['counter_unit'],
-                          counter_name=data['counter_name'], resource=resource)
+            meter = models.Meter(counter_type=data['counter_type'],
+                                 counter_unit=data['counter_unit'],
+                                 counter_name=data['counter_name'],
+                                 resource=resource)
             session.add(meter)
             if not filter(lambda x: x.id == source.id, meter.sources):
                 meter.sources.append(source)
@@ -217,6 +258,19 @@ class Connection(base.Connection):
             meter.message_id = data['message_id']
             session.flush()
 
+            if rmetadata:
+                if isinstance(rmetadata, dict):
+                    for key, v in utils.dict_to_keyval(rmetadata):
+                        try:
+                            _model = META_TYPE_MAP[type(v)]
+                        except KeyError:
+                            LOG.warn(_("Unknown metadata type. Key (%s) will "
+                                       "not be queryable."), key)
+                        else:
+                            session.add(_model(id=meter.id,
+                                               meta_key=key,
+                                               value=v))
+
     @staticmethod
     def clear_expired_metering_data(ttl):
         """Clear expired data from the backend storage system according to the
@@ -226,24 +280,26 @@ class Connection(base.Connection):
 
         """
         session = sqlalchemy_session.get_session()
-        query = session.query(Meter.id)
+        query = session.query(models.Meter.id)
         end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
-        query = query.filter(Meter.timestamp < end)
+        query = query.filter(models.Meter.timestamp < end)
         query.delete()
 
-        query = session.query(User.id).filter(~User.id.in_(
-            session.query(Meter.user_id).group_by(Meter.user_id)
+        query = session.query(models.User.id).filter(~models.User.id.in_(
+            session.query(models.Meter.user_id).group_by(models.Meter.user_id)
         ))
         query.delete(synchronize_session='fetch')
 
-        query = session.query(Project.id).filter(~Project.id.in_(
-            session.query(Meter.project_id).group_by(Meter.project_id)
-        ))
+        query = session.query(models.Project.id)\
+            .filter(~models.Project.id.in_(
+                session.query(models.Meter.project_id).group_by(
+                    models.Meter.project_id)))
         query.delete(synchronize_session='fetch')
 
-        query = session.query(Resource.id).filter(~Resource.id.in_(
-            session.query(Meter.resource_id).group_by(Meter.resource_id)
-        ))
+        query = session.query(models.Resource.id)\
+            .filter(~models.Resource.id.in_(
+                session.query(models.Meter.resource_id).group_by(
+                    models.Meter.resource_id)))
         query.delete(synchronize_session='fetch')
 
     @staticmethod
@@ -253,9 +309,9 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         """
         session = sqlalchemy_session.get_session()
-        query = session.query(User.id)
+        query = session.query(models.User.id)
         if source is not None:
-            query = query.filter(User.sources.any(id=source))
+            query = query.filter(models.User.sources.any(id=source))
         return (x[0] for x in query.all())
 
     @staticmethod
@@ -265,9 +321,9 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         """
         session = sqlalchemy_session.get_session()
-        query = session.query(Project.id)
+        query = session.query(models.Project.id)
         if source:
-            query = query.filter(Project.sources.any(id=source))
+            query = query.filter(models.Project.sources.any(id=source))
         return (x[0] for x in query.all())
 
     @staticmethod
@@ -294,8 +350,6 @@ class Connection(base.Connection):
         # just fail.
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
-        if metaquery:
-            raise NotImplementedError(_('metaquery not implemented'))
 
         # (thomasm) We need to get the max timestamp first, since that's the
         # most accurate. We also need to filter down in the subquery to
@@ -303,60 +357,65 @@ class Connection(base.Connection):
         session = sqlalchemy_session.get_session()
 
         ts_subquery = session.query(
-            Meter.resource_id,
-            func.max(Meter.timestamp).label("max_ts"),
-            func.min(Meter.timestamp).label("min_ts")
-        ).group_by(Meter.resource_id)
+            models.Meter.resource_id,
+            func.max(models.Meter.timestamp).label("max_ts"),
+            func.min(models.Meter.timestamp).label("min_ts")
+        ).group_by(models.Meter.resource_id)
 
         # Here are the basic 'eq' operation filters for the sample data.
-        for column, value in [(Meter.resource_id, resource),
-                              (Meter.user_id, user),
-                              (Meter.project_id, project)]:
+        for column, value in [(models.Meter.resource_id, resource),
+                              (models.Meter.user_id, user),
+                              (models.Meter.project_id, project)]:
             if value:
                 ts_subquery = ts_subquery.filter(column == value)
 
         if source:
             ts_subquery = ts_subquery.filter(
-                Meter.sources.any(id=source))
+                models.Meter.sources.any(id=source))
+
+        if metaquery:
+            ts_subquery = apply_metaquery_filter(session,
+                                                 ts_subquery,
+                                                 metaquery)
 
         # Here we limit the samples being used to a specific time period,
         # if requested.
         if start_timestamp:
             if start_timestamp_op == 'gt':
                 ts_subquery = ts_subquery.filter(
-                    Meter.timestamp > start_timestamp
-                )
+                    models.Meter.timestamp > start_timestamp)
             else:
                 ts_subquery = ts_subquery.filter(
-                    Meter.timestamp >= start_timestamp
-                )
+                    models.Meter.timestamp >= start_timestamp)
         if end_timestamp:
             if end_timestamp_op == 'le':
                 ts_subquery = ts_subquery.filter(
-                    Meter.timestamp <= end_timestamp
-                )
+                    models.Meter.timestamp <= end_timestamp)
             else:
                 ts_subquery = ts_subquery.filter(
-                    Meter.timestamp < end_timestamp
-                )
+                    models.Meter.timestamp < end_timestamp)
         ts_subquery = ts_subquery.subquery()
 
         # Now we need to get the max Meter.id out of the leftover results, to
         # break any ties.
         agg_subquery = session.query(
-            func.max(Meter.id).label("max_id"),
+            func.max(models.Meter.id).label("max_id"),
             ts_subquery
         ).filter(
-            Meter.resource_id == ts_subquery.c.resource_id,
-            Meter.timestamp == ts_subquery.c.max_ts
-        ).group_by(Meter.resource_id).subquery()
+            models.Meter.resource_id == ts_subquery.c.resource_id,
+            models.Meter.timestamp == ts_subquery.c.max_ts
+        ).group_by(
+            ts_subquery.c.resource_id,
+            ts_subquery.c.max_ts,
+            ts_subquery.c.min_ts
+        ).subquery()
 
         query = session.query(
-            Meter,
+            models.Meter,
             agg_subquery.c.min_ts,
             agg_subquery.c.max_ts
         ).filter(
-            Meter.id == agg_subquery.c.max_id
+            models.Meter.id == agg_subquery.c.max_id
         )
 
         for meter, first_ts, last_ts in query.all():
@@ -393,8 +452,6 @@ class Connection(base.Connection):
 
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
-        if metaquery:
-            raise NotImplementedError(_('metaquery not implemented'))
 
         session = sqlalchemy_session.get_session()
 
@@ -405,8 +462,9 @@ class Connection(base.Connection):
         # max() is used to choice a meter record, so the latest record
         # is selected for each (resource_id, counter_name).
         #
-        subquery_meter = session.query(func.max(Meter.id).label('id')).\
-            group_by(Meter.resource_id, Meter.counter_name).subquery()
+        subquery_meter = session.query(func.max(models.Meter.id).label('id'))\
+            .group_by(models.Meter.resource_id,
+                      models.Meter.counter_name).subquery()
 
         # The SQL of query_meter is essentially:
         #
@@ -415,21 +473,26 @@ class Connection(base.Connection):
         #   GROUP BY meter.resource_id, meter.counter_name) AS anon_2
         # ON meter.id = anon_2.id
         #
-        query_meter = session.query(Meter).\
-            join(subquery_meter, Meter.id == subquery_meter.c.id)
+        query_meter = session.query(models.Meter).\
+            join(subquery_meter, models.Meter.id == subquery_meter.c.id)
 
-        alias_meter = aliased(Meter, query_meter.subquery())
-        query = session.query(Resource, alias_meter).join(
-            alias_meter, Resource.id == alias_meter.resource_id)
+        if metaquery:
+            query_meter = apply_metaquery_filter(session,
+                                                 query_meter,
+                                                 metaquery)
+
+        alias_meter = aliased(models.Meter, query_meter.subquery())
+        query = session.query(models.Resource, alias_meter).join(
+            alias_meter, models.Resource.id == alias_meter.resource_id)
 
         if user is not None:
-            query = query.filter(Resource.user_id == user)
+            query = query.filter(models.Resource.user_id == user)
         if source is not None:
-            query = query.filter(Resource.sources.any(id=source))
+            query = query.filter(models.Resource.sources.any(id=source))
         if resource:
-            query = query.filter(Resource.id == resource)
+            query = query.filter(models.Resource.id == resource)
         if project is not None:
-            query = query.filter(Resource.project_id == project)
+            query = query.filter(models.Resource.project_id == project)
 
         for resource, meter in query.all():
             yield api_models.Meter(
@@ -452,12 +515,13 @@ class Connection(base.Connection):
             return
 
         session = sqlalchemy_session.get_session()
-        query = session.query(Meter)
-        query = make_query_from_filter(query, sample_filter,
+        query = session.query(models.Meter)
+        query = make_query_from_filter(session, query, sample_filter,
                                        require_meter=False)
         if limit:
             query = query.limit(limit)
-        samples = query.from_self().order_by(desc(Meter.timestamp)).all()
+        samples = query.from_self()\
+            .order_by(desc(models.Meter.timestamp)).all()
 
         for s in samples:
             # Remove the id generated by the database when
@@ -484,20 +548,20 @@ class Connection(base.Connection):
     @staticmethod
     def _make_stats_query(sample_filter, groupby):
         select = [
-            Meter.counter_unit.label('unit'),
-            func.min(Meter.timestamp).label('tsmin'),
-            func.max(Meter.timestamp).label('tsmax'),
-            func.avg(Meter.counter_volume).label('avg'),
-            func.sum(Meter.counter_volume).label('sum'),
-            func.min(Meter.counter_volume).label('min'),
-            func.max(Meter.counter_volume).label('max'),
-            func.count(Meter.counter_volume).label('count'),
+            models.Meter.counter_unit.label('unit'),
+            func.min(models.Meter.timestamp).label('tsmin'),
+            func.max(models.Meter.timestamp).label('tsmax'),
+            func.avg(models.Meter.counter_volume).label('avg'),
+            func.sum(models.Meter.counter_volume).label('sum'),
+            func.min(models.Meter.counter_volume).label('min'),
+            func.max(models.Meter.counter_volume).label('max'),
+            func.count(models.Meter.counter_volume).label('count'),
         ]
 
         session = sqlalchemy_session.get_session()
 
         if groupby:
-            group_attributes = [getattr(Meter, g) for g in groupby]
+            group_attributes = [getattr(models.Meter, g) for g in groupby]
             select.extend(group_attributes)
 
         query = session.query(*select)
@@ -505,7 +569,7 @@ class Connection(base.Connection):
         if groupby:
             query = query.group_by(*group_attributes)
 
-        return make_query_from_filter(query, sample_filter)
+        return make_query_from_filter(session, query, sample_filter)
 
     @staticmethod
     def _stats_result_to_model(result, period, period_start,
@@ -564,8 +628,8 @@ class Connection(base.Connection):
                 sample_filter.start or res.tsmin,
                 sample_filter.end or res.tsmax,
                 period):
-            q = query.filter(Meter.timestamp >= period_start)
-            q = q.filter(Meter.timestamp < period_end)
+            q = query.filter(models.Meter.timestamp >= period_start)
+            q = q.filter(models.Meter.timestamp < period_end)
             for r in q.all():
                 if r.count:
                     yield self._stats_result_to_model(
@@ -610,17 +674,17 @@ class Connection(base.Connection):
             raise NotImplementedError(_('Pagination not implemented'))
 
         session = sqlalchemy_session.get_session()
-        query = session.query(Alarm)
+        query = session.query(models.Alarm)
         if name is not None:
-            query = query.filter(Alarm.name == name)
+            query = query.filter(models.Alarm.name == name)
         if enabled is not None:
-            query = query.filter(Alarm.enabled == enabled)
+            query = query.filter(models.Alarm.enabled == enabled)
         if user is not None:
-            query = query.filter(Alarm.user_id == user)
+            query = query.filter(models.Alarm.user_id == user)
         if project is not None:
-            query = query.filter(Alarm.project_id == project)
+            query = query.filter(models.Alarm.project_id == project)
         if alarm_id is not None:
-            query = query.filter(Alarm.id == alarm_id)
+            query = query.filter(models.Alarm.id == alarm_id)
 
         return (self._row_to_alarm_model(x) for x in query.all())
 
@@ -631,9 +695,11 @@ class Connection(base.Connection):
         """
         session = sqlalchemy_session.get_session()
         with session.begin():
-            session.merge(User(id=alarm.user_id))
-            session.merge(Project(id=alarm.project_id))
-            alarm_row = Alarm(id=alarm.alarm_id)
+            Connection._create_or_update(session, models.User,
+                                         alarm.user_id)
+            Connection._create_or_update(session, models.Project,
+                                         alarm.project_id)
+            alarm_row = models.Alarm(id=alarm.alarm_id)
             alarm_row.update(alarm.as_dict())
             session.add(alarm_row)
             session.flush()
@@ -647,7 +713,7 @@ class Connection(base.Connection):
         """
         session = sqlalchemy_session.get_session()
         with session.begin():
-            alarm_row = session.merge(Alarm(id=alarm.alarm_id))
+            alarm_row = session.merge(models.Alarm(id=alarm.alarm_id))
             alarm_row.update(alarm.as_dict())
             session.flush()
 
@@ -661,7 +727,8 @@ class Connection(base.Connection):
         """
         session = sqlalchemy_session.get_session()
         with session.begin():
-            session.query(Alarm).filter(Alarm.id == alarm_id).delete()
+            session.query(models.Alarm).filter(
+                models.Alarm.id == alarm_id).delete()
             session.flush()
 
     @staticmethod
@@ -703,29 +770,34 @@ class Connection(base.Connection):
         :param end_timestamp_op: Optional timestamp end range operation
         """
         session = sqlalchemy_session.get_session()
-        query = session.query(AlarmChange)
-        query = query.filter(AlarmChange.alarm_id == alarm_id)
+        query = session.query(models.AlarmChange)
+        query = query.filter(models.AlarmChange.alarm_id == alarm_id)
 
         if on_behalf_of is not None:
-            query = query.filter(AlarmChange.on_behalf_of == on_behalf_of)
+            query = query.filter(
+                models.AlarmChange.on_behalf_of == on_behalf_of)
         if user is not None:
-            query = query.filter(AlarmChange.user_id == user)
+            query = query.filter(models.AlarmChange.user_id == user)
         if project is not None:
-            query = query.filter(AlarmChange.project_id == project)
+            query = query.filter(models.AlarmChange.project_id == project)
         if type is not None:
-            query = query.filter(AlarmChange.type == type)
+            query = query.filter(models.AlarmChange.type == type)
         if start_timestamp:
             if start_timestamp_op == 'gt':
-                query = query.filter(AlarmChange.timestamp > start_timestamp)
+                query = query.filter(
+                    models.AlarmChange.timestamp > start_timestamp)
             else:
-                query = query.filter(AlarmChange.timestamp >= start_timestamp)
+                query = query.filter(
+                    models.AlarmChange.timestamp >= start_timestamp)
         if end_timestamp:
             if end_timestamp_op == 'le':
-                query = query.filter(AlarmChange.timestamp <= end_timestamp)
+                query = query.filter(
+                    models.AlarmChange.timestamp <= end_timestamp)
             else:
-                query = query.filter(AlarmChange.timestamp < end_timestamp)
+                query = query.filter(
+                    models.AlarmChange.timestamp < end_timestamp)
 
-        query = query.order_by(desc(AlarmChange.timestamp))
+        query = query.order_by(desc(models.AlarmChange.timestamp))
         return (self._row_to_alarm_change_model(x) for x in query.all())
 
     def record_alarm_change(self, alarm_change):
@@ -733,69 +805,91 @@ class Connection(base.Connection):
         """
         session = sqlalchemy_session.get_session()
         with session.begin():
-            session.merge(User(id=alarm_change['user_id']))
-            session.merge(Project(id=alarm_change['project_id']))
-            session.merge(Project(id=alarm_change['on_behalf_of']))
-            alarm_change_row = AlarmChange(event_id=alarm_change['event_id'])
+            Connection._create_or_update(session, models.User,
+                                         alarm_change['user_id'])
+            Connection._create_or_update(session, models.Project,
+                                         alarm_change['project_id'])
+            Connection._create_or_update(session, models.Project,
+                                         alarm_change['on_behalf_of'])
+            alarm_change_row = models.AlarmChange(
+                event_id=alarm_change['event_id'])
             alarm_change_row.update(alarm_change)
             session.add(alarm_change_row)
             session.flush()
 
     @staticmethod
-    def _get_unique(session, key):
-        return session.query(UniqueName).filter(UniqueName.key == key).first()
-
-    def _get_or_create_unique_name(self, key, session=None):
-        """Find the UniqueName entry for a given key, creating
-           one if necessary.
-
-           This may result in a flush.
+    def _get_or_create_trait_type(trait_type, data_type, session=None):
+        """Find if this trait already exists in the database, and
+        if it does not, create a new entry in the trait type table.
         """
         if session is None:
             session = sqlalchemy_session.get_session()
         with session.begin(subtransactions=True):
-            unique = self._get_unique(session, key)
-            if not unique:
-                unique = UniqueName(key=key)
-                session.add(unique)
+            tt = session.query(models.TraitType).filter(
+                models.TraitType.desc == trait_type,
+                models.TraitType.data_type == data_type).first()
+            if not tt:
+                tt = models.TraitType(trait_type, data_type)
+                session.add(tt)
                 session.flush()
-        return unique
+        return tt
 
-    def _make_trait(self, trait_model, event, session=None):
+    @classmethod
+    def _make_trait(cls, trait_model, event, session=None):
         """Make a new Trait from a Trait model.
 
         Doesn't flush or add to session.
         """
-        name = self._get_or_create_unique_name(trait_model.name,
-                                               session=session)
-        value_map = Trait._value_map
+        trait_type = cls._get_or_create_trait_type(trait_model.name,
+                                                   trait_model.dtype,
+                                                   session)
+        value_map = models.Trait._value_map
         values = {'t_string': None, 't_float': None,
                   't_int': None, 't_datetime': None}
         value = trait_model.value
         if trait_model.dtype == api_models.Trait.DATETIME_TYPE:
             value = utils.dt_to_decimal(value)
         values[value_map[trait_model.dtype]] = value
-        return Trait(name, event, trait_model.dtype, **values)
+        return models.Trait(trait_type, event, **values)
 
-    def _record_event(self, session, event_model):
+    @staticmethod
+    def _get_or_create_event_type(event_type, session=None):
+        """Here, we check to see if an event type with the supplied
+        name already exists. If not, we create it and return the record.
+
+        This may result in a flush.
+        """
+        if session is None:
+            session = sqlalchemy_session.get_session()
+        with session.begin(subtransactions=True):
+            et = session.query(models.EventType).filter(
+                models.EventType.desc == event_type).first()
+            if not et:
+                et = models.EventType(event_type)
+                session.add(et)
+                session.flush()
+        return et
+
+    @classmethod
+    def _record_event(cls, session, event_model):
         """Store a single Event, including related Traits.
         """
         with session.begin(subtransactions=True):
-            unique = self._get_or_create_unique_name(event_model.event_name,
-                                                     session=session)
+            event_type = cls._get_or_create_event_type(event_model.event_type,
+                                                       session=session)
 
             generated = utils.dt_to_decimal(event_model.generated)
-            event = Event(event_model.message_id, unique, generated)
+            event = models.Event(event_model.message_id, event_type, generated)
             session.add(event)
 
             new_traits = []
             if event_model.traits:
                 for trait in event_model.traits:
-                    t = self._make_trait(trait, event, session=session)
+                    t = cls._make_trait(trait, event, session=session)
                     session.add(t)
                     new_traits.append(t)
 
-        # Note: we don't flush here, explicitly (unless a new uniquename
+        # Note: we don't flush here, explicitly (unless a new trait or event
         # does it). Otherwise, just wait until all the Events are staged.
         return (event, new_traits)
 
@@ -807,6 +901,9 @@ class Connection(base.Connection):
         Returns a list of events that could not be saved in a
         (reason, event) tuple. Reasons are enumerated in
         storage.model.Event
+
+        Flush when they're all added, unless new EventTypes or
+        TraitTypes are added along the way.
         """
         session = sqlalchemy_session.get_session()
         events = []
@@ -821,25 +918,16 @@ class Connection(base.Connection):
                 problem_events.append((api_models.Event.DUPLICATE,
                                        event_model))
             except Exception as e:
-                LOG.exception('Failed to record event: %s', e)
+                LOG.exception(_('Failed to record event: %s') % e)
                 problem_events.append((api_models.Event.UNKNOWN_PROBLEM,
                                        event_model))
             events.append(event)
-
-        # Update the models with the underlying DB ID.
-        for model, actual in zip(event_models, events):
-            if not actual:
-                continue
-            actual_event, actual_traits = actual
-            model.id = actual_event.id
-            if model.traits and actual_traits:
-                for trait, actual_trait in zip(model.traits, actual_traits):
-                    trait.id = actual_trait.id
-
         return problem_events
 
     def get_events(self, event_filter):
-        """Return an iterable of model.Event objects.
+        """Return an iterable of model.Event objects. The event model objects
+        have their Trait model objects available -- filtered by any traits
+        in the event_filter.
 
         :param event_filter: EventFilter instance
         """
@@ -848,46 +936,77 @@ class Connection(base.Connection):
         end = utils.dt_to_decimal(event_filter.end)
         session = sqlalchemy_session.get_session()
         with session.begin():
-            sub_query = session.query(Event.id)\
-                .join(Trait, Trait.event_id == Event.id)\
-                .filter(Event.generated >= start, Event.generated <= end)
+            sub_query = session.query(models.Event.id)\
+                .join(models.EventType,
+                      models.Event.event_type_id == models.EventType.id)\
+                .join(models.Trait,
+                      models.Trait.event_id == models.Event.id)\
+                .filter(models.Event.generated >= start,
+                        models.Event.generated <= end)
 
-            if event_filter.event_name:
-                event_name = self._get_unique(session, event_filter.event_name)
-                sub_query = sub_query.filter(Event.unique_name == event_name)
+            if event_filter.event_type:
+                event_type = event_filter.event_type
+                sub_query = sub_query\
+                    .filter(models.EventType.desc == event_type)
 
+            event_models_dict = {}
             if event_filter.traits:
+                sub_query = sub_query.join(models.TraitType,
+                                           models.TraitType.id ==
+                                           models.Trait.trait_type_id)
                 for key, value in event_filter.traits.iteritems():
                     if key == 'key':
-                        key = self._get_unique(session, value)
-                        sub_query = sub_query.filter(Trait.name == key)
+                        sub_query = sub_query.filter(models.TraitType.desc ==
+                                                     value)
                     elif key == 't_string':
-                        sub_query = sub_query.filter(Trait.t_string == value)
+                        sub_query = sub_query.filter(
+                            models.Trait.t_string == value)
                     elif key == 't_int':
-                        sub_query = sub_query.filter(Trait.t_int == value)
+                        sub_query = sub_query.filter(
+                            models.Trait.t_int == value)
                     elif key == 't_datetime':
                         dt = utils.dt_to_decimal(value)
-                        sub_query = sub_query.filter(Trait.t_datetime == dt)
+                        sub_query = sub_query.filter(
+                            models.Trait.t_datetime == dt)
                     elif key == 't_float':
-                        sub_query = sub_query.filter(Trait.t_datetime == value)
+                        sub_query = sub_query.filter(
+                            models.Trait.t_datetime == value)
+            else:
+                # Pre-populate event_models_dict to cover Events without traits
+                events = session.query(models.Event)\
+                    .filter(models.Event.generated >= start)\
+                    .filter(models.Event.generated <= end)
+                if event_filter.event_type:
+                    events = events\
+                        .join(models.EventType,
+                              models.EventType.id ==
+                              models.Event.event_type_id)\
+                        .filter(models.EventType.desc ==
+                                event_filter.event_type)
+                for db_event in events.all():
+                    generated = utils.decimal_to_dt(db_event.generated)
+                    api_event = api_models.Event(db_event.message_id,
+                                                 db_event.event_type.desc,
+                                                 generated, [])
+                    event_models_dict[db_event.id] = api_event
 
             sub_query = sub_query.subquery()
 
-            all_data = session.query(Trait)\
-                .join(sub_query, Trait.event_id == sub_query.c.id)
+            all_data = session.query(models.Trait)\
+                .join(sub_query, models.Trait.event_id == sub_query.c.id)
 
             # Now convert the sqlalchemy objects back into Models ...
-            event_models_dict = {}
             for trait in all_data.all():
                 event = event_models_dict.get(trait.event_id)
                 if not event:
                     generated = utils.decimal_to_dt(trait.event.generated)
                     event = api_models.Event(trait.event.message_id,
-                                             trait.event.unique_name.key,
+                                             trait.event.event_type.desc,
                                              generated, [])
                     event_models_dict[trait.event_id] = event
                 value = trait.get_value()
-                trait_model = api_models.Trait(trait.name.key, trait.t_type,
+                trait_model = api_models.Trait(trait.trait_type.desc,
+                                               trait.trait_type.data_type,
                                                value)
                 event.append_trait(trait_model)
 

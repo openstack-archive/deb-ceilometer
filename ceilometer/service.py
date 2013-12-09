@@ -23,13 +23,15 @@ import socket
 import sys
 
 from oslo.config import cfg
+from stevedore import named
 
 from ceilometer.openstack.common import gettextutils
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import rpc
 
 
-cfg.CONF.register_opts([
+OPTS = [
     cfg.StrOpt('host',
                default=socket.gethostname(),
                help='Name of this node.  This can be an opaque identifier.  '
@@ -37,7 +39,12 @@ cfg.CONF.register_opts([
                'However, the node name must be valid within '
                'an AMQP key, and if using ZeroMQ, a valid '
                'hostname, FQDN, or IP address'),
-])
+    cfg.MultiStrOpt('dispatcher',
+                    deprecated_group="collector",
+                    default=['database'],
+                    help='dispatcher to process data'),
+]
+cfg.CONF.register_opts(OPTS)
 
 CLI_OPTIONS = [
     cfg.StrOpt('os-username',
@@ -73,8 +80,33 @@ CLI_OPTIONS = [
                default=os.environ.get('OS_ENDPOINT_TYPE', 'publicURL'),
                help='Type of endpoint in Identity service catalog to use for '
                     'communication with OpenStack services.'),
+    cfg.BoolOpt('insecure',
+                default=False,
+                help='Does not perform X.509 certificate validation when'
+                     'establishing SSL connection with identity service.'),
 ]
 cfg.CONF.register_cli_opts(CLI_OPTIONS, group="service_credentials")
+
+
+LOG = log.getLogger(__name__)
+
+
+class DispatchedService(object):
+
+    DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
+
+    def __init__(self, *args, **kwargs):
+        super(DispatchedService, self).__init__(*args, **kwargs)
+        LOG.debug(_('loading dispatchers from %s'),
+                  self.DISPATCHER_NAMESPACE)
+        self.dispatcher_manager = named.NamedExtensionManager(
+            namespace=self.DISPATCHER_NAMESPACE,
+            names=cfg.CONF.dispatcher,
+            invoke_on_load=True,
+            invoke_args=[cfg.CONF])
+        if not list(self.dispatcher_manager):
+            LOG.warning(_('Failed to load any dispatchers for %s'),
+                        self.DISPATCHER_NAMESPACE)
 
 
 def prepare_service(argv=None):

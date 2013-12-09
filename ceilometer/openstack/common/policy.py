@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright (c) 2012 OpenStack Foundation.
 # All Rights Reserved.
 #
@@ -221,7 +219,7 @@ class Enforcer(object):
         if policy_file:
             return policy_file
 
-        raise cfg.ConfigFilesNotFoundError((CONF.policy_file,))
+        raise cfg.ConfigFilesNotFoundError((self.policy_file,))
 
     def enforce(self, rule, target, creds, do_raise=False,
                 exc=None, *args, **kwargs):
@@ -279,10 +277,9 @@ class Enforcer(object):
         return result
 
 
+@six.add_metaclass(abc.ABCMeta)
 class BaseCheck(object):
     """Abstract base class for Check classes."""
-
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def __str__(self):
@@ -449,7 +446,6 @@ class OrCheck(BaseCheck):
         for rule in self.rules:
             if rule(target, cred, enforcer):
                 return True
-
         return False
 
     def add_check(self, rule):
@@ -507,7 +503,7 @@ def _parse_list_rule(rule):
             continue
 
         # Handle bare strings
-        if isinstance(inner_rule, basestring):
+        if isinstance(inner_rule, six.string_types):
             inner_rule = [inner_rule]
 
         # Parse the inner rules into Check objects
@@ -627,6 +623,7 @@ def reducer(*tokens):
     return decorator
 
 
+@six.add_metaclass(ParseStateMeta)
 class ParseState(object):
     """Implement the core of parsing the policy language.
 
@@ -638,8 +635,6 @@ class ParseState(object):
     Fortunately, the policy language is simple enough that this
     shouldn't be that big a problem.
     """
-
-    __metaclass__ = ParseStateMeta
 
     def __init__(self):
         """Initialize the ParseState."""
@@ -766,7 +761,7 @@ def parse_rule(rule):
     """Parses a policy rule into a tree of Check objects."""
 
     # If the rule is a string, it's in the policy language
-    if isinstance(rule, basestring):
+    if isinstance(rule, six.string_types):
         return _parse_text_rule(rule)
     return _parse_list_rule(rule)
 
@@ -846,7 +841,13 @@ class GenericCheck(Check):
         """
 
         # TODO(termie): do dict inspection via dot syntax
-        match = self.match % target
+        try:
+            match = self.match % target
+        except KeyError:
+            # While doing GenericCheck if key not
+            # present in Target return false
+            return False
+
         if self.kind in creds:
             return match == six.text_type(creds[self.kind])
         return False

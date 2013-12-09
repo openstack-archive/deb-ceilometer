@@ -22,21 +22,21 @@
 
 import calendar
 import copy
+import json
 import operator
 import weakref
 
 import bson.code
 import bson.objectid
-import json
 import pymongo
 
 from oslo.config import cfg
 
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
-from ceilometer.openstack.common.gettextutils import _
 
 cfg.CONF.import_opt('time_to_live', 'ceilometer.storage',
                     group="database")
@@ -155,7 +155,8 @@ class ConnectionPool(object):
             client = self._pool.get(pool_key)()
             if client:
                 return client
-        LOG.info('connecting to MongoDB on %s', url)
+        LOG.info(_('Connecting to MongoDB on %s'),
+                 connection_options['nodelist'])
         client = pymongo.MongoClient(
             url,
             safe=True)

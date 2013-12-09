@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 # Author: Claudiu Belu <cbelu@cloudbasesolutions.com>
@@ -30,7 +28,7 @@ if sys.platform == 'win32':
 from oslo.config import cfg
 
 from ceilometer.compute.virt import inspector
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log as logging
 
 CONF = cfg.CONF
@@ -57,8 +55,8 @@ class UtilsV2(object):
     _NET_IN_METRIC_NAME = 'Aggregated Filtered Incoming Network Traffic'
     _NET_OUT_METRIC_NAME = 'Aggregated Filtered Outgoing Network Traffic'
     # Disk metrics are supported from Hyper-V 2012 R2
-    _DISK_RD_METRIC_NAME = 'Aggregated Disk Data Read'
-    _DISK_WR_METRIC_NAME = 'Aggregated Disk Data Written'
+    _DISK_RD_METRIC_NAME = 'Disk Data Read'
+    _DISK_WR_METRIC_NAME = 'Disk Data Written'
 
     def __init__(self, host='.'):
         if sys.platform == 'win32':
@@ -88,10 +86,14 @@ class UtilsV2(object):
         vm = self._lookup_vm(vm_name)
         cpu_sd = self._get_vm_resources(vm, self._PROC_SETTING)[0]
         cpu_metrics_def = self._get_metric_def(self._CPU_METRIC_NAME)
-        cpu_metric_aggr = self._get_metrics(vm, cpu_metrics_def)[0]
+        cpu_metric_aggr = self._get_metrics(vm, cpu_metrics_def)
 
-        return (int(cpu_metric_aggr.MetricValue),
-                cpu_sd.VirtualQuantity,
+        cpu_used = 0
+        if cpu_metric_aggr:
+            cpu_used = long(cpu_metric_aggr[0].MetricValue)
+
+        return (cpu_used,
+                int(cpu_sd.VirtualQuantity),
                 long(vm.OnTimeInMilliseconds))
 
     def get_vnic_metrics(self, vm_name):

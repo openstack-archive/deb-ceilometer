@@ -16,10 +16,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from ceilometer import pipeline
-from ceilometer import transformer
 from ceilometer.openstack.common import context as req_context
 from ceilometer.openstack.common import log as logging
+from ceilometer import pipeline
+from ceilometer import transformer
+
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from stevedore import extension
 
 
@@ -33,16 +35,16 @@ _pipeline_manager = None
 def _load_notification_manager():
     global _notification_manager
 
-    namespace = 'ceilometer.collector'
+    namespace = 'ceilometer.notification'
 
-    LOG.debug('loading notification handlers from %s', namespace)
+    LOG.debug(_('loading notification handlers from %s'), namespace)
 
     _notification_manager = extension.ExtensionManager(
         namespace=namespace,
         invoke_on_load=True)
 
     if not list(_notification_manager):
-        LOG.warning('Failed to load any notification handlers for %s',
+        LOG.warning(_('Failed to load any notification handlers for %s'),
                     namespace)
 
 

@@ -1,4 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
 #
 # Copyright 2013 Mirantis, Inc.
 # Copyright 2013 OpenStack Foundation
@@ -17,6 +16,7 @@
 #    under the License.
 import fixtures
 from oslo.config import cfg
+import six
 
 
 class Config(fixtures.Fixture):
@@ -29,7 +29,7 @@ class Config(fixtures.Fixture):
     the specified configuration option group.
 
     All overrides are automatically cleared at the end of the current
-    test by the reset() method, which is registred by addCleanup().
+    test by the reset() method, which is registered by addCleanup().
     """
 
     def __init__(self, conf=cfg.CONF):
@@ -41,5 +41,5 @@ class Config(fixtures.Fixture):
 
     def config(self, **kw):
         group = kw.pop('group', None)
-        for k, v in kw.iteritems():
+        for k, v in six.iteritems(kw):
             self.conf.set_override(k, v, group)
