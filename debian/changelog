@@ -1,3 +1,9 @@
+ceilometer (2014.1~b1-1) experimental; urgency=low
+
+  * New upstream release (Icehouse beta 1).
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 09 Dec 2013 17:09:32 +0800
+
 ceilometer (2013.2-5) unstable; urgency=medium
 
   * Adds call to ceilometer-expirer every day.
