@@ -1163,24 +1163,6 @@ class Alarm(_Base):
                       "must be set")
             raise ClientSideError(error)
 
-        if alarm.threshold_rule:
-            # ensure an implicit constraint on project_id is added to
-            # the query if not already present
-            alarm.threshold_rule.query = _sanitize_query(
-                alarm.threshold_rule.query,
-                storage.SampleFilter.__init__,
-                on_behalf_of=alarm.project_id
-            )
-        elif alarm.combination_rule:
-            auth_project = _get_auth_project(alarm.project_id)
-            for id in alarm.combination_rule.alarm_ids:
-                alarms = list(pecan.request.storage_conn.get_alarms(
-                    alarm_id=id, project=auth_project))
-                if not alarms:
-                    error = _("Alarm %s doesn't exist") % id
-                    pecan.response.translatable_error = error
-                    raise wsme.exc.ClientSideError(unicode(error))
-
         if alarm.threshold_rule and alarm.combination_rule:
             error = _("threshold_rule and combination_rule "
                       "cannot be set at the same time")
