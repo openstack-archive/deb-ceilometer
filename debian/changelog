@@ -1,4 +1,4 @@
-ceilometer (2013.2-6) unstable; urgency=low
+ceilometer (2013.2-6) unstable; urgency=medium
 
   * Added msgpack_python python-msgpack in debian/pydist-overrides.
 
