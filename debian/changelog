@@ -1,6 +1,9 @@
 ceilometer (2013.2.1-1) unstable; urgency=medium
 
   * New upstream release.
+  * Removes CVE-2013-6384_mongodb_db2_do_not_print_full_URL_in_logs.patch now
+    applied upstream.
+  * Refresh requirements.txt patch.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 16 Dec 2013 16:08:44 +0800
 
