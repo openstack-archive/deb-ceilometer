@@ -1,3 +1,9 @@
+ceilometer (2013.2.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 16 Dec 2013 16:08:44 +0800
+
 ceilometer (2013.2-6) unstable; urgency=medium
 
   * Added msgpack_python python-msgpack in debian/pydist-overrides.
