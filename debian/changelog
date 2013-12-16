@@ -1,3 +1,9 @@
+ceilometer (2013.2.1-2) unstable; urgency=medium
+
+  * Added missing version depends for python-iso8601 (needs >= 0.1.8).
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 16 Dec 2013 19:27:36 +0800
+
 ceilometer (2013.2.1-1) unstable; urgency=medium
 
   * New upstream release.
