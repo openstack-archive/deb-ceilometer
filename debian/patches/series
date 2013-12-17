@@ -1,1 +1,2 @@
 removes-sqlalchemy-restriction.patch
+WSME-0.5b6-compatibility.patch

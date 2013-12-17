@@ -4,6 +4,10 @@ ceilometer (2013.2.1-2) unstable; urgency=medium
   * Removes .testrepository and nova_tests/.testrepository on clean to allow
     double builds (Closes: #732372).
 
+  [ Gaudenz Steinlin ]
+  * Add fix for compatibility with WSME>=0.5b6 taken from upstream commit
+    e4a1a4fcefd4718e057cf8128c9a6c6b7c98ef59 (Closes: #732367).
+
  -- Thomas Goirand <zigo@debian.org>  Mon, 16 Dec 2013 19:27:36 +0800
 
 ceilometer (2013.2.1-1) unstable; urgency=medium
