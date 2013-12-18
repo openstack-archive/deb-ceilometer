@@ -33,6 +33,7 @@ override_dh_auto_clean:
 	rm -rf debian/*.upstart
 	rm -rf debian/ceilometer-common.postinst
 	find . -iname '*.pyc' -delete
+	rm -rf .testrepository nova_tests/.testrepository
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:

@@ -1,6 +1,8 @@
 ceilometer (2013.2.1-2) unstable; urgency=medium
 
   * Added missing version depends for python-iso8601 (needs >= 0.1.8).
+  * Removes .testrepository and nova_tests/.testrepository on clean to allow
+    double builds (Closes: #732372).
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 16 Dec 2013 19:27:36 +0800
 
