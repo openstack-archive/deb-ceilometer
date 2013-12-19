@@ -1,3 +1,4 @@
 /usr/bin/ceilometer-dbsync
 /usr/bin/ceilometer-expirer
 tools/show_data.py usr/share/doc/ceilometer
+ceilometer/api/app.wsgi	/usr/share/ceilometer
