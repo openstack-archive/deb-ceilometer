@@ -1,0 +1,142 @@
+# ceilometer po-debconf translation to Spanish
+# Copyright (C) 2013 Software in the Public Interest
+# This file is distributed under the same license as the ceilometer package.
+#
+# Changes:
+#   - Initial translation
+#       Matías A. Bellone <matiasbellone+debian@gmail.com>, 2013
+#
+# Traductores, si no conocen el formato PO, merece la pena leer la
+# documentación de gettext, especialmente las secciones dedicadas a este
+# formato, por ejemplo ejecutando:
+#       info -n '(gettext)PO Files'
+#       info -n '(gettext)Header Entry'
+#
+# Equipo de traducción al español, por favor lean antes de traducir
+# los siguientes documentos:
+#
+#   - El proyecto de traducción de Debian al español
+#     http://www.debian.org/intl/spanish/coordinacion
+#     especialmente las notas de traducción en
+#     http://www.debian.org/intl/spanish/notas
+#
+#   - La guía de traducción de po's de debconf:
+#     /usr/share/doc/po-debconf/README-trans
+#     o http://www.debian.org/intl/l10n/po-debconf/README-trans
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: ceilometer 2013.1.2-4\n"
+"Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
+"POT-Creation-Date: 2013-07-11 01:06+0800\n"
+"PO-Revision-Date: 2013-12-08 21:29-0300\n"
+"Last-Translator: Matías Bellone <matiasbellone+debian@gmail.com>\n"
+"Language-Team: Debian l10n Spanish <debian-l10n-spanish@lists.debian.org>\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-api.templates:2001
+msgid "Register Ceilometer in the Keystone endpoint catalog?"
+msgstr "¿Desea registrar Ceilometer en el catálogo de puntos finales de Keystone?"
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-api.templates:2001
+msgid ""
+"Each OpenStack service (each API) should be registered in order to be "
+"accessible. This is done using \"keystone service-create\" and \"keystone "
+"endpoint-create\". This can be done automatically now."
+msgstr ""
+"Debe registrar cada uno de los servicios OpenStack (cada API) para que sean "
+"accesibles. Esto se lleva a cabo mediante las órdenes «keystone service-"
+"create» y «keystone endpoint-create». Puede hacerlo ahora automáticamente."
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-api.templates:2001
+msgid ""
+"Note that you will need to have an up and running Keystone server on which "
+"to connect using the Keystone authentication token."
+msgstr ""
+"Tenga en cuenta que necesitará disponer de un servidor Keystone en ejecución "
+"al que conectarse utilizando el token de autenticación de Keystone."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:3001
+msgid "Keystone server IP address:"
+msgstr "Dirección IP del servidor Keystone:"
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:3001
+msgid ""
+"Please enter the IP address of the Keystone server, so that ceilometer-api "
+"can contact Keystone to do the Ceilometer service and endpoint creation."
+msgstr ""
+"Introduzca la dirección IP del servidor Keystone para que ceilometer-api "
+"pueda contactar con Keystone para realizar el servicio Ceilometer y crear "
+"el punto final."
+
+#. Type: password
+#. Description
+#: ../ceilometer-api.templates:4001
+msgid "Keystone authentication token:"
+msgstr "Token de autenticación de Keystone:"
+
+#. Type: password
+#. Description
+#: ../ceilometer-api.templates:4001
+msgid ""
+"To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
+"authentication token."
+msgstr ""
+"Para configurar su punto final en Keystone, ceilometer-api necesita el token "
+"de autenticación de Keystone."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:5001
+msgid "Ceilometer endpoint IP address:"
+msgstr "Dirección IP del punto final de Ceilometer:"
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:5001
+msgid "Please enter the IP address that will be used to contact Ceilometer."
+msgstr ""
+"Introduzca la dirección IP que se utilizará para contactar con Ceilometer."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:5001
+msgid ""
+"This IP address should be accessible from the clients that will use this "
+"service, so if you are installing a public cloud, this should be a public IP "
+"address."
+msgstr ""
+"Esta dirección IP debe ser accesible desde los clientes que usarán este "
+"servicio, por lo que si está instalando una nube pública, debería ser una "
+"dirección IP pública."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:6001
+msgid "Name of the region to register:"
+msgstr "Nombre de la región a registrar:"
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:6001
+msgid ""
+"OpenStack supports using availability zones, with each region representing a "
+"location. Please enter the zone that you wish to use when registering the "
+"endpoint."
+msgstr ""
+"OpenStack puede utilizarse con zonas de disponibilidad, donde cada región "
+"representa una ubicación. Introduzca la zona que desea utilizar cuando "
+"registre el punto final."
