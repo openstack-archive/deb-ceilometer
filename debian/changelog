@@ -6,6 +6,17 @@ ceilometer (2014.1~b1-1) experimental; urgency=low
   * Added msgpack_python python-msgpack in pydist-overrides, as otherwise the
     python-msgpack-python is automatically added as dependency.
 
+ -- Thomas Goirand <zigo@debian.org>  Mon, 09 Dec 2013 17:09:33 +0800
+
+ceilometer (2013.2.1-3) unstable; urgency=medium
+
+  * Adds ceilometer/api/app.wsgi to /usr/share/ceilometer.
+  * Added/updated debconf templates thanks to:
+    - German: Martin E. Schauer (Closes: #734739)
+    - Swedish: Martin Bagge (Closes: #734583)
+    - French: Julien Patriarca (Closes: #733092)
+    - Spanish: Matias A. Bellone (Closes: #732534)
+
  -- Thomas Goirand <zigo@debian.org>  Mon, 09 Dec 2013 17:09:32 +0800
 
 ceilometer (2013.2-5) unstable; urgency=medium

@@ -1,0 +1,119 @@
+# Translation of ceilometer debconf template to Swedish
+# Copyright (C) 2013 Martin Bagge <brother@bsnet.se>
+# This file is distributed under the same license as the ceilometer package.
+#
+# Martin Bagge <brother@bsnet.se>, 2013
+msgid ""
+msgstr ""
+"Project-Id-Version: ceilometer\n"
+"Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
+"POT-Creation-Date: 2013-07-11 01:06+0800\n"
+"PO-Revision-Date: 2013-12-30 10:28+0100\n"
+"Last-Translator: Martin Bagge / brother <brother@bsnet.se>\n"
+"Language-Team: Swedish <debian-l10n-swedish@lists.debian.org>\n"
+"Language: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 1.5.4\n"
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-api.templates:2001
+msgid "Register Ceilometer in the Keystone endpoint catalog?"
+msgstr "Ska Ceilometer registreras i Keystones katalog för ändpunkter?"
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-api.templates:2001
+msgid ""
+"Each OpenStack service (each API) should be registered in order to be "
+"accessible. This is done using \"keystone service-create\" and \"keystone "
+"endpoint-create\". This can be done automatically now."
+msgstr ""
+"Alla OpenStack-tjänster (varje API) måste registreras för att kunna "
+"användas. Detta görs med kommandona \"keystone service-create\" och "
+"\"keystone endpoint-create\". Detta kan göras automatiskt nu."
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-api.templates:2001
+msgid ""
+"Note that you will need to have an up and running Keystone server on which "
+"to connect using the Keystone authentication token."
+msgstr ""
+"Observera att du behöver ha en fungerande Keystone-server som kan anslutas "
+"till."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:3001
+msgid "Keystone server IP address:"
+msgstr "IP-adress till Keystone-server:"
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:3001
+msgid ""
+"Please enter the IP address of the Keystone server, so that ceilometer-api "
+"can contact Keystone to do the Ceilometer service and endpoint creation."
+msgstr ""
+"Ange IP-adress till Keystone-servern så att ceilometer-api kan kontakta "
+"Keystone för att skapa Ceilometer-tjänsten och ändpunkten."
+
+#. Type: password
+#. Description
+#: ../ceilometer-api.templates:4001
+msgid "Keystone authentication token:"
+msgstr "Autetiseringsvärde för Keystone:"
+
+#. Type: password
+#. Description
+#: ../ceilometer-api.templates:4001
+msgid ""
+"To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
+"authentication token."
+msgstr ""
+"För att lägga till ändpunkt i Keystone behöver ceilometer-api ett "
+"autentiseringsvärde för Keystone."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:5001
+msgid "Ceilometer endpoint IP address:"
+msgstr "IP-adress för Ceilometers ändpunkt:"
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:5001
+msgid "Please enter the IP address that will be used to contact Ceilometer."
+msgstr "Ange den IP-adress som ska användas för att kontakta Ceilometer."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:5001
+msgid ""
+"This IP address should be accessible from the clients that will use this "
+"service, so if you are installing a public cloud, this should be a public IP "
+"address."
+msgstr ""
+"Denna IP-adress ska vara nåbar från klienterna som vill använda den här "
+"tjänsten. Om detta är en publik molntjänst så ska det vara en publik IP-"
+"adress."
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:6001
+msgid "Name of the region to register:"
+msgstr "Regionnamn:"
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:6001
+msgid ""
+"OpenStack supports using availability zones, with each region representing a "
+"location. Please enter the zone that you wish to use when registering the "
+"endpoint."
+msgstr ""
+"OpenStack använder tillgänglighetszoner. Varje region representerar en "
+"plats. Ange zonen som ska användas när ändpunkten registreras."
