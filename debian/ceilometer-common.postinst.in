@@ -40,7 +40,7 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 	pkgos_var_user_group ceilometer
 	libvirt_user_group
 	adduser ceilometer nova || true
-	adduser ceilometer libvirt || true
+	adduser ceilometer ${LIBVIRT_GROUP} || true
 	pkgos_write_new_conf ceilometer ceilometer.conf
 	pkgos_write_new_conf ceilometer policy.json
 	pkgos_write_new_conf ceilometer sources.json
