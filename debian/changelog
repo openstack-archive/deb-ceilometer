@@ -1,3 +1,10 @@
+ceilometer (2013.2.1-4) unstable; urgency=medium
+
+  * Fix ${LIBVIRT_GROUP} when doing adduser ceilometer libvirt, so that it also
+    works on Ubuntu.
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 15 Jan 2014 17:37:07 +0800
+
 ceilometer (2013.2.1-3) unstable; urgency=medium
 
   * Adds ceilometer/api/app.wsgi to /usr/share/ceilometer.
