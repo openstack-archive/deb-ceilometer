@@ -16,7 +16,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-""" Base classes for DB backend implemtation test
+""" Base classes for DB backend implementation test
 """
 
 import datetime
@@ -24,7 +24,7 @@ import datetime
 import testscenarios
 
 from ceilometer.openstack.common import timeutils
-from ceilometer.publisher import rpc
+from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer import storage
 from ceilometer.storage import base
@@ -51,8 +51,8 @@ class DBTestBase(tests_db.TestBase):
             timestamp=timestamp,
             resource_metadata=metadata, source=source
         )
-        msg = rpc.meter_message_from_counter(
-            s, self.CONF.publisher_rpc.metering_secret
+        msg = utils.meter_message_from_counter(
+            s, self.CONF.publisher.metering_secret
         )
         self.conn.record_metering_data(msg)
         return msg
@@ -173,8 +173,6 @@ class ResourceTest(DBTestBase,
             self.assertIn(resource.source, msgs_sources)
             self.assertEqual(resource.user_id, 'user-id')
             self.assertEqual(resource.metadata['display_name'], 'test-server')
-            self.assertIn(models.ResourceMeter('instance', 'cumulative', ''),
-                          resource.meter)
             break
         else:
             assert False, 'Never found resource-id'
@@ -662,6 +660,54 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_resources())
         self.assertEqual(len(results), 9)
 
+    def test_clear_metering_data_with_alarms(self):
+        # NOTE(jd) Override this test in MongoDB because our code doesn't clear
+        # the collections, this is handled by MongoDB TTL feature.
+        if self.CONF.database.connection.startswith('mongodb://'):
+            return
+
+        alarm = models.Alarm(alarm_id='r3d',
+                             enabled=True,
+                             type='threshold',
+                             name='red-alert',
+                             description='my red-alert',
+                             timestamp=None,
+                             user_id='user-id',
+                             project_id='project-id',
+                             state="insufficient data",
+                             state_timestamp=None,
+                             ok_actions=[],
+                             alarm_actions=['http://nowhere/alarms'],
+                             insufficient_data_actions=[],
+                             repeat_actions=False,
+                             rule=dict(comparison_operator='eq',
+                                       threshold=36,
+                                       statistic='count',
+                                       evaluation_periods=1,
+                                       period=60,
+                                       meter_name='test.one',
+                                       query=[{'field': 'key',
+                                               'op': 'eq',
+                                               'value': 'value',
+                                              'type': 'string'}]),
+                             )
+
+        self.conn.create_alarm(alarm)
+        timeutils.utcnow.override_time = datetime.datetime(2012, 7, 2, 10, 45)
+        self.conn.clear_expired_metering_data(5)
+        # user and project with Alarms associated with it aren't deleted.
+        f = storage.SampleFilter(meter='instance')
+        results = list(self.conn.get_samples(f))
+        self.assertEqual(len(results), 2)
+        results = list(self.conn.get_users())
+        self.assertEqual(len(results), 3)
+        self.assertIn('user-id', results)
+        results = list(self.conn.get_projects())
+        self.assertEqual(len(results), 3)
+        self.assertIn('project-id', results)
+        results = list(self.conn.get_resources())
+        self.assertEqual(len(results), 2)
+
 
 class StatisticsTest(DBTestBase,
                      tests_db.MixinTestsWithBackendScenarios):
@@ -682,7 +728,7 @@ class StatisticsTest(DBTestBase,
                                    },
                 source='test',
             )
-            msg = rpc.meter_message_from_counter(
+            msg = utils.meter_message_from_counter(
                 c,
                 secret='not-so-secret',
             )
@@ -702,7 +748,7 @@ class StatisticsTest(DBTestBase,
                                    },
                 source='test',
             )
-            msg = rpc.meter_message_from_counter(
+            msg = utils.meter_message_from_counter(
                 c,
                 secret='not-so-secret',
             )
@@ -923,9 +969,9 @@ class StatisticsGroupByTest(DBTestBase,
                                    'event': test_sample['metadata_event'], },
                 source=test_sample['source'],
             )
-            msg = rpc.meter_message_from_counter(
+            msg = utils.meter_message_from_counter(
                 c,
-                self.CONF.publisher_rpc.metering_secret,
+                self.CONF.publisher.metering_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -1787,9 +1833,9 @@ class CounterDataTypeTest(DBTestBase,
             resource_metadata={},
             source='test-1',
         )
-        msg = rpc.meter_message_from_counter(
+        msg = utils.meter_message_from_counter(
             c,
-            self.CONF.publisher_rpc.metering_secret,
+            self.CONF.publisher.metering_secret,
         )
 
         self.conn.record_metering_data(msg)
@@ -1806,9 +1852,9 @@ class CounterDataTypeTest(DBTestBase,
             resource_metadata={},
             source='test-1',
         )
-        msg = rpc.meter_message_from_counter(
+        msg = utils.meter_message_from_counter(
             c,
-            self.CONF.publisher_rpc.metering_secret,
+            self.CONF.publisher.metering_secret,
         )
         self.conn.record_metering_data(msg)
 
@@ -1824,9 +1870,9 @@ class CounterDataTypeTest(DBTestBase,
             resource_metadata={},
             source='test-1',
         )
-        msg = rpc.meter_message_from_counter(
+        msg = utils.meter_message_from_counter(
             c,
-            self.CONF.publisher_rpc.metering_secret,
+            self.CONF.publisher.metering_secret,
         )
         self.conn.record_metering_data(msg)
 
@@ -1964,9 +2010,10 @@ class AlarmTest(AlarmTestBase,
         self.add_some_alarms()
         alarms = list(self.conn.get_alarms())
         self.assertEqual(len(alarms), 3)
-        self.assertEqual(alarms[0].rule['meter_name'], 'test.one')
-        self.assertEqual(alarms[1].rule['meter_name'], 'test.fourty')
-        self.assertEqual(alarms[2].rule['meter_name'], 'test.five')
+
+        meter_names = sorted([a.rule['meter_name'] for a in alarms])
+        self.assertEqual(meter_names,
+                         ['test.five', 'test.fourty', 'test.one'])
 
     def test_update(self):
         self.add_some_alarms()
@@ -2097,11 +2144,11 @@ class EventTest(EventTestBase):
 
 class GetEventTest(EventTestBase):
     def prepare_data(self):
-        event_models = []
+        self.event_models = []
         base = 0
         self.start = datetime.datetime(2013, 12, 31, 5, 0)
         now = self.start
-        for event_type in ['Foo', 'Bar', 'Zoo']:
+        for event_type in ['Foo', 'Bar', 'Zoo', 'Foo', 'Bar', 'Zoo']:
             trait_models = \
                 [models.Trait(name, dtype, value)
                     for name, dtype, value in [
@@ -2112,22 +2159,36 @@ class GetEventTest(EventTestBase):
                         ('trait_C', models.Trait.FLOAT_TYPE,
                             float(base) + 0.123456),
                         ('trait_D', models.Trait.DATETIME_TYPE, now)]]
-            event_models.append(
-                models.Event("id_%s" % event_type,
+            self.event_models.append(
+                models.Event("id_%s_%d" % (event_type, base),
                              event_type, now, trait_models))
             base += 100
             now = now + datetime.timedelta(hours=1)
         self.end = now
 
-        self.conn.record_events(event_models)
+        self.conn.record_events(self.event_models)
+
+    def test_generated_is_datetime(self):
+        event_filter = storage.EventFilter(self.start, self.end)
+        events = self.conn.get_events(event_filter)
+        self.assertEqual(6, len(events))
+        for i, event in enumerate(events):
+            self.assertTrue(isinstance(event.generated, datetime.datetime))
+            self.assertEqual(event.generated,
+                             self.event_models[i].generated)
+            model_traits = self.event_models[i].traits
+            for j, trait in enumerate(event.traits):
+                if trait.dtype == models.Trait.DATETIME_TYPE:
+                    self.assertTrue(isinstance(trait.value, datetime.datetime))
+                    self.assertEqual(trait.value, model_traits[j].value)
 
     def test_simple_get(self):
         event_filter = storage.EventFilter(self.start, self.end)
         events = self.conn.get_events(event_filter)
-        self.assertEqual(3, len(events))
+        self.assertEqual(6, len(events))
         start_time = None
-        for i, name in enumerate(["Foo", "Bar", "Zoo"]):
-            self.assertEqual(events[i].event_type, name)
+        for i, type in enumerate(['Foo', 'Bar', 'Zoo']):
+            self.assertEqual(events[i].event_type, type)
             self.assertEqual(4, len(events[i].traits))
             # Ensure sorted results ...
             if start_time is not None:
@@ -2136,22 +2197,120 @@ class GetEventTest(EventTestBase):
             start_time = events[i].generated
 
     def test_simple_get_event_type(self):
+        expected_trait_values = {
+            'id_Bar_100': {
+                'trait_A': 'my_Bar_text',
+                'trait_B': 101,
+                'trait_C': 100.123456,
+                'trait_D': self.start + datetime.timedelta(hours=1)
+            },
+            'id_Bar_400': {
+                'trait_A': 'my_Bar_text',
+                'trait_B': 401,
+                'trait_C': 400.123456,
+                'trait_D': self.start + datetime.timedelta(hours=4)
+            }
+        }
+
         event_filter = storage.EventFilter(self.start, self.end, "Bar")
         events = self.conn.get_events(event_filter)
-        self.assertEqual(1, len(events))
+        self.assertEqual(2, len(events))
         self.assertEqual(events[0].event_type, "Bar")
+        self.assertEqual(events[1].event_type, "Bar")
         self.assertEqual(4, len(events[0].traits))
+        self.assertEqual(4, len(events[1].traits))
+        for event in events:
+            trait_values = expected_trait_values.get(event.message_id,
+                                                     None)
+            if not trait_values:
+                self.fail("Unexpected event ID returned:" % event.message_id)
+
+            for trait in event.traits:
+                expected_val = trait_values.get(trait.name, None)
+                if not expected_val:
+                    self.fail("Unexpected trait type: %s" % trait.dtype)
+                self.assertEqual(expected_val, trait.value)
 
     def test_get_event_trait_filter(self):
-        trait_filters = {'key': 'trait_B', 't_int': 101}
+        trait_filters = [{'key': 'trait_B', 'integer': 101}]
         event_filter = storage.EventFilter(self.start, self.end,
-                                           traits=trait_filters)
+                                           traits_filter=trait_filters)
         events = self.conn.get_events(event_filter)
         self.assertEqual(1, len(events))
         self.assertEqual(events[0].event_type, "Bar")
         self.assertEqual(4, len(events[0].traits))
 
-    def test_simple_get_no_traits(self):
+    def test_get_event_multiple_trait_filter(self):
+        trait_filters = [{'key': 'trait_B', 'integer': 1},
+                         {'key': 'trait_A', 'string': 'my_Foo_text'}]
+        event_filter = storage.EventFilter(self.start, self.end,
+                                           traits_filter=trait_filters)
+        events = self.conn.get_events(event_filter)
+        self.assertEqual(1, len(events))
+        self.assertEqual(events[0].event_type, "Foo")
+        self.assertEqual(4, len(events[0].traits))
+
+    def test_get_event_multiple_trait_filter_expect_none(self):
+        trait_filters = [{'key': 'trait_B', 'integer': 1},
+                         {'key': 'trait_A', 'string': 'my_Zoo_text'}]
+        event_filter = storage.EventFilter(self.start, self.end,
+                                           traits_filter=trait_filters)
+        events = self.conn.get_events(event_filter)
+        self.assertEqual(0, len(events))
+
+    def test_get_event_types(self):
+        event_types = [e for e in
+                       self.conn.get_event_types()]
+
+        self.assertEqual(3, len(event_types))
+        self.assertTrue("Bar" in event_types)
+        self.assertTrue("Foo" in event_types)
+        self.assertTrue("Zoo" in event_types)
+
+    def test_get_trait_types(self):
+        trait_types = [tt for tt in
+                       self.conn.get_trait_types("Foo")]
+        self.assertEqual(4, len(trait_types))
+        trait_type_names = map(lambda x: x['name'], trait_types)
+        self.assertIn("trait_A", trait_type_names)
+        self.assertIn("trait_B", trait_type_names)
+        self.assertIn("trait_C", trait_type_names)
+        self.assertIn("trait_D", trait_type_names)
+
+    def test_get_trait_types_unknown_event(self):
+        trait_types = [tt for tt in
+                       self.conn.get_trait_types("Moo")]
+        self.assertEqual(0, len(trait_types))
+
+    def test_get_traits(self):
+        traits = self.conn.get_traits("Bar")
+        #format results in a way that makes them easier to
+        #work with
+        trait_dict = {}
+        for trait in traits:
+            trait_dict[trait.name] = trait.dtype
+
+        self.assertTrue("trait_A" in trait_dict)
+        self.assertEqual(models.Trait.TEXT_TYPE, trait_dict["trait_A"])
+        self.assertTrue("trait_B" in trait_dict)
+        self.assertEqual(models.Trait.INT_TYPE, trait_dict["trait_B"])
+        self.assertTrue("trait_C" in trait_dict)
+        self.assertEqual(models.Trait.FLOAT_TYPE, trait_dict["trait_C"])
+        self.assertTrue("trait_D" in trait_dict)
+        self.assertEqual(models.Trait.DATETIME_TYPE,
+                         trait_dict["trait_D"])
+
+    def test_get_all_traits(self):
+        traits = self.conn.\
+            get_traits("Foo")
+        traits = [t for t in traits]
+        self.assertEqual(8, len(traits))
+
+        trait = traits[0]
+        self.assertEqual("trait_A", trait.name)
+        self.assertEqual(models.Trait.TEXT_TYPE, trait.dtype)
+
+    def test_simple_get_event_no_traits(self):
         new_events = [models.Event("id_notraits", "NoTraits", self.start, [])]
         bad_events = self.conn.record_events(new_events)
         event_filter = storage.EventFilter(self.start, self.end, "NoTraits")
@@ -2161,6 +2320,25 @@ class GetEventTest(EventTestBase):
         self.assertEqual(events[0].message_id, "id_notraits")
         self.assertEqual(events[0].event_type, "NoTraits")
         self.assertEqual(0, len(events[0].traits))
+
+    def test_simple_get_no_filters(self):
+        event_filter = storage.EventFilter(None, None, None)
+        events = self.conn.get_events(event_filter)
+        self.assertEqual(6, len(events))
+
+    def test_get_by_message_id(self):
+        new_events = [models.Event("id_testid",
+                                   "MessageIDTest",
+                                   self.start,
+                                   [])]
+
+        bad_events = self.conn.record_events(new_events)
+        event_filter = storage.EventFilter(message_id="id_testid")
+        events = self.conn.get_events(event_filter)
+        self.assertEqual(0, len(bad_events))
+        self.assertEqual(1, len(events))
+        event = events[0]
+        self.assertEqual("id_testid", event.message_id)
 
 
 class BigIntegerTest(tests_db.TestBase,
@@ -2176,6 +2354,6 @@ class BigIntegerTest(tests_db.TestBase,
                           resource_id='resource-id',
                           timestamp=datetime.datetime.utcnow(),
                           resource_metadata=metadata)
-        msg = rpc.meter_message_from_counter(
-            s, self.CONF.publisher_rpc.metering_secret)
+        msg = utils.meter_message_from_counter(
+            s, self.CONF.publisher.metering_secret)
         self.conn.record_metering_data(msg)

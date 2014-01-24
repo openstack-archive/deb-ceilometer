@@ -29,6 +29,11 @@ from ceilometer import sample
 from ceilometer.tests import base as tests_base
 
 
+class FakeConnection():
+    def create_worker(self, topic, proxy, pool_name):
+        pass
+
+
 class TestCollector(tests_base.BaseTestCase):
     def setUp(self):
         super(TestCollector, self).setUp()
@@ -142,6 +147,7 @@ class TestCollector(tests_base.BaseTestCase):
         self._verify_udp_socket(udp_socket)
 
     @patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
+    @patch('ceilometer.event.converter.setup_events', mock.MagicMock())
     def test_init_host(self):
         # If we try to create a real RPC connection, init_host() never
         # returns. Mock it out so we can establish the service
@@ -161,3 +167,14 @@ class TestCollector(tests_base.BaseTestCase):
         self.CONF.set_override('udp_address', '', group='collector')
         with patch('ceilometer.openstack.common.rpc.create_connection'):
             self.srv.start()
+
+    @patch.object(FakeConnection, 'create_worker')
+    @patch('ceilometer.openstack.common.rpc.dispatcher.RpcDispatcher')
+    def test_initialize_service_hook_conf_opt(self, mock_dispatcher,
+                                              mock_worker):
+        self.CONF.set_override('metering_topic', 'mytopic',
+                               group='publisher_rpc')
+        self.srv.conn = FakeConnection()
+        self.srv.initialize_service_hook(mock.MagicMock())
+        mock_worker.assert_called_once_with('mytopic', mock_dispatcher(),
+                                            'ceilometer.collector.mytopic')

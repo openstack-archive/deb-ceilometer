@@ -18,6 +18,7 @@
 """Simple logging storage backend.
 """
 
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.storage import base
 
@@ -175,53 +176,4 @@ class Connection(base.Connection):
         return alarm
 
     def delete_alarm(self, alarm_id):
-        """Delete a alarm
-        """
-
-    def get_alarm_changes(self, alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
-        """Yields list of AlarmChanges describing alarm history
-
-        Changes are always sorted in reverse order of occurence, given
-        the importance of currency.
-
-        Segregation for non-administrative users is done on the basis
-        of the on_behalf_of parameter. This allows such users to have
-        visibility on both the changes initiated by themselves directly
-        (generally creation, rule changes, or deletion) and also on those
-        changes initiated on their behalf by the alarming service (state
-        transitions after alarm thresholds are crossed).
-
-        :param alarm_id: ID of alarm to return changes for
-        :param on_behalf_of: ID of tenant to scope changes query (None for
-                             administrative user, indicating all projects)
-        :param user: Optional ID of user to return changes for
-        :param project: Optional ID of project to return changes for
-        :project type: Optional change type
-        :param start_timestamp: Optional modified timestamp start range
-        :param start_timestamp_op: Optional timestamp start range operation
-        :param end_timestamp: Optional modified timestamp end range
-        :param end_timestamp_op: Optional timestamp end range operation
-        """
-        raise NotImplementedError('Alarm history not implemented')
-
-    def record_alarm_change(self, alarm_change):
-        """Record alarm change event.
-        """
-        raise NotImplementedError('Alarm history not implemented')
-
-    def record_events(self, events):
-        """Write the events.
-
-        :param events: a list of model.Event objects.
-        """
-        raise NotImplementedError('Events not implemented.')
-
-    def get_events(self, event_filter):
-        """Return an iterable of model.Event objects.
-
-        :param event_filter: EventFilter instance
-        """
-        raise NotImplementedError('Events not implemented.')
+        """Delete a alarm."""

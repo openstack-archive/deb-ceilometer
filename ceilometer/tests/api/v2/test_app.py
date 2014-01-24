@@ -18,9 +18,11 @@
 # under the License.
 """Test basic ceilometer-api app
 """
+import json
 import os
 
 import mock
+import wsme
 
 from ceilometer.api import acl
 from ceilometer.api import app
@@ -89,7 +91,7 @@ class TestApiMiddleware(FunctionalTest):
     no_lang_translated_error = 'No lang translated error'
     en_US_translated_error = 'en-US translated error'
 
-    def _fake_get_localized_message(self, message, user_locale):
+    def _fake_translate(self, message, user_locale):
         if user_locale is None:
             return self.no_lang_translated_error
         else:
@@ -138,8 +140,8 @@ class TestApiMiddleware(FunctionalTest):
 
     def test_json_parsable_error_middleware_translation_400(self):
         # Ensure translated messages get placed properly into json faults
-        with mock.patch.object(gettextutils, 'get_localized_message',
-                               side_effect=self._fake_get_localized_message):
+        with mock.patch.object(gettextutils, 'translate',
+                               side_effect=self._fake_translate):
             response = self.post_json('/alarms', params={'name': 'foobar',
                                                          'type': 'threshold'},
                                       expect_errors=True,
@@ -173,8 +175,8 @@ class TestApiMiddleware(FunctionalTest):
 
     def test_xml_parsable_error_middleware_translation_400(self):
         # Ensure translated messages get placed properly into xml faults
-        with mock.patch.object(gettextutils, 'get_localized_message',
-                               side_effect=self._fake_get_localized_message):
+        with mock.patch.object(gettextutils, 'translate',
+                               side_effect=self._fake_translate):
             response = self.post_json('/alarms', params={'name': 'foobar',
                                                          'type': 'threshold'},
                                       expect_errors=True,
@@ -190,8 +192,8 @@ class TestApiMiddleware(FunctionalTest):
 
     def test_best_match_language(self):
         # Ensure that we are actually invoking language negotiation
-        with mock.patch.object(gettextutils, 'get_localized_message',
-                               side_effect=self._fake_get_localized_message):
+        with mock.patch.object(gettextutils, 'translate',
+                               side_effect=self._fake_translate):
             response = self.post_json('/alarms', params={'name': 'foobar',
                                                          'type': 'threshold'},
                                       expect_errors=True,
@@ -207,3 +209,19 @@ class TestApiMiddleware(FunctionalTest):
         fault = response.xml.findall('./error/faultstring')
         for fault_string in fault:
             self.assertEqual(fault_string.text, self.en_US_translated_error)
+
+    def test_translated_then_untranslated_error(self):
+        resp = self.get_json('/alarms/alarm-id-3', expect_errors=True)
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(json.loads(resp.body)['error_message']
+                         ['faultstring'], "Alarm alarm-id-3 Not Found")
+
+        with mock.patch('ceilometer.api.controllers.v2.EntityNotFound') \
+                as CustomErrorClass:
+            CustomErrorClass.return_value = wsme.exc.ClientSideError(
+                "untranslated_error", status_code=404)
+            resp = self.get_json('/alarms/alarm-id-5', expect_errors=True)
+
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(json.loads(resp.body)['error_message']
+                         ['faultstring'], "untranslated_error")

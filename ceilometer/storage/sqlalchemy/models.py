@@ -22,7 +22,7 @@ import json
 import urlparse
 
 from oslo.config import cfg
-from sqlalchemy import Column, Integer, String, Table, ForeignKey, DateTime, \
+from sqlalchemy import Column, Integer, String, Table, ForeignKey, \
     Index, UniqueConstraint, BigInteger
 from sqlalchemy import Float, Boolean, Text
 from sqlalchemy.dialects.mysql import DECIMAL
@@ -201,7 +201,6 @@ class Meter(Base):
     )
     id = Column(Integer, primary_key=True)
     counter_name = Column(String(255))
-    sources = relationship("Source", secondary=lambda: sourceassoc)
     user_id = Column(String(255), ForeignKey('user.id'))
     project_id = Column(String(255), ForeignKey('project.id'))
     resource_id = Column(String(255), ForeignKey('resource.id'))
@@ -212,6 +211,15 @@ class Meter(Base):
     timestamp = Column(PreciseTimestamp(), default=timeutils.utcnow)
     message_signature = Column(String(1000))
     message_id = Column(String(1000))
+    sources = relationship("Source", secondary=lambda: sourceassoc)
+    meta_text = relationship("MetaText", backref="meter",
+                             cascade="all, delete-orphan")
+    meta_float = relationship("MetaFloat", backref="meter",
+                              cascade="all, delete-orphan")
+    meta_int = relationship("MetaBigInt", backref="meter",
+                            cascade="all, delete-orphan")
+    meta_bool = relationship("MetaBool", backref="meter",
+                             cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -257,13 +265,13 @@ class Alarm(Base):
     name = Column(Text)
     type = Column(String(50))
     description = Column(Text)
-    timestamp = Column(DateTime, default=timeutils.utcnow)
+    timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
 
     user_id = Column(String(255), ForeignKey('user.id'))
     project_id = Column(String(255), ForeignKey('project.id'))
 
     state = Column(String(255))
-    state_timestamp = Column(DateTime, default=timeutils.utcnow)
+    state_timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
 
     ok_actions = Column(JSONEncodedDict)
     alarm_actions = Column(JSONEncodedDict)
@@ -286,7 +294,7 @@ class AlarmChange(Base):
     user_id = Column(String(255), ForeignKey('user.id'))
     type = Column(String(20))
     detail = Column(Text)
-    timestamp = Column(DateTime, default=timeutils.utcnow)
+    timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
 
 
 class EventType(Base):
@@ -312,7 +320,7 @@ class Event(Base):
     )
     id = Column(Integer, primary_key=True)
     message_id = Column(String(50), unique=True)
-    generated = Column(Float(asdecimal=True))
+    generated = Column(PreciseTimestamp())
 
     event_type_id = Column(Integer, ForeignKey('event_type.id'))
     event_type = relationship("EventType", backref=backref('event_type'))
@@ -371,7 +379,7 @@ class Trait(Base):
     t_string = Column(String(255), nullable=True, default=None)
     t_float = Column(Float, nullable=True, default=None)
     t_int = Column(Integer, nullable=True, default=None)
-    t_datetime = Column(Float(asdecimal=True), nullable=True, default=None)
+    t_datetime = Column(PreciseTimestamp(), nullable=True, default=None)
 
     event_id = Column(Integer, ForeignKey('event.id'))
     event = relationship("Event", backref=backref('event', order_by=id))
@@ -401,7 +409,7 @@ class Trait(Base):
         if dtype == api_models.Trait.FLOAT_TYPE:
             return self.t_float
         if dtype == api_models.Trait.DATETIME_TYPE:
-            return utils.decimal_to_dt(self.t_datetime)
+            return self.t_datetime
         if dtype == api_models.Trait.TEXT_TYPE:
             return self.t_string
 

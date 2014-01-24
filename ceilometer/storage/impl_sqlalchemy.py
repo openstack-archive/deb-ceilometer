@@ -19,6 +19,7 @@
 
 from __future__ import absolute_import
 import datetime
+import eventlet
 import operator
 import os
 import types
@@ -27,6 +28,7 @@ from sqlalchemy import and_
 from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy.orm import aliased
+from sqlalchemy import pool
 
 from ceilometer.openstack.common.db import exception as dbexc
 import ceilometer.openstack.common.db.sqlalchemy.session as sqlalchemy_session
@@ -157,6 +159,8 @@ def make_query_from_filter(session, query, sample_filter, require_meter=True):
         query = query.filter_by(project_id=sample_filter.project)
     if sample_filter.resource:
         query = query.filter_by(resource_id=sample_filter.resource)
+    if sample_filter.message_id:
+        query = query.filter_by(message_id=sample_filter.message_id)
 
     if sample_filter.metaquery:
         query = apply_metaquery_filter(session, query,
@@ -173,6 +177,14 @@ class Connection(base.Connection):
         if url == 'sqlite://':
             conf.database.connection = \
                 os.environ.get('CEILOMETER_TEST_SQL_URL', url)
+
+        session = sqlalchemy_session.get_session()
+        engine = session.get_bind()
+        if isinstance(engine.pool, pool.QueuePool):
+            poolsize = engine.pool.size() + engine.pool._max_overflow
+            self.pool = eventlet.GreenPool(poolsize)
+        else:
+            self.pool = None
 
     def upgrade(self):
         session = sqlalchemy_session.get_session()
@@ -219,8 +231,17 @@ class Connection(base.Connection):
             setattr(obj, k, kwargs[k])
         return obj
 
+    def record_metering_data(self, data):
+        if self.pool:
+            if self.pool.waiting() > 0:
+                LOG.warn(_("Sqlalchemy connection pool is full, "
+                           "perhaps pool_size should be increased"))
+            self.pool.spawn(self._real_record_metering_data, data)
+        else:
+            self._real_record_metering_data(data)
+
     @classmethod
-    def record_metering_data(cls, data):
+    def _real_record_metering_data(cls, data):
         """Write the data to the backend storage system.
 
         :param data: a dictionary such as returned by
@@ -279,28 +300,49 @@ class Connection(base.Connection):
         :param ttl: Number of seconds to keep records for.
 
         """
+
         session = sqlalchemy_session.get_session()
-        query = session.query(models.Meter.id)
-        end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
-        query = query.filter(models.Meter.timestamp < end)
-        query.delete()
+        with session.begin():
+            end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
+            meter_query = session.query(models.Meter)\
+                .filter(models.Meter.timestamp < end)
+            for meter_obj in meter_query.all():
+                session.delete(meter_obj)
 
-        query = session.query(models.User.id).filter(~models.User.id.in_(
-            session.query(models.Meter.user_id).group_by(models.Meter.user_id)
-        ))
-        query.delete(synchronize_session='fetch')
+            query = session.query(models.User).filter(
+                ~models.User.id.in_(session.query(models.Meter.user_id)
+                                    .group_by(models.Meter.user_id)),
+                ~models.User.id.in_(session.query(models.Alarm.user_id)
+                                    .group_by(models.Alarm.user_id)),
+                ~models.User.id.in_(session.query(models.AlarmChange.user_id)
+                                    .group_by(models.AlarmChange.user_id))
+            )
+            for user_obj in query.all():
+                session.delete(user_obj)
 
-        query = session.query(models.Project.id)\
-            .filter(~models.Project.id.in_(
-                session.query(models.Meter.project_id).group_by(
-                    models.Meter.project_id)))
-        query.delete(synchronize_session='fetch')
+            query = session.query(models.Project)\
+                .filter(~models.Project.id.in_(
+                    session.query(models.Meter.project_id)
+                        .group_by(models.Meter.project_id)),
+                        ~models.Project.id.in_(
+                            session.query(models.Alarm.project_id)
+                            .group_by(models.Alarm.project_id)),
+                        ~models.Project.id.in_(
+                            session.query(models.AlarmChange.project_id)
+                            .group_by(models.AlarmChange.project_id)),
+                        ~models.Project.id.in_(
+                            session.query(models.AlarmChange.on_behalf_of)
+                            .group_by(models.AlarmChange.on_behalf_of))
+                        )
+            for project_obj in query.all():
+                session.delete(project_obj)
 
-        query = session.query(models.Resource.id)\
-            .filter(~models.Resource.id.in_(
-                session.query(models.Meter.resource_id).group_by(
-                    models.Meter.resource_id)))
-        query.delete(synchronize_session='fetch')
+            query = session.query(models.Resource)\
+                .filter(~models.Resource.id.in_(
+                    session.query(models.Meter.resource_id).group_by(
+                        models.Meter.resource_id)))
+            for res_obj in query.all():
+                session.delete(res_obj)
 
     @staticmethod
     def get_users(source=None):
@@ -427,14 +469,6 @@ class Connection(base.Connection):
                 source=meter.sources[0].id,
                 user_id=meter.user_id,
                 metadata=meter.resource_metadata,
-                meter=[
-                    api_models.ResourceMeter(
-                        counter_name=m.counter_name,
-                        counter_type=m.counter_type,
-                        counter_unit=m.counter_unit,
-                    )
-                    for m in meter.resource.meters
-                ],
             )
 
     @staticmethod
@@ -702,7 +736,6 @@ class Connection(base.Connection):
             alarm_row = models.Alarm(id=alarm.alarm_id)
             alarm_row.update(alarm.as_dict())
             session.add(alarm_row)
-            session.flush()
 
         return self._row_to_alarm_model(alarm_row)
 
@@ -713,9 +746,12 @@ class Connection(base.Connection):
         """
         session = sqlalchemy_session.get_session()
         with session.begin():
+            Connection._create_or_update(session, models.User,
+                                         alarm.user_id)
+            Connection._create_or_update(session, models.Project,
+                                         alarm.project_id)
             alarm_row = session.merge(models.Alarm(id=alarm.alarm_id))
             alarm_row.update(alarm.as_dict())
-            session.flush()
 
         return self._row_to_alarm_model(alarm_row)
 
@@ -729,7 +765,6 @@ class Connection(base.Connection):
         with session.begin():
             session.query(models.Alarm).filter(
                 models.Alarm.id == alarm_id).delete()
-            session.flush()
 
     @staticmethod
     def _row_to_alarm_change_model(row):
@@ -748,7 +783,7 @@ class Connection(base.Connection):
                           end_timestamp=None, end_timestamp_op=None):
         """Yields list of AlarmChanges describing alarm history
 
-        Changes are always sorted in reverse order of occurence, given
+        Changes are always sorted in reverse order of occurrence, given
         the importance of currency.
 
         Segregation for non-administrative users is done on the basis
@@ -815,7 +850,6 @@ class Connection(base.Connection):
                 event_id=alarm_change['event_id'])
             alarm_change_row.update(alarm_change)
             session.add(alarm_change_row)
-            session.flush()
 
     @staticmethod
     def _get_or_create_trait_type(trait_type, data_type, session=None):
@@ -831,7 +865,6 @@ class Connection(base.Connection):
             if not tt:
                 tt = models.TraitType(trait_type, data_type)
                 session.add(tt)
-                session.flush()
         return tt
 
     @classmethod
@@ -847,8 +880,6 @@ class Connection(base.Connection):
         values = {'t_string': None, 't_float': None,
                   't_int': None, 't_datetime': None}
         value = trait_model.value
-        if trait_model.dtype == api_models.Trait.DATETIME_TYPE:
-            value = utils.dt_to_decimal(value)
         values[value_map[trait_model.dtype]] = value
         return models.Trait(trait_type, event, **values)
 
@@ -867,7 +898,6 @@ class Connection(base.Connection):
             if not et:
                 et = models.EventType(event_type)
                 session.add(et)
-                session.flush()
         return et
 
     @classmethod
@@ -878,8 +908,8 @@ class Connection(base.Connection):
             event_type = cls._get_or_create_event_type(event_model.event_type,
                                                        session=session)
 
-            generated = utils.dt_to_decimal(event_model.generated)
-            event = models.Event(event_model.message_id, event_type, generated)
+            event = models.Event(event_model.message_id, event_type,
+                                 event_model.generated)
             session.add(event)
 
             new_traits = []
@@ -913,7 +943,6 @@ class Connection(base.Connection):
             try:
                 with session.begin():
                     event = self._record_event(session, event_model)
-                    session.flush()
             except dbexc.DBDuplicateEntry:
                 problem_events.append((api_models.Event.DUPLICATE,
                                        event_model))
@@ -925,90 +954,182 @@ class Connection(base.Connection):
         return problem_events
 
     def get_events(self, event_filter):
-        """Return an iterable of model.Event objects. The event model objects
-        have their Trait model objects available -- filtered by any traits
-        in the event_filter.
+        """Return an iterable of model.Event objects.
 
         :param event_filter: EventFilter instance
         """
 
-        start = utils.dt_to_decimal(event_filter.start)
-        end = utils.dt_to_decimal(event_filter.end)
+        start = event_filter.start_time
+        end = event_filter.end_time
         session = sqlalchemy_session.get_session()
+        LOG.debug(_("Getting events that match filter: %s") % event_filter)
         with session.begin():
-            sub_query = session.query(models.Event.id)\
-                .join(models.EventType,
-                      models.Event.event_type_id == models.EventType.id)\
-                .join(models.Trait,
-                      models.Trait.event_id == models.Event.id)\
-                .filter(models.Event.generated >= start,
-                        models.Event.generated <= end)
+            event_query = session.query(models.Event)
+
+            # Build up the join conditions
+            event_join_conditions = [models.EventType.id ==
+                                     models.Event.event_type_id]
 
             if event_filter.event_type:
-                event_type = event_filter.event_type
-                sub_query = sub_query\
-                    .filter(models.EventType.desc == event_type)
+                event_join_conditions\
+                    .append(models.EventType.desc == event_filter.event_type)
+
+            event_query = event_query.join(models.EventType,
+                                           and_(*event_join_conditions))
+
+            # Build up the where conditions
+            event_filter_conditions = []
+            if event_filter.message_id:
+                event_filter_conditions\
+                    .append(models.Event.message_id == event_filter.message_id)
+            if start:
+                event_filter_conditions.append(models.Event.generated >= start)
+            if end:
+                event_filter_conditions.append(models.Event.generated <= end)
+
+            if event_filter_conditions:
+                event_query = event_query\
+                    .filter(and_(*event_filter_conditions))
 
             event_models_dict = {}
-            if event_filter.traits:
-                sub_query = sub_query.join(models.TraitType,
-                                           models.TraitType.id ==
-                                           models.Trait.trait_type_id)
-                for key, value in event_filter.traits.iteritems():
-                    if key == 'key':
-                        sub_query = sub_query.filter(models.TraitType.desc ==
-                                                     value)
-                    elif key == 't_string':
-                        sub_query = sub_query.filter(
-                            models.Trait.t_string == value)
-                    elif key == 't_int':
-                        sub_query = sub_query.filter(
-                            models.Trait.t_int == value)
-                    elif key == 't_datetime':
-                        dt = utils.dt_to_decimal(value)
-                        sub_query = sub_query.filter(
-                            models.Trait.t_datetime == dt)
-                    elif key == 't_float':
-                        sub_query = sub_query.filter(
-                            models.Trait.t_datetime == value)
+            if event_filter.traits_filter:
+                for trait_filter in event_filter.traits_filter:
+
+                    # Build a sub query that joins Trait to TraitType
+                    # where the trait name matches
+                    trait_name = trait_filter.pop('key')
+                    conditions = [models.Trait.trait_type_id ==
+                                  models.TraitType.id,
+                                  models.TraitType.desc == trait_name]
+
+                    for key, value in trait_filter.iteritems():
+                        if key == 'string':
+                            conditions.append(models.Trait.t_string == value)
+                        elif key == 'integer':
+                            conditions.append(models.Trait.t_int == value)
+                        elif key == 'datetime':
+                            conditions.append(models.Trait.t_datetime == value)
+                        elif key == 'float':
+                            conditions.append(models.Trait.t_float == value)
+
+                    trait_query = session.query(models.Trait.event_id)\
+                        .join(models.TraitType, and_(*conditions)).subquery()
+
+                    event_query = event_query\
+                        .join(trait_query,
+                              models.Event.id == trait_query.c.event_id)
             else:
-                # Pre-populate event_models_dict to cover Events without traits
-                events = session.query(models.Event)\
-                    .filter(models.Event.generated >= start)\
-                    .filter(models.Event.generated <= end)
-                if event_filter.event_type:
-                    events = events\
-                        .join(models.EventType,
-                              models.EventType.id ==
-                              models.Event.event_type_id)\
-                        .filter(models.EventType.desc ==
-                                event_filter.event_type)
-                for db_event in events.all():
-                    generated = utils.decimal_to_dt(db_event.generated)
-                    api_event = api_models.Event(db_event.message_id,
-                                                 db_event.event_type.desc,
-                                                 generated, [])
-                    event_models_dict[db_event.id] = api_event
+                # If there are no trait filters, grab the events from the db
+                query = session.query(models.Event.id,
+                                      models.Event.generated,
+                                      models.Event.message_id,
+                                      models.EventType.desc)\
+                    .join(models.EventType,
+                          and_(*event_join_conditions))
+                if event_filter_conditions:
+                    query = query.filter(and_(*event_filter_conditions))
+                for (id, generated, message_id, desc) in query.all():
+                    event_models_dict[id] = api_models.Event(message_id,
+                                                             desc,
+                                                             generated,
+                                                             [])
 
-            sub_query = sub_query.subquery()
-
-            all_data = session.query(models.Trait)\
-                .join(sub_query, models.Trait.event_id == sub_query.c.id)
+            # Build event models for the events
+            event_query = event_query.subquery()
+            query = session.query(models.Trait)\
+                .join(models.TraitType,
+                      models.Trait.trait_type_id == models.TraitType.id)\
+                .join(event_query, models.Trait.event_id == event_query.c.id)
 
             # Now convert the sqlalchemy objects back into Models ...
-            for trait in all_data.all():
+            for trait in query.all():
                 event = event_models_dict.get(trait.event_id)
                 if not event:
-                    generated = utils.decimal_to_dt(trait.event.generated)
-                    event = api_models.Event(trait.event.message_id,
-                                             trait.event.event_type.desc,
-                                             generated, [])
+                    event = api_models.Event(
+                        trait.event.message_id,
+                        trait.event.event_type.desc,
+                        trait.event.generated, [])
                     event_models_dict[trait.event_id] = event
-                value = trait.get_value()
                 trait_model = api_models.Trait(trait.trait_type.desc,
                                                trait.trait_type.data_type,
-                                               value)
+                                               trait.get_value())
                 event.append_trait(trait_model)
 
         event_models = event_models_dict.values()
         return sorted(event_models, key=operator.attrgetter('generated'))
+
+    @staticmethod
+    def get_event_types():
+        """Return all event types as an iterable of strings.
+        """
+
+        session = sqlalchemy_session.get_session()
+        with session.begin():
+            query = session.query(models.EventType.desc)\
+                .order_by(models.EventType.desc)
+            for name in query.all():
+                # The query returns a tuple with one element.
+                yield name[0]
+
+    @staticmethod
+    def get_trait_types(event_type):
+        """Return a dictionary containing the name and data type of
+        the trait type. Only trait types for the provided event_type are
+        returned.
+
+        :param event_type: the type of the Event
+        """
+        session = sqlalchemy_session.get_session()
+
+        LOG.debug(_("Get traits for %s") % event_type)
+        with session.begin():
+            query = (session.query(models.TraitType.desc,
+                                   models.TraitType.data_type)
+                     .join(models.Trait,
+                           models.Trait.trait_type_id ==
+                           models.TraitType.id)
+                     .join(models.Event,
+                           models.Event.id ==
+                           models.Trait.event_id)
+                     .join(models.EventType,
+                           and_(models.EventType.id ==
+                                models.Event.id,
+                                models.EventType.desc ==
+                                event_type))
+                     .group_by(models.TraitType.desc,
+                               models.TraitType.data_type)
+                     .distinct())
+
+            for desc, type in query.all():
+                yield {'name': desc, 'data_type': type}
+
+    @staticmethod
+    def get_traits(event_type, trait_type=None):
+        """Return all trait instances associated with an event_type. If
+        trait_type is specified, only return instances of that trait type.
+
+        :param event_type: the type of the Event to filter by
+        :param trait_type: the name of the Trait to filter by
+        """
+
+        session = sqlalchemy_session.get_session()
+        with session.begin():
+            trait_type_filters = [models.TraitType.id ==
+                                  models.Trait.trait_type_id]
+            if trait_type:
+                trait_type_filters.append(models.TraitType.desc == trait_type)
+
+            query = (session.query(models.Trait)
+                     .join(models.TraitType, and_(*trait_type_filters))
+                     .join(models.Event,
+                           models.Event.id == models.Trait.event_id)
+                     .join(models.EventType,
+                           and_(models.EventType.id ==
+                                models.Event.event_type_id,
+                                models.EventType.desc == event_type)))
+
+            for trait in query.all():
+                type = trait.trait_type
+                yield api_models.Trait(name=type.desc,
+                                       dtype=type.data_type,
+                                       value=trait.get_value())

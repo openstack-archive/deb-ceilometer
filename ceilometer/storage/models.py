@@ -18,6 +18,8 @@
 """Model classes for use in the storage API.
 """
 
+from ceilometer.openstack.common import timeutils
+
 
 class Model(object):
     """Base class for storage API models.
@@ -60,7 +62,7 @@ class Event(Model):
                             the Event ID, which comes from the
                             underlying storage system.
         :param event_type:  The type of the event.
-        :param generated:   UTC time for when the event occured.
+        :param generated:   UTC time for when the event occurred.
         :param traits:      list of Traits on this Event.
         """
         Model.__init__(self, message_id=message_id, event_type=event_type,
@@ -89,6 +91,14 @@ class Trait(Model):
     FLOAT_TYPE = 3
     DATETIME_TYPE = 4
 
+    type_names = {
+        NONE_TYPE: "none",
+        TEXT_TYPE: "string",
+        INT_TYPE: "integer",
+        FLOAT_TYPE: "float",
+        DATETIME_TYPE: "datetime"
+    }
+
     def __init__(self, name, dtype, value):
         if not dtype:
             dtype = Trait.NONE_TYPE
@@ -96,6 +106,31 @@ class Trait(Model):
 
     def __repr__(self):
         return "<Trait: %s %d %s>" % (self.name, self.dtype, self.value)
+
+    def get_type_name(self):
+        return self.get_name_by_type(self.dtype)
+
+    @classmethod
+    def get_type_by_name(cls, type_name):
+        return getattr(cls, '%s_TYPE' % type_name.upper(), None)
+
+    @classmethod
+    def get_type_names(cls):
+        return cls.type_names.values()
+
+    @classmethod
+    def get_name_by_type(cls, type_id):
+        return cls.type_names.get(type_id, "none")
+
+    @classmethod
+    def convert_value(cls, trait_type, value):
+        if trait_type is cls.INT_TYPE:
+            return int(value)
+        if trait_type is cls.FLOAT_TYPE:
+            return float(value)
+        if trait_type is cls.DATETIME_TYPE:
+            return timeutils.normalize_time(timeutils.parse_isotime(value))
+        return str(value)
 
 
 class Resource(Model):
@@ -105,8 +140,7 @@ class Resource(Model):
     def __init__(self, resource_id, project_id,
                  first_sample_timestamp,
                  last_sample_timestamp,
-                 source, user_id, metadata,
-                 meter):
+                 source, user_id, metadata):
         """Create a new resource.
 
         :param resource_id: UUID of the resource
@@ -116,7 +150,6 @@ class Resource(Model):
         :param source:      the identifier for the user/project id definition
         :param user_id:     UUID of user owning the resource
         :param metadata:    most current metadata for the resource (a dict)
-        :param meter:       list of the meters reporting data for the resource,
         """
         Model.__init__(self,
                        resource_id=resource_id,
@@ -126,28 +159,6 @@ class Resource(Model):
                        source=source,
                        user_id=user_id,
                        metadata=metadata,
-                       meter=meter,
-                       )
-
-
-class ResourceMeter(Model):
-    """The definitions of the meters for which data has been collected
-    for a resource.
-
-    See Resource.meter field.
-    """
-
-    def __init__(self, counter_name, counter_type, counter_unit):
-        """Create a new resource meter.
-
-        :param counter_name: the name of the counter updating the resource
-        :param counter_type: one of gauge, delta, cumulative
-        :param counter_unit: official units name for the sample data
-        """
-        Model.__init__(self,
-                       counter_name=counter_name,
-                       counter_type=counter_type,
-                       counter_unit=counter_unit,
                        )
 
 

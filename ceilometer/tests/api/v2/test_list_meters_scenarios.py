@@ -21,10 +21,11 @@
 
 import base64
 import datetime
+import json as jsonutils
 import logging
 import testscenarios
 
-from ceilometer.publisher import rpc
+from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
@@ -47,6 +48,7 @@ class TestListMeters(FunctionalTest,
 
     def setUp(self):
         super(TestListMeters, self).setUp()
+        self.messages = []
         for cnt in [
                 sample.Sample(
                     'meter.test',
@@ -128,9 +130,10 @@ class TestListMeters(FunctionalTest,
                                        'util': 0.58,
                                        'is_public': True},
                     source='test_source1')]:
-            msg = rpc.meter_message_from_counter(
+            msg = utils.meter_message_from_counter(
                 cnt,
-                self.CONF.publisher_rpc.metering_secret)
+                self.CONF.publisher.metering_secret)
+            self.messages.append(msg)
             self.conn.record_metering_data(msg)
 
     def test_list_meters(self):
@@ -146,6 +149,10 @@ class TestListMeters(FunctionalTest,
         self.assertEqual(set(r['source'] for r in data),
                          set(['test_source', 'test_source1']))
 
+    def test_list_samples(self):
+        data = self.get_json('/samples')
+        self.assertEqual(5, len(data))
+
     def test_list_meters_with_dict_metadata(self):
         data = self.get_json('/meters/meter.mine',
                              q=[{'field':
@@ -159,6 +166,60 @@ class TestListMeters(FunctionalTest,
         self.assertIsNotNone(metadata)
         self.assertEqual('self.sample4', metadata['tag'])
         self.assertEqual('prop_value', metadata['properties.prop_1'])
+
+    def test_get_one_sample(self):
+        sample_id = self.messages[1]['message_id']
+        data = self.get_json('/samples/%s' % sample_id)
+        self.assertIn('id', data)
+        self.assertEqual(data, {
+            u'id': sample_id,
+            u'metadata': {u'display_name': u'test-server',
+                          u'is_public': u'False',
+                          u'size': u'0',
+                          u'tag': u'self.sample1',
+                          u'util': u'0.47'},
+            u'meter': u'meter.test',
+            u'project_id': u'project-id',
+            u'resource_id': u'resource-id',
+            u'timestamp': u'2012-07-02T11:40:00',
+            u'type': u'cumulative',
+            u'unit': u'',
+            u'user_id': u'user-id',
+            u'volume': 3.0})
+
+    def test_get_not_existing_sample(self):
+        resp = self.get_json('/samples/not_exists', expect_errors=True)
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(jsonutils.loads(resp.body)['error_message']
+                         ['faultstring'],
+                         "Sample not_exists Not Found")
+
+    def test_list_samples_with_dict_metadata(self):
+        data = self.get_json('/samples',
+                             q=[{'field':
+                                 'metadata.properties.prop_2.sub_prop_1',
+                                 'op': 'eq',
+                                 'value': 'sub_prop_value',
+                                 }])
+        self.assertIn('id', data[0])
+        del data[0]['id']  # Randomly generated
+        self.assertEqual(data, [{
+            u'user_id': u'user-id4',
+            u'resource_id': u'resource-id4',
+            u'timestamp': u'2012-07-02T10:43:00',
+            u'meter': u'meter.mine',
+            u'volume': 1.0,
+            u'project_id': u'project-id2',
+            u'type': u'gauge',
+            u'unit': u'',
+            u'metadata': {u'display_name': u'test-server',
+                          u'properties.prop_2:sub_prop_1': u'sub_prop_value',
+                          u'util': u'0.58',
+                          u'tag': u'self.sample4',
+                          u'properties.prop_1': u'prop_value',
+                          u'is_public': u'True',
+                          u'size': u'0'}
+        }])
 
     def test_list_meters_metadata_query(self):
         data = self.get_json('/meters/meter.test',

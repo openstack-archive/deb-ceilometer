@@ -40,6 +40,8 @@ OPTS = [
 
 cfg.CONF.register_opts(OPTS, group="collector")
 cfg.CONF.import_opt('rpc_backend', 'ceilometer.openstack.common.rpc')
+cfg.CONF.import_opt('metering_topic', 'ceilometer.publisher.rpc',
+                    group="publisher_rpc")
 
 
 LOG = log.getLogger(__name__)
@@ -75,10 +77,6 @@ class CollectorService(service.DispatchedService, rpc_service.Service):
                 LOG.warn(_("UDP: Cannot decode data sent by %s"), str(source))
             else:
                 try:
-                    sample['counter_name'] = sample['name']
-                    sample['counter_volume'] = sample['volume']
-                    sample['counter_unit'] = sample['unit']
-                    sample['counter_type'] = sample['type']
                     LOG.debug(_("UDP: Storing %s"), str(sample))
                     self.dispatcher_manager.map_method('record_metering_data',
                                                        sample)

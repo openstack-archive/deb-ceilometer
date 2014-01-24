@@ -227,10 +227,11 @@ alarms based on application centric data.
 
 
 There can be multiple form of actions, but two have been implemented so far:
-1. http call back: you provide a URL to be called whenever the alarm has been set
+
+1. :term:`HTTP callback`: you provide a URL to be called whenever the alarm has been set
    off. The payload of the request contains all the details of why the alarm went
    off.
-2. log: mostly useful for debugging, stores alarms in a log file.
+2. :term:`log`: mostly useful for debugging, stores alarms in a log file.
 
 For more details on this, I recommend you to read the blog post by
 Mehdi Abaakouk `Autoscaling with Heat and Ceilometer`_. Particular attention
@@ -326,14 +327,6 @@ Each plugin API is defined by the namespace and an abstract base class
 for the plugin instances. Plugins are not required to subclass from
 the API definition class, but it is encouraged as a way to discover
 API changes.
-
-.. note::
-
-   There is ongoing work to add a generic plugin system to Nova.  If
-   that is implemented as part of the common library, ceilometer may
-   use it (or adapt it as necessary for our use). If it remains part
-   of Nova for Folsom we should probably not depend on it because
-   loading plugins is trivial with setuptools.
 
 Polling
 -------

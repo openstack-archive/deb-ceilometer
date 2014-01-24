@@ -241,6 +241,7 @@ class Connection(base.Connection):
                   # TODO(shengjie) extra dimensions need to be added as CQ
                   'f:user_id': data['user_id'],
                   'f:project_id': data['project_id'],
+                  'f:message_id': data['message_id'],
                   'f:resource_id': data['resource_id'],
                   'f:source': data['source'],
                   # add in reversed_ts here for time range scan
@@ -254,15 +255,6 @@ class Connection(base.Connection):
         # Save original meter.
         record['f:message'] = json.dumps(data)
         meter_table.put(row, record)
-
-    def clear_expired_metering_data(self, ttl):
-        """Clear expired data from the backend storage system according to the
-        time-to-live.
-
-        :param ttl: Number of seconds to keep records for.
-
-        """
-        raise NotImplementedError
 
     def get_users(self, source=None):
         """Return an iterable of user id strings.
@@ -309,7 +301,7 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
 
-        def make_resource(data, first_ts, last_ts, meter_refs):
+        def make_resource(data, first_ts, last_ts):
             """Transform HBase fields to Resource model."""
             # convert HBase metadata e.g. f:r_display_name to display_name
             data['f:metadata'] = _metadata_from_document(data)
@@ -322,10 +314,6 @@ class Connection(base.Connection):
                 source=data['f:source'],
                 user_id=data['f:user_id'],
                 metadata=data['f:metadata'],
-                meter=[
-                    models.ResourceMeter(*(m.split("!")))
-                    for m in meter_refs
-                ],
             )
         meter_table = self.conn.table(self.METER_TABLE)
 
@@ -352,11 +340,6 @@ class Connection(base.Connection):
                 meters, key=_resource_id_from_record_tuple):
             meter_rows = [data[1] for data in sorted(
                 r_meters, key=_timestamp_from_record_tuple)]
-            meter_references = [
-                _format_meter_reference(m['f:counter_name'],
-                                        m['f:counter_type'],
-                                        m['f:counter_unit'])
-                for m in meter_rows]
 
             latest_data = meter_rows[-1]
             min_ts = timeutils.parse_strtime(meter_rows[0]['f:timestamp'])
@@ -367,15 +350,13 @@ class Connection(base.Connection):
                         yield make_resource(
                             latest_data,
                             min_ts,
-                            max_ts,
-                            meter_references
+                            max_ts
                         )
             else:
                 yield make_resource(
                     latest_data,
                     min_ts,
-                    max_ts,
-                    meter_references
+                    max_ts
                 )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
@@ -399,7 +380,7 @@ class Connection(base.Connection):
         LOG.debug(_("Query Resource table: %s") % q)
 
         # handle metaquery
-        if len(metaquery) > 0:
+        if metaquery:
             meta_q = []
             for k, v in metaquery.iteritems():
                 meta_q.append(
@@ -465,7 +446,7 @@ class Connection(base.Connection):
             # TODO(jd) implements using HBase capabilities
             if limit == 0:
                 break
-            if len(metaquery) > 0:
+            if metaquery:
                 for k, v in metaquery.iteritems():
                     message = json.loads(meter['f:message'])
                     metadata = message['resource_metadata']
@@ -569,7 +550,7 @@ class Connection(base.Connection):
                     start_time, ts) / period) * period
                 period_start = start_time + datetime.timedelta(0, offset)
 
-            if not len(results) or not results[-1].period_start == \
+            if not results or not results[-1].period_start == \
                     period_start:
                 if period:
                     period_end = period_start + datetime.timedelta(
@@ -591,76 +572,6 @@ class Connection(base.Connection):
                 )
             self._update_meter_stats(results[-1], meter)
         return results
-
-    def get_alarms(self, name=None, user=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None):
-        """Yields a lists of alarms that match filters
-            raise NotImplementedError('metaquery not implemented')
-        """
-        raise NotImplementedError('Alarms not implemented')
-
-    def create_alarm(self, alarm):
-        """update alarm
-        """
-        raise NotImplementedError('Alarms not implemented')
-
-    def update_alarm(self, alarm):
-        """update alarm
-        """
-        raise NotImplementedError('Alarms not implemented')
-
-    def get_alarm_changes(self, alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
-        """Yields list of AlarmChanges describing alarm history
-
-        Changes are always sorted in reverse order of occurence, given
-        the importance of currency.
-
-        Segregation for non-administrative users is done on the basis
-        of the on_behalf_of parameter. This allows such users to have
-        visibility on both the changes initiated by themselves directly
-        (generally creation, rule changes, or deletion) and also on those
-        changes initiated on their behalf by the alarming service (state
-        transitions after alarm thresholds are crossed).
-
-        :param alarm_id: ID of alarm to return changes for
-        :param on_behalf_of: ID of tenant to scope changes query (None for
-                             administrative user, indicating all projects)
-        :param user: Optional ID of user to return changes for
-        :param project: Optional ID of project to return changes for
-        :project type: Optional change type
-        :param start_timestamp: Optional modified timestamp start range
-        :param start_timestamp_op: Optional timestamp start range operation
-        :param end_timestamp: Optional modified timestamp end range
-        :param end_timestamp_op: Optional timestamp end range operation
-        """
-        raise NotImplementedError('Alarm history not implemented')
-
-    def record_alarm_change(self, alarm_change):
-        """Record alarm change event.
-        """
-        raise NotImplementedError('Alarm history not implemented')
-
-    def delete_alarm(self, alarm_id):
-        """Delete a alarm
-        """
-        raise NotImplementedError('Alarms not implemented')
-
-    def record_events(self, events):
-        """Write the events.
-
-        :param events: a list of model.Event objects.
-        """
-        raise NotImplementedError('Events not implemented.')
-
-    def get_events(self, event_filter):
-        """Return an iterable of model.Event objects.
-
-        :param event_filter: EventFilter instance
-        """
-        raise NotImplementedError('Events not implemented.')
 
 
 ###############
@@ -797,7 +708,8 @@ def reverse_timestamp(dt):
 
 def make_query(user=None, project=None, meter=None,
                resource=None, source=None, start=None, start_op=None,
-               end=None, end_op=None, require_meter=True, query_only=False):
+               end=None, end_op=None, message_id=None, require_meter=True,
+               query_only=False):
     """Return a filter query string based on the selected parameters.
 
     :param user: Optional user-id
@@ -809,6 +721,7 @@ def make_query(user=None, project=None, meter=None,
     :param start_op: Optional start timestamp operator, like gt, ge
     :param end: Optional end timestamp
     :param end_op: Optional end timestamp operator, like lt, le
+    :param message_id: Optional message_id
     :param require_meter: If true and the filter does not have a meter,
             raise an error.
     :param query_only: If true only returns the filter query,
@@ -825,6 +738,9 @@ def make_query(user=None, project=None, meter=None,
     if resource:
         q.append("SingleColumnValueFilter ('f', 'resource_id', =, 'binary:%s')"
                  % resource)
+    if message_id:
+        q.append("SingleColumnValueFilter ('f', 'message_id', =, 'binary:%s')"
+                 % message_id)
     if source:
         q.append("SingleColumnValueFilter "
                  "('f', 'source', =, 'binary:%s')" % source)
@@ -860,7 +776,7 @@ def make_query(user=None, project=None, meter=None,
                      rts_end)
 
     sample_filter = None
-    if len(q):
+    if q:
         sample_filter = " AND ".join(q)
 
     if query_only:
@@ -882,6 +798,7 @@ def make_query_from_filter(sample_filter, require_meter=True):
                       sample_filter.start_timestamp_op,
                       sample_filter.end,
                       sample_filter.end_timestamp_op,
+                      sample_filter.message_id,
                       require_meter)
 
 

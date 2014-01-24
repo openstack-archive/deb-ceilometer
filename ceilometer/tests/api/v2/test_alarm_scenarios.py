@@ -293,6 +293,20 @@ class TestAlarms(FunctionalTest,
         alarms = list(self.conn.get_alarms())
         self.assertEqual(4, len(alarms))
 
+    def test_post_null_threshold_rule(self):
+        json = {
+            'name': 'added_alarm_invalid_threshold_rule',
+            'type': 'threshold',
+            'threshold_rule': None,
+            'combination_rule': None,
+        }
+        resp = self.post_json('/alarms', params=json, expect_errors=True,
+                              status=400, headers=self.auth_headers)
+        self.assertEqual(
+            resp.json['error_message']['faultstring'],
+            "either threshold_rule or combination_rule "
+            "must be set")
+
     def test_post_invalid_alarm_statistic(self):
         json = {
             'name': 'added_alarm',
@@ -434,7 +448,7 @@ class TestAlarms(FunctionalTest,
         json['threshold_rule']['query'].append({
             'field': 'project_id', 'op': 'eq',
             'value': self.auth_headers['X-Project-Id']})
-        # to check to BoundedInt type convertion
+        # to check to BoundedInt type conversion
         json['threshold_rule']['evaluation_periods'] = 3
         json['threshold_rule']['period'] = 180
         if alarms[0].name == 'added_alarm':
@@ -977,7 +991,7 @@ class TestAlarms(FunctionalTest,
     def _assert_is_subset(self, expected, actual):
         for k, v in expected.iteritems():
             self.assertEqual(v, actual.get(k), 'mismatched field: %s' % k)
-        self.assertTrue(actual['event_id'] is not None)
+        self.assertIsNotNone(actual['event_id'])
 
     def _assert_in_json(self, expected, actual):
         for k, v in expected.iteritems():

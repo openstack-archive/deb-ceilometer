@@ -21,7 +21,7 @@ import contextlib
 import eventlet
 from oslo.config import cfg
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log as logging
 
 
@@ -90,7 +90,7 @@ class MatchMakerBase(object):
         """Acknowledge that a key.host is alive.
 
         Used internally for updating heartbeats, but may also be used
-        publically to acknowledge a system is alive (i.e. rpc message
+        publicly to acknowledge a system is alive (i.e. rpc message
         successfully sent to host)
         """
         pass
@@ -172,7 +172,7 @@ class HeartbeatMatchMakerBase(MatchMakerBase):
         """Acknowledge that a host.topic is alive.
 
         Used internally for updating heartbeats, but may also be used
-        publically to acknowledge a system is alive (i.e. rpc message
+        publicly to acknowledge a system is alive (i.e. rpc message
         successfully sent to host)
         """
         raise NotImplementedError("Must implement ack_alive")

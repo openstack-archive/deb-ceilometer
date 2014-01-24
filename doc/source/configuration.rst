@@ -37,7 +37,7 @@ cinder_control_exchange          cinder                                Exchange 
 neutron_control_exchange         neutron                               Exchange name for Neutron notifications
 metering_secret                  change this or be hacked              Secret value for signing metering messages
 metering_topic                   metering                              the topic ceilometer uses for metering messages
-sample_source                    openstack                             The source name of emited samples
+sample_source                    openstack                             The source name of emitted samples
 control_exchange                 ceilometer                            AMQP exchange to connect to if using RabbitMQ or Qpid
 database_connection              mongodb://localhost:27017/ceilometer  Database connection string
 metering_api_port                8777                                  The port for the ceilometer API server
@@ -168,6 +168,22 @@ database_connection          hbase://$hbase-thrift-server:9090     Database conn
     If you are changing the configuration on the fly, you will need to restart
     the Ceilometer services that use the database to allow the changes to take
     affect, i.e. the collector and API services.
+
+Event Conversion
+================
+
+The following options in the [event] configuration section affect the extraction of Event data from notifications.
+
+==================================  ======================================  ==============================================================
+Parameter                           Default                                 Note
+==================================  ======================================  ==============================================================
+drop_unmatched_notifications        False                                   If set to True, then notifications with no matching event
+                                                                            definition will be dropped.
+                                                                            (Notifications will *only* be dropped if this is True)
+definitions_cfg_file                event_definitions.yaml                  Name of event definitions config file (yaml format)
+==================================  ======================================  ==============================================================
+
+
 
 General options
 ===============

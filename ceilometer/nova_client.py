@@ -41,11 +41,12 @@ def logged(func):
 
 
 class Client(object):
+    """A client which gets information via python-novaclient."""
 
     def __init__(self):
-        """Returns a nova Client object."""
+        """Initialize a nova client object."""
         conf = cfg.CONF.service_credentials
-        tenant = conf.os_tenant_id and conf.os_tenant_id or conf.os_tenant_name
+        tenant = conf.os_tenant_id or conf.os_tenant_name
         self.nova_client = nova_client.Client(
             username=conf.os_username,
             api_key=conf.os_password,
@@ -81,7 +82,14 @@ class Client(object):
             instance.flavor[attr] = getattr(flavor, attr, default)
 
     def _with_image(self, instance):
-        iid = instance.image['id']
+        try:
+            iid = instance.image['id']
+        except TypeError:
+            instance.image = None
+            instance.kernel_id = None
+            instance.ramdisk_id = None
+            return
+
         try:
             image = self.nova_client.images.get(iid)
         except novaclient.exceptions.NotFound:

@@ -26,6 +26,7 @@ import ast
 import base64
 import copy
 import datetime
+import functools
 import inspect
 import json
 import uuid
@@ -179,8 +180,18 @@ class Link(_Base):
 
 
 class Query(_Base):
-    """Sample query filter.
+    """Query filter.
     """
+
+    # The data types supported by the query.
+    _supported_types = ['integer', 'float', 'string', 'boolean']
+
+    # Functions to convert the data field to the correct type.
+    _type_converters = {'integer': int,
+                        'float': float,
+                        'boolean': strutils.bool_from_string,
+                        'string': six.text_type,
+                        'datetime': timeutils.parse_isotime}
 
     _op = None  # provide a default
 
@@ -249,28 +260,22 @@ class Query(_Base):
                             ' automatically') % (self.value)
                     LOG.debug(msg)
             else:
-                if type == 'integer':
-                    converted_value = int(self.value)
-                elif type == 'float':
-                    converted_value = float(self.value)
-                elif type == 'boolean':
-                    converted_value = strutils.bool_from_string(self.value)
-                elif type == 'string':
-                    converted_value = self.value
-                else:
-                    # For now, this method only support integer, float,
-                    # boolean and and string as the metadata type. A TypeError
-                    # will be raised for any other type.
+                if type not in self._supported_types:
+                    # Types must be explicitly declared so the
+                    # correct type converter may be used. Subclasses
+                    # of Query may define _supported_types and
+                    # _type_converters to define their own types.
                     raise TypeError()
+                converted_value = self._type_converters[type](self.value)
         except ValueError:
-            msg = _('Failed to convert the metadata value %(value)s'
+            msg = _('Failed to convert the value %(value)s'
                     ' to the expected data type %(type)s.') % \
                 {'value': self.value, 'type': type}
             raise ClientSideError(msg)
         except TypeError:
-            msg = _('The data type %s is not supported. The supported'
-                    ' data type list is: integer, float, boolean and'
-                    ' string.') % (type)
+            msg = _('The data type %(type)s is not supported. The supported'
+                    ' data type list is: %(supported)s') % \
+                {'type': type, 'supported': self._supported_types}
             raise ClientSideError(msg)
         except Exception:
             msg = _('Unexpected exception converting %(value)s to'
@@ -527,8 +532,10 @@ def _send_notification(event, payload):
                   notification, notify.INFO, payload)
 
 
-class Sample(_Base):
+class OldSample(_Base):
     """A single measurement for a given meter and resource.
+
+    This class is deprecated in favor of Sample.
     """
 
     source = wtypes.text
@@ -576,9 +583,9 @@ class Sample(_Base):
         if timestamp and isinstance(timestamp, basestring):
             timestamp = timeutils.parse_isotime(timestamp)
 
-        super(Sample, self).__init__(counter_volume=counter_volume,
-                                     resource_metadata=resource_metadata,
-                                     timestamp=timestamp, **kwds)
+        super(OldSample, self).__init__(counter_volume=counter_volume,
+                                        resource_metadata=resource_metadata,
+                                        timestamp=timestamp, **kwds)
 
         if self.resource_metadata in (wtypes.Unset, None):
             self.resource_metadata = {}
@@ -706,7 +713,7 @@ class MeterController(rest.RestController):
         pecan.request.context['meter_id'] = meter_id
         self._id = meter_id
 
-    @wsme_pecan.wsexpose([Sample], [Query], int)
+    @wsme_pecan.wsexpose([OldSample], [Query], int)
     def get_all(self, q=[], limit=None):
         """Return samples for the meter.
 
@@ -714,15 +721,15 @@ class MeterController(rest.RestController):
         :param limit: Maximum number of samples to return.
         """
         if limit and limit < 0:
-            raise ValueError("Limit must be positive")
+            raise ClientSideError(_("Limit must be positive"))
         kwargs = _query_to_kwargs(q, storage.SampleFilter.__init__)
         kwargs['meter'] = self._id
         f = storage.SampleFilter(**kwargs)
-        return [Sample.from_db_model(e)
+        return [OldSample.from_db_model(e)
                 for e in pecan.request.storage_conn.get_samples(f, limit=limit)
                 ]
 
-    @wsme_pecan.wsexpose([Sample], body=[Sample])
+    @wsme_pecan.wsexpose([OldSample], body=[OldSample])
     def post(self, samples):
         """Post a list of new Samples to Ceilometer.
 
@@ -884,6 +891,103 @@ class MetersController(rest.RestController):
                 for m in pecan.request.storage_conn.get_meters(**kwargs)]
 
 
+class Sample(_Base):
+    """One measurement."""
+
+    id = wtypes.text
+    "The unique identifier for the sample."
+
+    meter = wtypes.text
+    "The meter name this sample is for."
+
+    type = wtypes.Enum(str, *sample.TYPES)
+    "The meter type (see :ref:`measurements`)"
+
+    unit = wtypes.text
+    "The unit of measure."
+
+    volume = float
+    "The metered value."
+
+    user_id = wtypes.text
+    "The user this sample was taken for."
+
+    project_id = wtypes.text
+    "The project this sample was taken for."
+
+    resource_id = wtypes.text
+    "The :class:`Resource` this sample was taken for."
+
+    source = wtypes.text
+    "The source that identifies where the sample comes from."
+
+    timestamp = datetime.datetime
+    "When the sample has been generated."
+
+    metadata = {wtypes.text: wtypes.text}
+    "Arbitrary metadata associated with the sample."
+
+    @classmethod
+    def from_db_model(cls, m):
+        return cls(id=m.message_id,
+                   meter=m.counter_name,
+                   type=m.counter_type,
+                   unit=m.counter_unit,
+                   volume=m.counter_volume,
+                   user_id=m.user_id,
+                   project_id=m.project_id,
+                   resource_id=m.resource_id,
+                   timestamp=m.timestamp,
+                   metadata=_flatten_metadata(m.resource_metadata))
+
+    @classmethod
+    def sample(cls):
+        return cls(id=str(uuid.uuid1()),
+                   meter='instance',
+                   type='gauge',
+                   unit='instance',
+                   resource_id='bd9431c1-8d69-4ad3-803a-8d4a6b89fd36',
+                   project_id='35b17138-b364-4e6a-a131-8f3099c5be68',
+                   user_id='efd87807-12d2-4b38-9c70-5f5c2ac427ff',
+                   timestamp=timeutils.utcnow(),
+                   source='openstack',
+                   metadata={'name1': 'value1',
+                             'name2': 'value2'},
+                   )
+
+
+class SamplesController(rest.RestController):
+    """Controller managing the samples."""
+
+    @wsme_pecan.wsexpose([Sample], [Query], int)
+    def get_all(self, q=[], limit=None):
+        """Return all known samples, based on the data recorded so far.
+
+        :param q: Filter rules for the samples to be returned.
+        :param limit: Maximum number of samples to be returned.
+        """
+        if limit and limit < 0:
+            raise ClientSideError(_("Limit must be positive"))
+        kwargs = _query_to_kwargs(q, storage.SampleFilter.__init__)
+        f = storage.SampleFilter(**kwargs)
+        return map(Sample.from_db_model,
+                   pecan.request.storage_conn.get_samples(f, limit=limit))
+
+    @wsme_pecan.wsexpose(Sample, wtypes.text)
+    def get_one(self, sample_id):
+        """Return a sample
+
+        :param sample_id: the id of the sample
+        """
+        f = storage.SampleFilter(message_id=sample_id)
+
+        samples = list(pecan.request.storage_conn.get_samples(f))
+        if len(samples) < 1:
+            raise EntityNotFound(_('Sample'), sample_id)
+
+        return Sample.from_db_model(samples[0])
+
+
 class Resource(_Base):
     """An externally defined object for which samples have been received.
     """
@@ -897,8 +1001,11 @@ class Resource(_Base):
     user_id = wtypes.text
     "The ID of the user who created the resource or updated it last"
 
-    timestamp = datetime.datetime
-    "UTC date and time of the last update to any meter for the resource"
+    first_sample_timestamp = datetime.datetime
+    "UTC date & time of the first sample associated with the resource"
+
+    last_sample_timestamp = datetime.datetime
+    "UTC date & time of the last sample associated with the resource"
 
     metadata = {wtypes.text: wtypes.text}
     "Arbitrary metadata associated with the resource"
@@ -1157,8 +1264,8 @@ class Alarm(_Base):
 
     @staticmethod
     def validate(alarm):
-        if (alarm.threshold_rule == wtypes.Unset
-                and alarm.combination_rule == wtypes.Unset):
+        if (alarm.threshold_rule in (wtypes.Unset, None)
+                and alarm.combination_rule in (wtypes.Unset, None)):
             error = _("either threshold_rule or combination_rule "
                       "must be set")
             raise ClientSideError(error)
@@ -1279,7 +1386,7 @@ class AlarmController(rest.RestController):
         auth_project = acl.get_limited_to_project(pecan.request.headers)
         alarms = list(self.conn.get_alarms(alarm_id=self._id,
                                            project=auth_project))
-        if len(alarms) < 1:
+        if not alarms:
             raise EntityNotFound(_('Alarm'), self._id)
         return alarms[0]
 
@@ -1481,7 +1588,7 @@ class AlarmsController(rest.RestController):
         # make sure alarms are unique by name per project.
         alarms = list(conn.get_alarms(name=data.name,
                                       project=data.project_id))
-        if len(alarms) > 0:
+        if alarms:
             raise ClientSideError(_("Alarm with that name exists"))
 
         try:
@@ -1506,9 +1613,240 @@ class AlarmsController(rest.RestController):
                 for m in pecan.request.storage_conn.get_alarms(**kwargs)]
 
 
+class TraitDescription(_Base):
+    """A description of a trait, with no associated value."""
+
+    type = wtypes.text
+    "the data type, defaults to string"
+
+    name = wtypes.text
+    "the name of the trait"
+
+    @classmethod
+    def sample(cls):
+        return cls(name='service',
+                   type='string'
+                   )
+
+
+class EventQuery(Query):
+    """Query arguments for Event Queries."""
+
+    _supported_types = ['integer', 'float', 'string', 'datetime']
+
+    type = wsme.wsattr(wtypes.text, default='string')
+    "the type of the trait filter, defaults to string"
+
+    def __repr__(self):
+        # for logging calls
+        return '<EventQuery %r %s %r %s>' % (self.field,
+                                             self.op,
+                                             self._get_value_as_type(),
+                                             self.type)
+
+
+class Trait(_Base):
+    """A Trait associated with an event."""
+
+    name = wtypes.text
+    "The name of the trait"
+
+    value = wtypes.text
+    "the value of the trait"
+
+    type = wtypes.text
+    "the type of the trait (string, integer, float or datetime)"
+
+    @classmethod
+    def sample(cls):
+        return cls(name='service',
+                   type='string',
+                   value='compute.hostname'
+                   )
+
+
+class Event(_Base):
+    """A System event."""
+
+    message_id = wtypes.text
+    "The message ID for the notification"
+
+    event_type = wtypes.text
+    "The type of the event"
+
+    _traits = None
+
+    def get_traits(self):
+        return self._traits
+
+    @staticmethod
+    def _convert_storage_trait(t):
+        """Helper method to convert a storage model into an API trait
+        instance. If an API trait instance is passed in, just return it.
+        """
+        if isinstance(t, Trait):
+            return t
+        value = (six.text_type(t.value)
+                 if not t.dtype == storage.models.Trait.DATETIME_TYPE
+                 else t.value.isoformat())
+        type = storage.models.Trait.get_name_by_type(t.dtype)
+        return Trait(name=t.name, type=type, value=value)
+
+    def set_traits(self, traits):
+        self._traits = map(self._convert_storage_trait, traits)
+
+    traits = wsme.wsproperty(wtypes.ArrayType(Trait),
+                             get_traits,
+                             set_traits)
+    "Event specific properties"
+
+    generated = datetime.datetime
+    "The time the event occurred"
+
+    @classmethod
+    def sample(cls):
+        return cls(
+            event_type='compute.instance.update',
+            generated='2013-11-11T20:00:00',
+            message_id='94834db1-8f1b-404d-b2ec-c35901f1b7f0',
+            traits={
+                'request_id': 'req-4e2d67b8-31a4-48af-bb2f-9df72a353a72',
+                'service': 'conductor.tem-devstack-01',
+                'tenant_id': '7f13f2b17917463b9ee21aa92c4b36d6'
+            }
+        )
+
+
+def requires_admin(func):
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        usr_limit, proj_limit = acl.get_limited_to(pecan.request.headers)
+        # If User and Project are None, you have full access.
+        if usr_limit and proj_limit:
+            raise ClientSideError(_("Not Authorized"), status_code=403)
+        return func(*args, **kwargs)
+
+    return wrapped
+
+
+def _event_query_to_event_filter(q):
+    evt_model_filter = {
+        'event_type': None,
+        'message_id': None,
+        'start_time': None,
+        'end_time': None
+    }
+    traits_filter = []
+
+    for i in q:
+        # FIXME(herndon): Support for operators other than
+        # 'eq' will come later.
+        if i.op != 'eq':
+            error = _("operator %s not supported") % i.op
+            raise ClientSideError(error)
+        if i.field in evt_model_filter:
+            evt_model_filter[i.field] = i.value
+        else:
+            traits_filter.append({"key": i.field,
+                                  i.type: i._get_value_as_type()})
+    return storage.EventFilter(traits_filter=traits_filter, **evt_model_filter)
+
+
+class TraitsController(rest.RestController):
+    """Works on Event Traits."""
+
+    @requires_admin
+    @wsme_pecan.wsexpose([Trait], wtypes.text, wtypes.text)
+    def get_one(self, event_type, trait_name):
+        """Return all instances of a trait for an event type.
+
+        :param event_type: Event type to filter traits by
+        :param trait_name: Trait to return values for
+        """
+        LOG.debug(_("Getting traits for %s") % event_type)
+        return [Trait(name=t.name, type=t.get_type_name(), value=t.value)
+                for t in pecan.request.storage_conn
+                .get_traits(event_type, trait_name)]
+
+    @requires_admin
+    @wsme_pecan.wsexpose([TraitDescription], wtypes.text)
+    def get_all(self, event_type):
+        """Return all trait names for an event type.
+
+        :param event_type: Event type to filter traits by
+        """
+        get_trait_name = storage.models.Trait.get_name_by_type
+        return [TraitDescription(name=t['name'],
+                                 type=get_trait_name(t['data_type']))
+                for t in pecan.request.storage_conn
+                .get_trait_types(event_type)]
+
+
+class EventTypesController(rest.RestController):
+    """Works on Event Types in the system."""
+
+    traits = TraitsController()
+
+    # FIXME(herndon): due to a bug in pecan, making this method
+    # get_all instead of get will hide the traits subcontroller.
+    # https://bugs.launchpad.net/pecan/+bug/1262277
+    @requires_admin
+    @wsme_pecan.wsexpose([unicode])
+    def get(self):
+        """Get all event types.
+        """
+        return list(pecan.request.storage_conn.get_event_types())
+
+
+class EventsController(rest.RestController):
+    """Works on Events."""
+
+    @requires_admin
+    @wsme_pecan.wsexpose([Event], [EventQuery])
+    def get_all(self, q=[]):
+        """Return all events matching the query filters.
+
+        :param q: Filter arguments for which Events to return
+        """
+        event_filter = _event_query_to_event_filter(q)
+        return [Event(message_id=event.message_id,
+                      event_type=event.event_type,
+                      generated=event.generated,
+                      traits=event.traits)
+                for event in
+                pecan.request.storage_conn.get_events(event_filter)]
+
+    @requires_admin
+    @wsme_pecan.wsexpose(Event, wtypes.text)
+    def get_one(self, message_id):
+        """Return a single event with the given message id.
+
+        :param message_id: Message ID of the Event to be returned
+        """
+        event_filter = storage.EventFilter(message_id=message_id)
+        events = pecan.request.storage_conn.get_events(event_filter)
+        if not events:
+            raise EntityNotFound(_("Event"), message_id)
+
+        if len(events) > 1:
+            LOG.error(_("More than one event with "
+                        "id %s returned from storage driver") % message_id)
+
+        event = events[0]
+
+        return Event(message_id=event.message_id,
+                     event_type=event.event_type,
+                     generated=event.generated,
+                     traits=event.traits)
+
+
 class V2Controller(object):
     """Version 2 API controller root."""
 
     resources = ResourcesController()
     meters = MetersController()
+    samples = SamplesController()
     alarms = AlarmsController()
+    event_types = EventTypesController()
+    events = EventsController()

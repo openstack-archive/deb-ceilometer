@@ -23,7 +23,7 @@
 # Options defined in ceilometer.sample
 #
 
-# Source for samples emited on this instance (string value)
+# Source for samples emitted on this instance (string value)
 # Deprecated group/name - [DEFAULT]/counter_source
 #sample_source=openstack
 
@@ -189,7 +189,7 @@
 
 # format string to use for log messages with context (string
 # value)
-#logging_context_format_string=%(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user)s %(tenant)s] %(instance)s%(message)s
+#logging_context_format_string=%(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s
 
 # format string to use for log messages without context
 # (string value)
@@ -204,7 +204,7 @@
 #logging_exception_prefix=%(asctime)s.%(msecs)03d %(process)d TRACE %(name)s %(instance)s
 
 # list of logger=LEVEL pairs (list value)
-#default_log_levels=amqp=WARN,amqplib=WARN,boto=WARN,keystone=INFO,qpid=WARN,sqlalchemy=WARN,suds=INFO,iso8601=WARN
+#default_log_levels=amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,iso8601=WARN
 
 # publish error events (boolean value)
 #publish_errors=false
@@ -518,37 +518,84 @@
 #cinder_control_exchange=cinder
 
 
-[publisher_rpc]
+[alarm]
 
 #
-# Options defined in ceilometer.publisher.rpc
+# Options defined in ceilometer.alarm.notifier.rest
 #
 
-# the topic ceilometer uses for metering messages (string
-# value)
-#metering_topic=metering
+# SSL Client certificate for REST notifier (string value)
+#rest_notifier_certificate_file=
 
-# Secret value for signing metering messages (string value)
-#metering_secret=change this or be hacked
+# SSL Client private key for REST notifier (string value)
+#rest_notifier_certificate_key=
 
+# Verify the SSL Server certificate when
+# calling alarm action (boolean value)
+#rest_notifier_ssl_verify=true
 
-[ssl]
 
 #
-# Options defined in ceilometer.openstack.common.sslutils
+# Options defined in ceilometer.alarm.rpc
 #
 
-# CA certificate file to use to verify connecting clients
+# the topic ceilometer uses for alarm notifier messages
 # (string value)
-#ca_file=<None>
+#notifier_rpc_topic=alarm_notifier
 
-# Certificate file to use when starting the server securely
-# (string value)
-#cert_file=<None>
+# the topic ceilometer uses for alarm partition coordination
+# messages (string value)
+#partition_rpc_topic=alarm_partition_coordination
 
-# Private key file to use when starting the server securely
-# (string value)
-#key_file=<None>
+
+#
+# Options defined in ceilometer.alarm.service
+#
+
+# Period of evaluation cycle, should be >= than configured
+# pipeline interval for collection of underlying metrics.
+# (integer value)
+# Deprecated group/name - [alarm]/threshold_evaluation_interval
+#evaluation_interval=60
+
+# Class to launch as alarm evaluation service (string value)
+#evaluation_service=ceilometer.alarm.service.SingletonAlarmService
+
+
+#
+# Options defined in ceilometer.api.controllers.v2
+#
+
+# Record alarm change events (boolean value)
+#record_history=true
+
+
+[api]
+
+#
+# Options defined in ceilometer.api
+#
+
+# The port for the ceilometer API server (integer value)
+# Deprecated group/name - [DEFAULT]/metering_api_port
+#port=8777
+
+# The listen IP for the ceilometer API server (string value)
+#host=0.0.0.0
+
+
+[collector]
+
+#
+# Options defined in ceilometer.collector
+#
+
+# address to bind the UDP socket todisabled if set to an empty
+# string (string value)
+#udp_address=0.0.0.0
+
+# port to bind the UDP socket to (integer value)
+#udp_port=4952
 
 
 [database]
@@ -560,11 +607,6 @@
 # The backend to use for db (string value)
 # Deprecated group/name - [DEFAULT]/db_backend
 #backend=sqlalchemy
-
-# Enable the experimental use of thread pooling for all DB API
-# calls (boolean value)
-# Deprecated group/name - [DEFAULT]/dbapi_use_tpool
-#use_tpool=false
 
 
 #
@@ -586,6 +628,7 @@
 # value)
 # Deprecated group/name - [DEFAULT]/sql_idle_timeout
 # Deprecated group/name - [DATABASE]/sql_idle_timeout
+# Deprecated group/name - [sql]/idle_timeout
 #idle_timeout=3600
 
 # Minimum number of SQL connections to keep open in a pool
@@ -643,6 +686,185 @@
 #time_to_live=-1
 
 
+[dispatcher_file]
+
+#
+# Options defined in ceilometer.dispatcher.file
+#
+
+# Name and the location of the file to record meters. (string
+# value)
+#file_path=<None>
+
+# The max size of the file (integer value)
+#max_bytes=0
+
+# The max number of the files to keep (integer value)
+#backup_count=0
+
+
+[event]
+
+#
+# Options defined in ceilometer.event.converter
+#
+
+# Configuration file for event definitions (string value)
+#definitions_cfg_file=event_definitions.yaml
+
+# Drop notifications if no event definition matches.
+# (Otherwise, we convert them with just the default traits)
+# (boolean value)
+#drop_unmatched_notifications=false
+
+
+[keystone_authtoken]
+
+#
+# Options defined in keystoneclient.middleware.auth_token
+#
+
+# Prefix to prepend at the beginning of the path (string
+# value)
+#auth_admin_prefix=
+
+# Host providing the admin Identity API endpoint (string
+# value)
+#auth_host=127.0.0.1
+
+# Port of the admin Identity API endpoint (integer value)
+#auth_port=35357
+
+# Protocol of the admin Identity API endpoint(http or https)
+# (string value)
+#auth_protocol=https
+
+# Complete public Identity API endpoint (string value)
+#auth_uri=<None>
+
+# API version of the admin Identity API endpoint (string
+# value)
+#auth_version=<None>
+
+# Do not handle authorization requests within the middleware,
+# but delegate the authorization decision to downstream WSGI
+# components (boolean value)
+#delay_auth_decision=false
+
+# Request timeout value for communicating with Identity API
+# server. (boolean value)
+#http_connect_timeout=<None>
+
+# How many times are we trying to reconnect when communicating
+# with Identity API Server. (integer value)
+#http_request_max_retries=3
+
+# Allows to pass in the name of a fake http_handler callback
+# function used instead of httplib.HTTPConnection or
+# httplib.HTTPSConnection. Useful for unit testing where
+# network is not available. (string value)
+#http_handler=<None>
+
+# Single shared secret with the Keystone configuration used
+# for bootstrapping a Keystone installation, or otherwise
+# bypassing the normal authentication process. (string value)
+#admin_token=<None>
+
+# Keystone account username (string value)
+#admin_user=<None>
+
+# Keystone account password (string value)
+#admin_password=<None>
+
+# Keystone service account tenant name to validate user tokens
+# (string value)
+#admin_tenant_name=admin
+
+# Env key for the swift cache (string value)
+#cache=<None>
+
+# Required if Keystone server requires client certificate
+# (string value)
+#certfile=<None>
+
+# Required if Keystone server requires client certificate
+# (string value)
+#keyfile=<None>
+
+# A PEM encoded Certificate Authority to use when verifying
+# HTTPs connections. Defaults to system CAs. (string value)
+#cafile=<None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure=false
+
+# Directory used to cache files related to PKI tokens (string
+# value)
+#signing_dir=<None>
+
+# If defined, the memcache server(s) to use for caching (list
+# value)
+# Deprecated group/name - [DEFAULT]/memcache_servers
+#memcached_servers=<None>
+
+# In order to prevent excessive requests and validations, the
+# middleware uses an in-memory cache for the tokens the
+# Keystone API returns. This is only valid if memcache_servers
+# is defined. Set to -1 to disable caching completely.
+# (integer value)
+#token_cache_time=300
+
+# Value only used for unit testing (integer value)
+#revocation_cache_time=1
+
+# (optional) if defined, indicate whether token data should be
+# authenticated or authenticated and encrypted. Acceptable
+# values are MAC or ENCRYPT.  If MAC, token data is
+# authenticated (with HMAC) in the cache. If ENCRYPT, token
+# data is encrypted and authenticated in the cache. If the
+# value is not one of these options or empty, auth_token will
+# raise an exception on initialization. (string value)
+#memcache_security_strategy=<None>
+
+# (optional, mandatory if memcache_security_strategy is
+# defined) this string is used for key derivation. (string
+# value)
+#memcache_secret_key=<None>
+
+# (optional) indicate whether to set the X-Service-Catalog
+# header. If False, middleware will not ask for service
+# catalog on token validation and will not set the X-Service-
+# Catalog header. (boolean value)
+#include_service_catalog=true
+
+
+[matchmaker_redis]
+
+#
+# Options defined in ceilometer.openstack.common.rpc.matchmaker_redis
+#
+
+# Host to locate redis (string value)
+#host=127.0.0.1
+
+# Use this port to connect to redis host. (integer value)
+#port=6379
+
+# Password for Redis server. (optional) (string value)
+#password=<None>
+
+
+[matchmaker_ring]
+
+#
+# Options defined in ceilometer.openstack.common.rpc.matchmaker_ring
+#
+
+# Matchmaker ring file (JSON) (string value)
+# Deprecated group/name - [DEFAULT]/matchmaker_ringfile
+#ringfile=/etc/oslo/matchmaker_ring.json
+
+
 [notification]
 
 #
@@ -657,56 +879,27 @@
 #store_events=false
 
 
-[alarm]
+[publisher]
 
 #
-# Options defined in ceilometer.alarm.notifier.rest
+# Options defined in ceilometer.publisher.utils
 #
 
-# SSL Client certificate for REST notifier (string value)
-#rest_notifier_certificate_file=
+# Secret value for signing metering messages (string value)
+# Deprecated group/name - [DEFAULT]/metering_secret
+# Deprecated group/name - [publisher_rpc]/metering_secret
+#metering_secret=change this or be hacked
 
-# SSL Client private key for REST notifier (string value)
-#rest_notifier_certificate_key=
 
-# Verify the SSL Server certificate when
-# calling alarm action (boolean value)
-#rest_notifier_ssl_verify=true
-
+[publisher_rpc]
 
 #
-# Options defined in ceilometer.alarm.rpc
+# Options defined in ceilometer.publisher.rpc
 #
 
-# the topic ceilometer uses for alarm notifier messages
-# (string value)
-#notifier_rpc_topic=alarm_notifier
-
-# the topic ceilometer uses for alarm partition coordination
-# messages (string value)
-#partition_rpc_topic=alarm_partition_coordination
-
-
-#
-# Options defined in ceilometer.alarm.service
-#
-
-# Period of evaluation cycle, should be >= than configured
-# pipeline interval for collection of underlying metrics.
-# (integer value)
-# Deprecated group/name - [alarm]/threshold_evaluation_interval
-#evaluation_interval=60
-
-# Class to launch as alarm evaluation service (string value)
-#evaluation_service=ceilometer.alarm.service.SingletonAlarmService
-
-
-#
-# Options defined in ceilometer.api.controllers.v2
-#
-
-# Record alarm change events (boolean value)
-#record_history=true
+# the topic ceilometer uses for metering messages (string
+# value)
+#metering_topic=metering
 
 
 [rpc_notifier2]
@@ -717,20 +910,6 @@
 
 # AMQP topic(s) used for OpenStack notifications (list value)
 #topics=notifications
-
-
-[api]
-
-#
-# Options defined in ceilometer.api
-#
-
-# The port for the ceilometer API server (integer value)
-# Deprecated group/name - [DEFAULT]/metering_api_port
-#port=8777
-
-# The listen IP for the ceilometer API server (string value)
-#host=0.0.0.0
 
 
 [service_credentials]
@@ -772,61 +951,22 @@
 #insecure=false
 
 
-[dispatcher_file]
+[ssl]
 
 #
-# Options defined in ceilometer.dispatcher.file
+# Options defined in ceilometer.openstack.common.sslutils
 #
 
-# Name and the location of the file to record meters. (string
-# value)
-#file_path=<None>
+# CA certificate file to use to verify connecting clients
+# (string value)
+#ca_file=<None>
 
-# The max size of the file (integer value)
-#max_bytes=0
+# Certificate file to use when starting the server securely
+# (string value)
+#cert_file=<None>
 
-# The max number of the files to keep (integer value)
-#backup_count=0
-
-
-[collector]
-
-#
-# Options defined in ceilometer.collector
-#
-
-# address to bind the UDP socket todisabled if set to an empty
-# string (string value)
-#udp_address=0.0.0.0
-
-# port to bind the UDP socket to (integer value)
-#udp_port=4952
-
-
-[matchmaker_ring]
-
-#
-# Options defined in ceilometer.openstack.common.rpc.matchmaker_ring
-#
-
-# Matchmaker ring file (JSON) (string value)
-# Deprecated group/name - [DEFAULT]/matchmaker_ringfile
-#ringfile=/etc/oslo/matchmaker_ring.json
-
-
-[matchmaker_redis]
-
-#
-# Options defined in ceilometer.openstack.common.rpc.matchmaker_redis
-#
-
-# Host to locate redis (string value)
-#host=127.0.0.1
-
-# Use this port to connect to redis host. (integer value)
-#port=6379
-
-# Password for Redis server. (optional) (string value)
-#password=<None>
+# Private key file to use when starting the server securely
+# (string value)
+#key_file=<None>
 
 
