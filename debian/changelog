@@ -1,4 +1,4 @@
-ceilometer (2014.1~b1-1) experimental; urgency=low
+ceilometer (2014.1~b2-1) experimental; urgency=low
 
   * New upstream release (Icehouse beta 1).
   * Removes now applied upstream CVE-2013-6384 patch, refreshes
