@@ -5,10 +5,10 @@
     delaycompress
     notifempty
     postrotate
-        if dpkg-vendor --derives-from ubuntu ; then
-            service ceilometer-api restart >/dev/null 2>&1 || true
-        else
-            invoke-rc.d ceilometer-api restart >/dev/null 2>&1 || true
+        if dpkg-vendor --derives-from ubuntu ; then \
+            service ceilometer-api restart >/dev/null 2>&1 || true ; \
+        else \
+            invoke-rc.d ceilometer-api restart >/dev/null 2>&1 || true ; \
         fi
     endscript
 }
