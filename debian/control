@@ -242,3 +242,20 @@ Description: OpenStack efficient metering counters system - alarm notifier
  overall system.
  .
  This package contains the alarm notifier daemon.
+
+Package: ceilometer-notification-agent
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends}
+Description: OpenStack efficient metering counters system - alarm notifier
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, accros
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the notification agent daemon.

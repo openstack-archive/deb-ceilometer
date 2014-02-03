@@ -1,0 +1,14 @@
+/var/log/ceilometer/ceilometer-notification-agent.log {
+    daily
+    missingok
+    compress
+    delaycompress
+    notifempty
+    postrotate
+        if dpkg-vendor --derives-from ubuntu ; then \
+            service ceilometer-notification-agent restart >/dev/null 2>&1 || true ; \
+        else \
+            invoke-rc.d ceilometer-notification-agent restart >/dev/null 2>&1 || true ; \
+        fi
+    endscript
+}
