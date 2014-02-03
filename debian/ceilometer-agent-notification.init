@@ -1,14 +1,14 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          ceilometer-notification-agent
+# Provides:          ceilometer-agent-notification
 # Required-Start:    $network $local_fs $remote_fs $syslog
 # Required-Stop:     $remote_fs
 # Should-Start:      mongodb rabbitmq-server
 # Should-Stop:       mongodb rabbitmq-server
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: ceilometer notification agent
-# Description:       ceilometer notification agent
+# Short-Description: ceilometer agent notification
+# Description:       ceilometer agent notification
 ### END INIT INFO
 
 # Author: Thomas Goirand <zigo@debian.org>
@@ -16,7 +16,7 @@
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="Ceilometer Notification Agent"
 SYS_NAME=ceilometer
-NAME=ceilometer-notification-agent
+NAME=ceilometer-agent-notification
 DAEMON=/usr/bin/${NAME}
 
 SCRIPTNAME=/etc/init.d/${NAME}

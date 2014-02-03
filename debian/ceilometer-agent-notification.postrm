@@ -3,7 +3,7 @@
 set -e
 
 if [ "${1}" = purge ] ; then
-	rm -f /var/log/ceilometer/ceilometer-notification-agent.log*
+	rm -f /var/log/ceilometer/ceilometer-agent-notification.log*
 	[ -d /var/log/ceilometer ] && rmdir --ignore-fail-on-non-empty /var/log/ceilometer
 fi
 
