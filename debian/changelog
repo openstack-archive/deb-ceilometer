@@ -1,3 +1,10 @@
+ceilometer (2013.2.1-5) unstable; urgency=medium
+
+  * Added missing postrotate scripts to restart daemons after logrotate
+    (Closes: #736930).
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 03 Feb 2014 15:41:29 +0800
+
 ceilometer (2013.2.1-4) unstable; urgency=medium
 
   * Fix ${LIBVIRT_GROUP} when doing adduser ceilometer libvirt, so that it also
