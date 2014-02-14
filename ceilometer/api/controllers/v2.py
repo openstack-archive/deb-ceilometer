@@ -893,8 +893,11 @@ class Resource(_Base):
     user_id = wtypes.text
     "The ID of the user who created the resource or updated it last"
 
-    timestamp = datetime.datetime
-    "UTC date and time of the last update to any meter for the resource"
+    first_sample_timestamp = datetime.datetime
+    "UTC date & time of the first sample associated with the resource"
+
+    last_sample_timestamp = datetime.datetime
+    "UTC date & time of the last sample associated with the resource"
 
     metadata = {wtypes.text: wtypes.text}
     "Arbitrary metadata associated with the resource"
@@ -1088,6 +1091,11 @@ class AlarmCombinationRule(_Base):
 
 class Alarm(_Base):
     """Representation of an alarm.
+
+    .. note::
+        combination_rule and threshold_rule are mutually exclusive. The *type*
+        of the alarm should be set to *threshold* or *combination* and the
+        appropriate rule should be filled.
     """
 
     alarm_id = wtypes.text
@@ -1203,9 +1211,9 @@ class Alarm(_Base):
         return cls(alarm_id=None,
                    name="SwiftObjectAlarm",
                    description="An alarm",
-                   type='threshold',
+                   type='combination',
                    threshold_rule=None,
-                   combination_rule=None,
+                   combination_rule=AlarmCombinationRule.sample(),
                    user_id="c96c887c216949acbdfbd8b494863567",
                    project_id="c96c887c216949acbdfbd8b494863567",
                    enabled=True,
