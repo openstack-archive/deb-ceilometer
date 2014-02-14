@@ -13,8 +13,10 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
     Change-Id: Icb66d17066b515bebf3f3a326d84e18cbfce01ef
     Signed-off-by: Julien Danjou <julien@danjou.info>
 
---- a/ceilometer/api/controllers/v2.py
-+++ b/ceilometer/api/controllers/v2.py
+Index: ceilometer/ceilometer/api/controllers/v2.py
+===================================================================
+--- ceilometer.orig/ceilometer/api/controllers/v2.py	2014-02-14 10:20:11.000000000 +0800
++++ ceilometer/ceilometer/api/controllers/v2.py	2014-02-14 10:20:17.000000000 +0800
 @@ -516,19 +516,19 @@
      source = wtypes.text
      "The ID of the source that identifies where the sample comes from"
@@ -83,7 +85,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          now = timeutils.utcnow()
          auth_project = acl.get_limited_to_project(pecan.request.headers)
          def_source = pecan.request.cfg.sample_source
-@@ -1002,14 +989,6 @@
+@@ -1005,14 +992,6 @@
  
      @staticmethod
      def validate(threshold_rule):
@@ -98,7 +100,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          #note(sileht): wsme default doesn't work in some case
          #workaround for https://bugs.launchpad.net/wsme/+bug/1227039
          if not threshold_rule.query:
-@@ -1074,17 +1053,6 @@
+@@ -1077,17 +1056,6 @@
                     alarm_ids=['739e99cb-c2ec-4718-b900-332502355f38',
                                '153462d0-a9b8-4b5b-8175-9e4b05e9b856'])
  
@@ -116,7 +118,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
  
  class Alarm(_Base):
      """Representation of an alarm.
-@@ -1165,13 +1133,18 @@
+@@ -1173,13 +1141,18 @@
  
      @staticmethod
      def validate(alarm):
@@ -142,7 +144,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
  
          if alarm.threshold_rule:
              # ensure an implicit constraint on project_id is added to
-@@ -1182,20 +1155,17 @@
+@@ -1190,20 +1163,17 @@
                  on_behalf_of=alarm.project_id
              )
          elif alarm.combination_rule:
@@ -167,7 +169,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          return alarm
  
      @classmethod
-@@ -1318,7 +1288,6 @@
+@@ -1326,7 +1296,6 @@
          """Return this alarm."""
          return Alarm.from_db_model(self._alarm())
  
@@ -175,7 +177,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
      @wsme_pecan.wsexpose(Alarm, wtypes.text, body=Alarm)
      def put(self, data):
          """Modify this alarm."""
-@@ -1329,18 +1298,20 @@
+@@ -1337,18 +1306,20 @@
  
          data.alarm_id = self._id
          user, project = acl.get_limited_to(pecan.request.headers)
@@ -202,7 +204,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          old_alarm = Alarm.from_db_model(alarm_in).as_dict(storage.models.Alarm)
          updated_alarm = data.as_dict(storage.models.Alarm)
          try:
-@@ -1440,7 +1411,6 @@
+@@ -1448,7 +1419,6 @@
          except NotImplementedError:
              pass
  
@@ -210,7 +212,7 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
      @wsme_pecan.wsexpose(Alarm, body=Alarm, status_code=201)
      def post(self, data):
          """Create a new alarm."""
-@@ -1449,17 +1419,17 @@
+@@ -1457,17 +1427,17 @@
  
          data.alarm_id = str(uuid.uuid4())
          user, project = acl.get_limited_to(pecan.request.headers)
@@ -236,8 +238,10 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          change = data.as_dict(storage.models.Alarm)
  
          # make sure alarms are unique by name per project.
---- a/ceilometer/tests/api.py
-+++ b/ceilometer/tests/api.py
+Index: ceilometer/ceilometer/tests/api.py
+===================================================================
+--- ceilometer.orig/ceilometer/tests/api.py	2014-02-14 10:20:11.000000000 +0800
++++ ceilometer/ceilometer/tests/api.py	2014-02-14 10:20:17.000000000 +0800
 @@ -104,6 +104,9 @@
                  'template_path': '%s/ceilometer/api/templates' % root_dir,
                  'enable_acl': enable_acl,
@@ -248,8 +252,10 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          }
  
          return pecan.testing.load_test_app(self.config)
---- a/tests/api/v2/test_alarm_scenarios.py
-+++ b/tests/api/v2/test_alarm_scenarios.py
+Index: ceilometer/tests/api/v2/test_alarm_scenarios.py
+===================================================================
+--- ceilometer.orig/tests/api/v2/test_alarm_scenarios.py	2014-02-14 10:20:11.000000000 +0800
++++ ceilometer/tests/api/v2/test_alarm_scenarios.py	2014-02-14 10:20:17.000000000 +0800
 @@ -278,7 +278,9 @@
                                    status=400, headers=self.auth_headers)
              self.assertEqual(
@@ -261,8 +267,10 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
          alarms = list(self.conn.get_alarms())
          self.assertEqual(4, len(alarms))
  
---- a/tests/api/v2/test_app.py
-+++ b/tests/api/v2/test_app.py
+Index: ceilometer/tests/api/v2/test_app.py
+===================================================================
+--- ceilometer.orig/tests/api/v2/test_app.py	2014-02-14 10:20:11.000000000 +0800
++++ ceilometer/tests/api/v2/test_app.py	2014-02-14 10:20:17.000000000 +0800
 @@ -134,7 +134,8 @@
          # Ensure translated messages get placed properly into json faults
          self.stubs.Set(gettextutils, 'get_localized_message',
@@ -293,8 +301,10 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
                                    expect_errors=True,
                                    headers={"Accept":
                                             "application/xml,*/*",
---- a/tests/api/v2/test_post_samples_scenarios.py
-+++ b/tests/api/v2/test_post_samples_scenarios.py
+Index: ceilometer/tests/api/v2/test_post_samples_scenarios.py
+===================================================================
+--- ceilometer.orig/tests/api/v2/test_post_samples_scenarios.py	2014-02-14 10:20:11.000000000 +0800
++++ ceilometer/tests/api/v2/test_post_samples_scenarios.py	2014-02-14 10:20:17.000000000 +0800
 @@ -198,7 +198,7 @@
              s_broke = copy.copy(s1)
              del s_broke[0][m]
@@ -304,8 +314,10 @@ Date:   Mon Sep 30 16:43:59 2013 +0200
                                    expect_errors=True)
              self.assertEqual(data.status_int, 400)
  
---- a/requirements.txt
-+++ b/requirements.txt
+Index: ceilometer/requirements.txt
+===================================================================
+--- ceilometer.orig/requirements.txt	2014-02-14 10:20:15.000000000 +0800
++++ ceilometer/requirements.txt	2014-02-14 10:20:17.000000000 +0800
 @@ -22,7 +22,7 @@
  lxml>=2.3
  requests>=1.1
