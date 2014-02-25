@@ -1,3 +1,9 @@
+ceilometer (2013.2.2-3) unstable; urgency=medium
+
+  * Fixes build-depend for the new SQLA 0.9.x.
+
+ -- Thomas Goirand <zigo@debian.org>  Sun, 23 Feb 2014 22:49:13 +0000
+
 ceilometer (2013.2.2-2) unstable; urgency=medium
 
   * Rebuilt Ceilometer with the new openstack-pkg-tools >= 9.
