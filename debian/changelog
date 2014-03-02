@@ -1,3 +1,9 @@
+ceilometer (2013.2.2-3) UNRELEASED; urgency=low
+
+  * Updated ru.po thanks to Yuri Kozlov (Closes: #736703).
+
+ -- Thomas Goirand <zigo@debian.org>  Sun, 02 Mar 2014 17:24:45 +0800
+
 ceilometer (2013.2.2-2) unstable; urgency=medium
 
   * Rebuilt Ceilometer with the new openstack-pkg-tools >= 9.
