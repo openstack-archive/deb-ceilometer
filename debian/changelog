@@ -1,3 +1,9 @@
+ceilometer (2013.2.2-4) unstable; urgency=medium
+
+  * Updated ru.po thanks to Yuri Kozlov (Closes: #736703).
+
+ -- Thomas Goirand <zigo@debian.org>  Sun, 02 Mar 2014 17:24:45 +0800
+
 ceilometer (2013.2.2-3) unstable; urgency=medium
 
   * Fixes build-depend for the new SQLA 0.9.x.
