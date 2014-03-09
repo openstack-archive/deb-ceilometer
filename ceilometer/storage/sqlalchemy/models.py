@@ -19,17 +19,18 @@ SQLAlchemy models for Ceilometer data.
 """
 
 import json
-import urlparse
+import six.moves.urllib.parse as urlparse
 
 from oslo.config import cfg
 from sqlalchemy import Column, Integer, String, Table, ForeignKey, \
-    Index, UniqueConstraint, BigInteger
-from sqlalchemy import Float, Boolean, Text
+    Index, UniqueConstraint, BigInteger, join
+from sqlalchemy import Float, Boolean, Text, DateTime
 from sqlalchemy.dialects.mysql import DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import backref
+from sqlalchemy.orm import column_property
 from sqlalchemy.orm import relationship
-from sqlalchemy.types import TypeDecorator, DATETIME
+from sqlalchemy.types import TypeDecorator
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models as api_models
@@ -38,7 +39,7 @@ from ceilometer import utils
 sql_opts = [
     cfg.StrOpt('mysql_engine',
                default='InnoDB',
-               help='MySQL engine')
+               help='MySQL engine to use.')
 ]
 
 cfg.CONF.register_opts(sql_opts)
@@ -71,14 +72,14 @@ class JSONEncodedDict(TypeDecorator):
 class PreciseTimestamp(TypeDecorator):
     """Represents a timestamp precise to the microsecond."""
 
-    impl = DATETIME
+    impl = DateTime
 
     def load_dialect_impl(self, dialect):
         if dialect.name == 'mysql':
             return dialect.type_descriptor(DECIMAL(precision=20,
                                                    scale=6,
                                                    asdecimal=True))
-        return dialect.type_descriptor(DATETIME())
+        return self.impl
 
     def process_bind_param(self, value, dialect):
         if value is None:
@@ -116,8 +117,8 @@ Base = declarative_base(cls=CeilometerBase)
 
 
 sourceassoc = Table('sourceassoc', Base.metadata,
-                    Column('meter_id', Integer,
-                           ForeignKey("meter.id")),
+                    Column('sample_id', Integer,
+                           ForeignKey("sample.id")),
                     Column('project_id', String(255),
                            ForeignKey("project.id")),
                     Column('resource_id', String(255),
@@ -130,10 +131,10 @@ sourceassoc = Table('sourceassoc', Base.metadata,
 Index('idx_su', sourceassoc.c['source_id'], sourceassoc.c['user_id']),
 Index('idx_sp', sourceassoc.c['source_id'], sourceassoc.c['project_id']),
 Index('idx_sr', sourceassoc.c['source_id'], sourceassoc.c['resource_id']),
-Index('idx_sm', sourceassoc.c['source_id'], sourceassoc.c['meter_id']),
+Index('idx_ss', sourceassoc.c['source_id'], sourceassoc.c['sample_id']),
 Index('ix_sourceassoc_source_id', sourceassoc.c['source_id'])
-UniqueConstraint(sourceassoc.c['meter_id'], sourceassoc.c['user_id'],
-                 name='uniq_sourceassoc0meter_id0user_id')
+UniqueConstraint(sourceassoc.c['sample_id'], sourceassoc.c['user_id'],
+                 name='uniq_sourceassoc0sample_id0user_id')
 
 
 class Source(Base):
@@ -148,7 +149,7 @@ class MetaText(Base):
     __table_args__ = (
         Index('ix_meta_text_key', 'meta_key'),
     )
-    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('sample.id'), primary_key=True)
     meta_key = Column(String(255), primary_key=True)
     value = Column(Text)
 
@@ -160,7 +161,7 @@ class MetaBool(Base):
     __table_args__ = (
         Index('ix_meta_bool_key', 'meta_key'),
     )
-    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('sample.id'), primary_key=True)
     meta_key = Column(String(255), primary_key=True)
     value = Column(Boolean)
 
@@ -172,7 +173,7 @@ class MetaBigInt(Base):
     __table_args__ = (
         Index('ix_meta_int_key', 'meta_key'),
     )
-    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('sample.id'), primary_key=True)
     meta_key = Column(String(255), primary_key=True)
     value = Column(BigInteger, default=False)
 
@@ -184,42 +185,71 @@ class MetaFloat(Base):
     __table_args__ = (
         Index('ix_meta_float_key', 'meta_key'),
     )
-    id = Column(Integer, ForeignKey('meter.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('sample.id'), primary_key=True)
     meta_key = Column(String(255), primary_key=True)
-    value = Column(Float, default=False)
+    value = Column(Float(53), default=False)
 
 
 class Meter(Base):
-    """Metering data."""
+    """Meter definition data."""
 
     __tablename__ = 'meter'
     __table_args__ = (
-        Index('ix_meter_timestamp', 'timestamp'),
-        Index('ix_meter_user_id', 'user_id'),
-        Index('ix_meter_project_id', 'project_id'),
-        Index('idx_meter_rid_cname', 'resource_id', 'counter_name'),
+        UniqueConstraint('name', 'type', 'unit', name='def_unique'),
+        Index('ix_meter_name', 'name')
     )
     id = Column(Integer, primary_key=True)
-    counter_name = Column(String(255))
+    name = Column(String(255), nullable=False)
+    type = Column(String(255))
+    unit = Column(String(255))
+
+
+class Sample(Base):
+    """Metering data."""
+
+    __tablename__ = 'sample'
+    __table_args__ = (
+        Index('ix_sample_timestamp', 'timestamp'),
+        Index('ix_sample_user_id', 'user_id'),
+        Index('ix_sample_project_id', 'project_id'),
+    )
+    id = Column(Integer, primary_key=True)
+    meter_id = Column(Integer, ForeignKey('meter.id'))
     user_id = Column(String(255), ForeignKey('user.id'))
     project_id = Column(String(255), ForeignKey('project.id'))
     resource_id = Column(String(255), ForeignKey('resource.id'))
     resource_metadata = Column(JSONEncodedDict())
-    counter_type = Column(String(255))
-    counter_unit = Column(String(255))
-    counter_volume = Column(Float(53))
+    volume = Column(Float(53))
     timestamp = Column(PreciseTimestamp(), default=timeutils.utcnow)
+    recorded_at = Column(PreciseTimestamp(), default=timeutils.utcnow)
     message_signature = Column(String(1000))
     message_id = Column(String(1000))
     sources = relationship("Source", secondary=lambda: sourceassoc)
-    meta_text = relationship("MetaText", backref="meter",
+    meta_text = relationship("MetaText", backref="sample",
                              cascade="all, delete-orphan")
-    meta_float = relationship("MetaFloat", backref="meter",
+    meta_float = relationship("MetaFloat", backref="sample",
                               cascade="all, delete-orphan")
-    meta_int = relationship("MetaBigInt", backref="meter",
+    meta_int = relationship("MetaBigInt", backref="sample",
                             cascade="all, delete-orphan")
-    meta_bool = relationship("MetaBool", backref="meter",
+    meta_bool = relationship("MetaBool", backref="sample",
                              cascade="all, delete-orphan")
+
+
+class MeterSample(Base):
+    """Helper model as many of the filters work against Sample data
+    joined with Meter data.
+    """
+    meter = Meter.__table__
+    sample = Sample.__table__
+    __table__ = join(meter, sample)
+
+    id = column_property(sample.c.id)
+    meter_id = column_property(meter.c.id, sample.c.meter_id)
+    counter_name = column_property(meter.c.name)
+    counter_type = column_property(meter.c.type)
+    counter_unit = column_property(meter.c.unit)
+    counter_volume = column_property(sample.c.volume)
+    sources = relationship("Source", secondary=lambda: sourceassoc)
 
 
 class User(Base):
@@ -227,7 +257,7 @@ class User(Base):
     id = Column(String(255), primary_key=True)
     sources = relationship("Source", secondary=lambda: sourceassoc)
     resources = relationship("Resource", backref='user')
-    meters = relationship("Meter", backref='user')
+    samples = relationship("Sample", backref='user')
 
 
 class Project(Base):
@@ -235,7 +265,7 @@ class Project(Base):
     id = Column(String(255), primary_key=True)
     sources = relationship("Source", secondary=lambda: sourceassoc)
     resources = relationship("Resource", backref='project')
-    meters = relationship("Meter", backref='project')
+    samples = relationship("Sample", backref='project')
 
 
 class Resource(Base):
@@ -250,7 +280,7 @@ class Resource(Base):
     resource_metadata = Column(JSONEncodedDict())
     user_id = Column(String(255), ForeignKey('user.id'))
     project_id = Column(String(255), ForeignKey('project.id'))
-    meters = relationship("Meter", backref='resource')
+    samples = relationship("Sample", backref='resource')
 
 
 class Alarm(Base):
@@ -267,8 +297,8 @@ class Alarm(Base):
     description = Column(Text)
     timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
 
-    user_id = Column(String(255), ForeignKey('user.id'))
-    project_id = Column(String(255), ForeignKey('project.id'))
+    user_id = Column(String(255))
+    project_id = Column(String(255))
 
     state = Column(String(255))
     state_timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
@@ -279,6 +309,7 @@ class Alarm(Base):
     repeat_actions = Column(Boolean)
 
     rule = Column(JSONEncodedDict)
+    time_constraints = Column(JSONEncodedDict)
 
 
 class AlarmChange(Base):
@@ -377,7 +408,7 @@ class Trait(Base):
     trait_type = relationship("TraitType", backref=backref('trait_type'))
 
     t_string = Column(String(255), nullable=True, default=None)
-    t_float = Column(Float, nullable=True, default=None)
+    t_float = Column(Float(53), nullable=True, default=None)
     t_int = Column(Integer, nullable=True, default=None)
     t_datetime = Column(PreciseTimestamp(), nullable=True, default=None)
 

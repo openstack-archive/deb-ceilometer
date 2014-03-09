@@ -18,11 +18,10 @@
 """Base classes for API tests.
 """
 
-import urllib
-
 import flask
 import pecan
 import pecan.testing
+from six.moves import urllib
 
 from ceilometer.api import acl
 from ceilometer.api.v1 import app as v1_app
@@ -61,7 +60,7 @@ class TestBase(db_test_base.TestBase):
 
     def get(self, path, headers=None, **kwds):
         if kwds:
-            query = path + '?' + urllib.urlencode(kwds)
+            query = path + '?' + urllib.parse.urlencode(kwds)
         else:
             query = path
         rv = self.test_app.get(query, headers=headers)
@@ -148,7 +147,6 @@ class FunctionalTest(db_test_base.TestBase):
         :param status: Expected status code of response
         """
         full_path = self.PATH_PREFIX + path
-        print('%s: %s %s' % (method.upper(), full_path, params))
         response = getattr(self.app, "%s_json" % method)(
             str(full_path),
             params=params,
@@ -157,7 +155,6 @@ class FunctionalTest(db_test_base.TestBase):
             extra_environ=extra_environ,
             expect_errors=expect_errors
         )
-        print('GOT:%s' % response)
         return response
 
     def delete(self, path, expect_errors=False, headers=None,
@@ -173,17 +170,16 @@ class FunctionalTest(db_test_base.TestBase):
         :param status: Expected status code of response
         """
         full_path = self.PATH_PREFIX + path
-        print('DELETE: %s' % (full_path))
         response = self.app.delete(str(full_path),
                                    headers=headers,
                                    status=status,
                                    extra_environ=extra_environ,
                                    expect_errors=expect_errors)
-        print('GOT:%s' % response)
         return response
 
     def get_json(self, path, expect_errors=False, headers=None,
-                 extra_environ=None, q=[], groupby=[], **params):
+                 extra_environ=None, q=[], groupby=[], status=None,
+                 **params):
         """Sends simulated HTTP GET request to Pecan test app.
 
         :param path: url path of target service
@@ -195,6 +191,7 @@ class FunctionalTest(db_test_base.TestBase):
         :param q: list of queries consisting of: field, value, op, and type
                   keys
         :param groupby: list of fields to group by
+        :param status: Expected status code of response
         :param params: content for wsgi.input of request
         """
         full_path = self.PATH_PREFIX + path
@@ -212,13 +209,12 @@ class FunctionalTest(db_test_base.TestBase):
             all_params.update(query_params)
         if groupby:
             all_params.update({'groupby': groupby})
-        print('GET: %s %r' % (full_path, all_params))
         response = self.app.get(full_path,
                                 params=all_params,
                                 headers=headers,
                                 extra_environ=extra_environ,
-                                expect_errors=expect_errors)
+                                expect_errors=expect_errors,
+                                status=status)
         if not expect_errors:
             response = response.json
-        print('GOT:%s' % response)
         return response

@@ -271,6 +271,7 @@ Efficient use of soft deletes:
 """
 
 import functools
+import logging
 import os.path
 import re
 import time
@@ -285,16 +286,15 @@ from sqlalchemy.sql.expression import literal_column
 
 from ceilometer.openstack.common.db import exception
 from ceilometer.openstack.common.gettextutils import _
-from ceilometer.openstack.common import log as logging
 from ceilometer.openstack.common import timeutils
 
 sqlite_db_opts = [
     cfg.StrOpt('sqlite_db',
                default='ceilometer.sqlite',
-               help='the filename to use with sqlite'),
+               help='The file name to use with SQLite'),
     cfg.BoolOpt('sqlite_synchronous',
                 default=True,
-                help='If true, use synchronous mode for sqlite'),
+                help='If True, SQLite uses synchronous mode'),
 ]
 
 database_opts = [
@@ -324,7 +324,7 @@ database_opts = [
                                                   group='DATABASE'),
                                 cfg.DeprecatedOpt('idle_timeout',
                                                   group='sql')],
-               help='timeout before idle sql connections are reaped'),
+               help='Timeout before idle sql connections are reaped'),
     cfg.IntOpt('min_pool_size',
                default=1,
                deprecated_opts=[cfg.DeprecatedOpt('sql_min_pool_size',
@@ -347,7 +347,7 @@ database_opts = [
                                                   group='DEFAULT'),
                                 cfg.DeprecatedOpt('sql_max_retries',
                                                   group='DATABASE')],
-               help='maximum db connection retries during startup. '
+               help='Maximum db connection retries during startup. '
                     '(setting -1 implies an infinite retry count)'),
     cfg.IntOpt('retry_interval',
                default=10,
@@ -355,7 +355,7 @@ database_opts = [
                                                   group='DEFAULT'),
                                 cfg.DeprecatedOpt('reconnect_interval',
                                                   group='DATABASE')],
-               help='interval between retries of opening a sql connection'),
+               help='Interval between retries of opening a sql connection'),
     cfg.IntOpt('max_overflow',
                default=None,
                deprecated_opts=[cfg.DeprecatedOpt('sql_max_overflow',
@@ -737,13 +737,16 @@ def create_engine(sql_connection, sqlite_fk=False,
     if engine.name in ['mysql', 'ibm_db_sa']:
         callback = functools.partial(_ping_listener, engine)
         sqlalchemy.event.listen(engine, 'checkout', callback)
-        if mysql_traditional_mode:
-            sqlalchemy.event.listen(engine, 'checkout', _set_mode_traditional)
-        else:
-            LOG.warning(_("This application has not enabled MySQL traditional"
-                          " mode, which means silent data corruption may"
-                          " occur. Please encourage the application"
-                          " developers to enable this mode."))
+        if engine.name == 'mysql':
+            if mysql_traditional_mode:
+                sqlalchemy.event.listen(engine, 'checkout',
+                                        _set_mode_traditional)
+            else:
+                LOG.warning(_("This application has not enabled MySQL "
+                              "traditional mode, which means silent "
+                              "data corruption may occur. "
+                              "Please encourage the application "
+                              "developers to enable this mode."))
     elif 'sqlite' in connection_dict.drivername:
         if not CONF.sqlite_synchronous:
             sqlalchemy.event.listen(engine, 'connect',

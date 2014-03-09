@@ -24,6 +24,7 @@ import datetime
 import json as jsonutils
 import logging
 import testscenarios
+import webtest.app
 
 from ceilometer.publisher import utils
 from ceilometer import sample
@@ -41,6 +42,30 @@ class TestListEmptyMeters(FunctionalTest,
     def test_empty(self):
         data = self.get_json('/meters')
         self.assertEqual([], data)
+
+
+class TestValidateUserInput(FunctionalTest,
+                            tests_db.MixinTestsWithBackendScenarios):
+
+    def test_list_meters_query_float_metadata(self):
+        self.assertRaises(webtest.app.AppError, self.get_json,
+                          '/meters/meter.test',
+                          q=[{'field': 'metadata.util',
+                          'op': 'eq',
+                          'value': '0.7.5',
+                          'type': 'float'}])
+        self.assertRaises(webtest.app.AppError, self.get_json,
+                          '/meters/meter.test',
+                          q=[{'field': 'metadata.util',
+                          'op': 'eq',
+                          'value': 'abacaba',
+                          'type': 'boolean'}])
+        self.assertRaises(webtest.app.AppError, self.get_json,
+                          '/meters/meter.test',
+                          q=[{'field': 'metadata.util',
+                          'op': 'eq',
+                          'value': '45.765',
+                          'type': 'integer'}])
 
 
 class TestListMeters(FunctionalTest,
@@ -149,7 +174,34 @@ class TestListMeters(FunctionalTest,
         self.assertEqual(set(r['source'] for r in data),
                          set(['test_source', 'test_source1']))
 
+    def test_meters_query_with_timestamp(self):
+        date_time = datetime.datetime(2012, 7, 2, 10, 41)
+        isotime = date_time.isoformat()
+        resp = self.get_json('/meters',
+                             q=[{'field': 'timestamp',
+                                 'op': 'gt',
+                                 'value': isotime}],
+                             expect_errors=True)
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(jsonutils.loads(resp.body)['error_message']
+                         ['faultstring'],
+                         'Unknown argument: "timestamp": '
+                         'not valid for this resource')
+
     def test_list_samples(self):
+        resp = self.get_json('/samples',
+                             q=[{'field': 'search_offset',
+                                 'op': 'eq',
+                                 'value': 42}],
+                             expect_errors=True)
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(jsonutils.loads(resp.body)['error_message']
+                         ['faultstring'],
+                         "Invalid input for field/attribute field. "
+                         "Value: 'search_offset'. "
+                         "search_offset cannot be used without timestamp")
+
+    def test_query_samples_with_search_offset(self):
         data = self.get_json('/samples')
         self.assertEqual(5, len(data))
 
@@ -171,6 +223,7 @@ class TestListMeters(FunctionalTest,
         sample_id = self.messages[1]['message_id']
         data = self.get_json('/samples/%s' % sample_id)
         self.assertIn('id', data)
+        del data['recorded_at']
         self.assertEqual(data, {
             u'id': sample_id,
             u'metadata': {u'display_name': u'test-server',
@@ -184,12 +237,13 @@ class TestListMeters(FunctionalTest,
             u'timestamp': u'2012-07-02T11:40:00',
             u'type': u'cumulative',
             u'unit': u'',
+            u'source': 'test_source',
             u'user_id': u'user-id',
             u'volume': 3.0})
 
     def test_get_not_existing_sample(self):
-        resp = self.get_json('/samples/not_exists', expect_errors=True)
-        self.assertEqual(resp.status_code, 404)
+        resp = self.get_json('/samples/not_exists', expect_errors=True,
+                             status=404)
         self.assertEqual(jsonutils.loads(resp.body)['error_message']
                          ['faultstring'],
                          "Sample not_exists Not Found")
@@ -203,6 +257,7 @@ class TestListMeters(FunctionalTest,
                                  }])
         self.assertIn('id', data[0])
         del data[0]['id']  # Randomly generated
+        del data[0]['recorded_at']
         self.assertEqual(data, [{
             u'user_id': u'user-id4',
             u'resource_id': u'resource-id4',
@@ -212,6 +267,7 @@ class TestListMeters(FunctionalTest,
             u'project_id': u'project-id2',
             u'type': u'gauge',
             u'unit': u'',
+            u'source': u'test_source1',
             u'metadata': {u'display_name': u'test-server',
                           u'properties.prop_2:sub_prop_1': u'sub_prop_value',
                           u'util': u'0.58',
@@ -309,7 +365,6 @@ class TestListMeters(FunctionalTest,
                          set(['meter.mine']))
         self.assertEqual(set(r['resource_metadata']['is_public'] for r
                              in data), set(['False']))
-        # FIXME(gordc): verify no false positive (Bug#1236496)
 
     def test_list_meters_query_string_metadata(self):
         data = self.get_json('/meters/meter.test',

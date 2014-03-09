@@ -21,6 +21,8 @@
 import abc
 import collections
 
+import six
+
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
@@ -37,6 +39,7 @@ DiskIOData = collections.namedtuple(
 )
 
 
+@six.add_metaclass(abc.ABCMeta)
 class _Base(plugin.ComputePollster):
 
     DISKIO_USAGE_MESSAGE = ' '.join(["DISKIO USAGE:",
@@ -78,23 +81,24 @@ class _Base(plugin.ComputePollster):
     def _get_sample(instance, c_data):
         """Return one Sample."""
 
-    def get_samples(self, manager, cache, instance):
-        instance_name = util.instance_name(instance)
-        try:
-            c_data = self._populate_cache(
-                manager.inspector,
-                cache,
-                instance,
-                instance_name,
-            )
-            yield self._get_sample(instance, c_data)
-        except virt_inspector.InstanceNotFoundException as err:
-            # Instance was deleted while getting samples. Ignore it.
-            LOG.debug(_('Exception while getting samples %s'), err)
-        except Exception as err:
-            LOG.warning(_('Ignoring instance %(name)s: %(error)s') % (
-                        {'name': instance_name, 'error': err}))
-            LOG.exception(err)
+    def get_samples(self, manager, cache, resources):
+        for instance in resources:
+            instance_name = util.instance_name(instance)
+            try:
+                c_data = self._populate_cache(
+                    manager.inspector,
+                    cache,
+                    instance,
+                    instance_name,
+                )
+                yield self._get_sample(instance, c_data)
+            except virt_inspector.InstanceNotFoundException as err:
+                # Instance was deleted while getting samples. Ignore it.
+                LOG.debug(_('Exception while getting samples %s'), err)
+            except Exception as err:
+                LOG.warning(_('Ignoring instance %(name)s: %(error)s') % (
+                            {'name': instance_name, 'error': err}))
+                LOG.exception(err)
 
 
 class ReadRequestsPollster(_Base):

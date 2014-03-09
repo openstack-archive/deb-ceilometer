@@ -115,7 +115,7 @@ class Connection(base.Connection):
         """Return an iterable of dictionaries containing meter information.
 
         { 'name': name of the meter,
-          'type': type of the meter (guage, counter),
+          'type': type of the meter (gauge, delta, cumulative),
           'resource_id': UUID of the resource,
           'project_id': UUID of project owning the resource,
           'user_id': UUID of user owning the resource,
@@ -137,7 +137,8 @@ class Connection(base.Connection):
         """
         return []
 
-    def get_meter_statistics(self, sample_filter, period=None, groupby=None):
+    def get_meter_statistics(self, sample_filter, period=None, groupby=None,
+                             aggregate=None):
         """Return a dictionary containing meter statistics.
         described by the query parameters.
 
@@ -176,4 +177,4 @@ class Connection(base.Connection):
         return alarm
 
     def delete_alarm(self, alarm_id):
-        """Delete a alarm."""
+        """Delete an alarm."""

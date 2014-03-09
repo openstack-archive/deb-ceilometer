@@ -54,8 +54,8 @@ Units
 Dimension     Unit      Abbreviations   Note
 ============  ========  ==============  =====
 None          N/A                       Dimension-less variable
-Volume        byte                   B
-Time          seconds                s
+Volume        byte      B
+Time          seconds   s
 ============  ========  ==============  =====
 
 Here are the meter types by components that are currently implemented:
@@ -65,30 +65,38 @@ Compute (Nova)
 
 All meters are related to the guest machine, not the host.
 
-========================  ==========  ========  ========  ============  =======================================================
-Name                      Type        Unit      Resource  Origin        Note
-========================  ==========  ========  ========  ============  =======================================================
-instance                  Gauge       instance  inst ID   both          Duration of instance
-instance:<type>           Gauge       instance  inst ID   both          Duration of instance <type> (openstack types)
-memory                    Gauge             MB  inst ID   notification  Volume of RAM in MB
-cpu                       Cumulative        ns  inst ID   pollster      CPU time used
-cpu_util                  Gauge              %  inst ID   pollster      Average CPU utilisation
-vcpus                     Gauge           vcpu  inst ID   notification  Number of VCPUs
-disk.read.requests        Cumulative   request  inst ID   pollster      Number of read requests
-disk.write.requests       Cumulative   request  inst ID   pollster      Number of write requests
-disk.read.bytes           Cumulative         B  inst ID   pollster      Volume of read in B
-disk.write.bytes          Cumulative         B  inst ID   pollster      Volume of write in B
-disk.root.size            Gauge             GB  inst ID   notification  Size of root disk in GB
-disk.ephemeral.size       Gauge             GB  inst ID   notification  Size of ephemeral disk in GB
-network.incoming.bytes    Cumulative         B  iface ID  pollster      number of incoming bytes on the network for a VM interface
-network.outgoing.bytes    Cumulative         B  iface ID  pollster      number of outgoing bytes on the network for a VM interface
-network.incoming.packets  Cumulative    packet  iface ID  pollster      number of incoming packets for a VM interface
-network.outgoing.packets  Cumulative    packet  iface ID  pollster      number of outgoing packets for a VM interface
-========================  ==========  ========  ========  ============  =======================================================
+=============================  ==========  =========  ========  ============  ==================================================================
+Name                           Type        Unit       Resource  Origin        Note
+=============================  ==========  =========  ========  ============  ==================================================================
+instance                       Gauge       instance   inst ID   both          Existence of instance
+instance:<type>                Gauge       instance   inst ID   both          Existence of instance <type> (openstack types)
+memory                         Gauge       MB         inst ID   notification  Volume of RAM in MB
+cpu                            Cumulative  ns         inst ID   pollster      CPU time used
+cpu_util                       Gauge       %          inst ID   pollster      Average CPU utilisation
+vcpus                          Gauge       vcpu       inst ID   notification  Number of VCPUs
+disk.read.requests             Cumulative  request    inst ID   pollster      Number of read requests
+disk.read.requests.rate        Gauge       request/s  inst ID   pollster      Average rate of read requests per second
+disk.write.requests            Cumulative  request    inst ID   pollster      Number of write requests
+disk.write.requests.rate       Cumulative  request/s  inst ID   pollster      Average rate of write requests per second
+disk.read.bytes                Cumulative  B          inst ID   pollster      Volume of reads in B
+disk.read.bytes.rate           Cumulative  B/s        inst ID   pollster      Average rate of reads in B per second
+disk.write.bytes               Cumulative  B          inst ID   pollster      Volume of writes in B
+disk.write.bytes.rate          Cumulative  B/s        inst ID   pollster      Average volume of writes in B per second
+disk.root.size                 Gauge       GB         inst ID   notification  Size of root disk in GB
+disk.ephemeral.size            Gauge       GB         inst ID   notification  Size of ephemeral disk in GB
+network.incoming.bytes         Cumulative  B          iface ID  pollster      Number of incoming bytes on a VM network interface
+network.incoming.bytes.rate    Gauge       B/s        iface ID  pollster      Average rate per sec of incoming bytes on a VM network interface
+network.outgoing.bytes         Cumulative  B          iface ID  pollster      Number of outgoing bytes on a VM network interface
+network.outgoing.bytes.rate    Gauge       B/s        iface ID  pollster      Average rate per sec of outgoing bytes on a VM network interface
+network.incoming.packets       Cumulative  packet     iface ID  pollster      Number of incoming packets on a VM network interface
+network.incoming.packets.rate  Gauge       packet/s   iface ID  pollster      Average rate per sec of incoming packets on a VM network interface
+network.outgoing.packets       Cumulative  packet     iface ID  pollster      Number of outgoing packets on a VM network interface
+network.outgoing.packets.rate  Gauge       packet/s   iface ID  pollster      Average rate per sec of outgoing packets on a VM network interface
+=============================  ==========  =========  ========  ============  ==================================================================
 
 At present, most of the Nova meters will only work with libvirt front-end
 hypervisors while test coverage was mostly done based on KVM. Contributors
-are welcome to implement other virtualization backends’ meters or complete
+are welcome to implement other virtualization backends' meters or complete
 the existing ones.
 
 Network (Neutron)
@@ -97,19 +105,19 @@ Network (Neutron)
 ========================  ==========  ========  ========  ============  ======================================================
 Name                      Type        Unit      Resource  Origin        Note
 ========================  ==========  ========  ========  ============  ======================================================
-network                   Gauge       network   netw ID   notification  Duration of network
+network                   Gauge       network   netw ID   notification  Existence of network
 network.create            Delta       network   netw ID   notification  Creation requests for this network
 network.update            Delta       network   netw ID   notification  Update requests for this network
-subnet                    Gauge       subnet    subnt ID  notification  Duration of subnet
+subnet                    Gauge       subnet    subnt ID  notification  Existence of subnet
 subnet.create             Delta       subnet    subnt ID  notification  Creation requests for this subnet
 subnet.update             Delta       subnet    subnt ID  notification  Update requests for this subnet
-port                      Gauge       port      port ID   notification  Duration of port
+port                      Gauge       port      port ID   notification  Existence of port
 port.create               Delta       port      port ID   notification  Creation requests for this port
 port.update               Delta       port      port ID   notification  Update requests for this port
-router                    Gauge       router    rtr ID    notification  Duration of router
+router                    Gauge       router    rtr ID    notification  Existence of router
 router.create             Delta       router    rtr ID    notification  Creation requests for this router
 router.update             Delta       router    rtr ID    notification  Update requests for this router
-ip.floating               Gauge       ip        ip ID     both          Duration of floating ip
+ip.floating               Gauge       ip        ip ID     both          Existence of floating ip
 ip.floating.create        Delta       ip        ip ID     notification  Creation requests for this floating ip
 ip.floating.update        Delta       ip        ip ID     notification  Update requests for this floating ip
 ========================  ==========  ========  ========  ============  ======================================================
@@ -120,13 +128,13 @@ Image (Glance)
 ========================  ==========  =======  ========  ============  =======================================================
 Name                      Type        Unit     Resource  Origin        Note
 ========================  ==========  =======  ========  ============  =======================================================
-image                     Gauge         image  image ID  both          Image polling -> it (still) exists
-image.size                Gauge             B  image ID  both          Uploaded image size
-image.update              Delta         image  image ID  notification  Number of update on the image
-image.upload              Delta         image  image ID  notification  Number of upload of the image
-image.delete              Delta         image  image ID  notification  Number of delete on the image
-image.download            Delta             B  image ID  notification  Image is downloaded
-image.serve               Delta             B  image ID  notification  Image is served out
+image                     Gauge       image    image ID  both          Image polling -> it (still) exists
+image.size                Gauge       B        image ID  both          Uploaded image size
+image.update              Delta       image    image ID  notification  Number of update on the image
+image.upload              Delta       image    image ID  notification  Number of upload of the image
+image.delete              Delta       image    image ID  notification  Number of delete on the image
+image.download            Delta       B        image ID  notification  Image is downloaded
+image.serve               Delta       B        image ID  notification  Image is served out
 ========================  ==========  =======  ========  ============  =======================================================
 
 Volume (Cinder)
@@ -135,8 +143,8 @@ Volume (Cinder)
 ========================  ==========  =======  ========  ============  =======================================================
 Name                      Type        Unit     Resource  Origin        Note
 ========================  ==========  =======  ========  ============  =======================================================
-volume                    Gauge        volume  vol ID    notification  Duration of volume
-volume.size               Gauge            GB  vol ID    notification  Size of volume
+volume                    Gauge       volume   vol ID    notification  Existence of volume
+volume.size               Gauge       GB       vol ID    notification  Size of volume
 ========================  ==========  =======  ========  ============  =======================================================
 
 Make sure Cinder is properly configured first: see :ref:`installing_manually`.
@@ -145,16 +153,16 @@ Object Storage (Swift)
 ======================
 
 ===============================  ==========  ==========  ===========  ============  ==========================================
-Name                             Type        Volume      Resource     Origin        Note
+Name                             Type        Unit        Resource     Origin        Note
 ===============================  ==========  ==========  ===========  ============  ==========================================
-storage.objects                  Gauge           object  store ID     pollster      Number of objects
-storage.objects.size             Gauge                B  store ID     pollster      Total size of stored objects
-storage.objects.containers       Gauge        container  store ID     pollster      Number of containers
-storage.objects.incoming.bytes   Delta                B  store ID     notification  Number of incoming bytes
-storage.objects.outgoing.bytes   Delta                B  store ID     notification  Number of outgoing bytes
-storage.api.request              Delta          request  store ID     notification  Number of API requests against swift
-storage.containers.objects       Gauge           object  str ID/cont  pollster      Number of objects in container
-storage.containers.objects.size  Gauge                B  str ID/cont  pollster      Total size of stored objects in container
+storage.objects                  Gauge       object      store ID     pollster      Number of objects
+storage.objects.size             Gauge       B           store ID     pollster      Total size of stored objects
+storage.objects.containers       Gauge       container   store ID     pollster      Number of containers
+storage.objects.incoming.bytes   Delta       B           store ID     notification  Number of incoming bytes
+storage.objects.outgoing.bytes   Delta       B           store ID     notification  Number of outgoing bytes
+storage.api.request              Delta       request     store ID     notification  Number of API requests against swift
+storage.containers.objects       Gauge       object      str ID/cont  pollster      Number of objects in container
+storage.containers.objects.size  Gauge       B           str ID/cont  pollster      Total size of stored objects in container
 ===============================  ==========  ==========  ===========  ============  ==========================================
 
 In order to use storage.objects.incoming.bytes and storage.outgoing.bytes, one must configure
@@ -162,15 +170,64 @@ Swift as described in :ref:`installing_manually`. Note that they may not be
 updated right after an upload/download, since Swift takes some time to update
 the container properties.
 
+Orchestration (Heat)
+====================
+
+===============================  ==========  ==========  ===========  ============  ==========================================
+Name                             Type        Unit        Resource     Origin        Note
+===============================  ==========  ==========  ===========  ============  ==========================================
+stack.create                     Delta       stack       stack ID     notification  Creation requests for a stack successful
+stack.update                     Delta       stack       stack ID     notification  Updating requests for a stack successful
+stack.delete                     Delta       stack       stack ID     notification  Deletion requests for a stack successful
+stack.resume                     Delta       stack       stack ID     notification  Resuming requests for a stack successful
+stack.suspend                    Delta       stack       stack ID     notification  Suspending requests for a stack successful
+===============================  ==========  ==========  ===========  ============  ==========================================
+
+To enable Heat notifications configure Heat as described in :ref:`installing_manually`.
+
 Energy (Kwapi)
 ==============
 
 ==========================  ==========  ==========  ========  ========= ==============================================
-Name                        Type        Volume      Resource  Origin    Note
+Name                        Type        Unit        Resource  Origin    Note
 ==========================  ==========  ==========  ========  ========= ==============================================
-energy                      Cumulative         kWh  probe ID  pollster  Amount of energy
-power                       Gauge                W  probe ID  pollster  Power consumption
+energy                      Cumulative  kWh         probe ID  pollster  Amount of energy
+power                       Gauge       W           probe ID  pollster  Power consumption
 ==========================  ==========  ==========  ========  ========= ==============================================
+
+Network (From SDN Controller)
+=============
+
+These meters based on OpenFlow Switch metrics.
+In order to enable these meters, each driver needs to be configured.
+
+=================================  ==========  ======  =========  ========  ==============================
+Meter                              Type        Unit    Resource   Origin    Note
+=================================  ==========  ======  =========  ========  ==============================
+switch                             Gauge       switch  switch ID  pollster  Existence of switch
+switch.port                        Gauge       port    switch ID  pollster  Existence of port
+switch.port.receive.packets        Cumulative  packet  switch ID  pollster  Received Packets
+switch.port.transmit.packets       Cumulative  packet  switch ID  pollster  Transmitted Packets
+switch.port.receive.bytes          Cumulative  B       switch ID  pollster  Received Bytes
+switch.port.transmit.bytes         Cumulative  B       switch ID  pollster  Transmitted Bytes
+switch.port.receive.drops          Cumulative  packet  switch ID  pollster  Receive Drops
+switch.port.transmit.drops         Cumulative  packet  switch ID  pollster  Transmit Drops
+switch.port.receive.errors         Cumulative  packet  switch ID  pollster  Receive Errors
+switch.port.transmit.errors        Cumulative  packet  switch ID  pollster  Transmit Errors
+switch.port.receive.frame_error    Cumulative  packet  switch ID  pollster  Receive Frame Alignment Errors
+switch.port.receive.overrun_error  Cumulative  packet  switch ID  pollster  Receive Overrun Errors
+switch.port.receive.crc_error      Cumulative  packet  switch ID  pollster  Receive CRC Errors
+switch.port.collision.count        Cumulative  count   switch ID  pollster  Collisions
+switch.table                       Gauge       table   switch ID  pollster  Duration of Table
+switch.table.active.entries        Gauge       entry   switch ID  pollster  Active Entries
+switch.table.lookup.packets        Gauge       packet  switch ID  pollster  Packet Lookups
+switch.table.matched.packets       Gauge       packet  switch ID  pollster  Packet Matches
+switch.flow                        Gauge       flow    switch ID  pollster  Duration of Flow
+switch.flow.duration.seconds       Gauge       s       switch ID  pollster  Duration(seconds)
+switch.flow.duration.nanoseconds   Gauge       ns      switch ID  pollster  Duration(nanoseconds)
+switch.flow.packets                Cumulative  packet  switch ID  pollster  Received Packets
+switch.flow.bytes                  Cumulative  B       switch ID  pollster  Received Bytes
+=================================  ==========  ======  =========  ========  ==============================
 
 Dynamically retrieving the Meters via ceilometer client
 =======================================================

@@ -25,16 +25,19 @@ import itertools
 import json
 import os
 import re
-import urlparse
+import six.moves.urllib.parse as urlparse
 
+import bson.json_util
 import happybase
 
 from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import network_utils
 from ceilometer.openstack.common import timeutils
+from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
+from ceilometer import utils
 
 LOG = log.getLogger(__name__)
 
@@ -46,23 +49,42 @@ class HBaseStorage(base.StorageEngine):
 
     - user
       - { _id: user id
-          source: [ array of source ids reporting for the user ]
+          s_source_name: each source reported for user is stored with prefix s_
+                         the value of each entry is '1'
+          sources: this field contains the first source reported for user.
+                   This data is not used but stored for simplification of impl
           }
     - project
       - { _id: project id
-          source: [ array of source ids reporting for the project ]
+          s_source_name: the same as for users
+          sources: the same as for users
           }
     - meter
-      - the raw incoming data
+      - {_id_reverted_ts: row key is constructed in this way for efficient
+                          filtering
+         parsed_info_from_incoming_data: e.g. counter_name, counter_type
+         resource_metadata: raw metadata for corresponding resource
+         r_metadata_name: flattened metadata for corresponding resource
+         message: raw incoming data
+         recorded_at: when the sample has been recorded
+         source: source for the sample
+        }
     - resource
       - the metadata for resources
       - { _id: uuid of resource,
-          metadata: metadata dictionaries
+          metadata: raw metadata dictionaries
+          r_metadata: flattened metadata fir quick filtering
           timestamp: datetime of last update
           user_id: uuid
           project_id: uuid
           meter: [ array of {counter_name: string, counter_type: string} ]
+          source: source of resource
         }
+    - alarm
+      - the raw incoming alarm data
+    - alarm_h
+      - raw incoming alarm_history data. Timestamp becomes now()
+        if not determined
     """
 
     @staticmethod
@@ -82,6 +104,8 @@ class Connection(base.Connection):
     USER_TABLE = "user"
     RESOURCE_TABLE = "resource"
     METER_TABLE = "meter"
+    ALARM_TABLE = "alarm"
+    ALARM_HISTORY_TABLE = "alarm_h"
 
     def __init__(self, conf):
         """Hbase Connection Initialization."""
@@ -109,13 +133,17 @@ class Connection(base.Connection):
         self.conn.create_table(self.USER_TABLE, {'f': dict()})
         self.conn.create_table(self.RESOURCE_TABLE, {'f': dict()})
         self.conn.create_table(self.METER_TABLE, {'f': dict()})
+        self.conn.create_table(self.ALARM_TABLE, {'f': dict()})
+        self.conn.create_table(self.ALARM_HISTORY_TABLE, {'f': dict()})
 
     def clear(self):
         LOG.debug(_('Dropping HBase schema...'))
         for table in [self.PROJECT_TABLE,
                       self.USER_TABLE,
                       self.RESOURCE_TABLE,
-                      self.METER_TABLE]:
+                      self.METER_TABLE,
+                      self.ALARM_TABLE,
+                      self.ALARM_HISTORY_TABLE]:
             try:
                 self.conn.disable_table(table)
             except Exception:
@@ -161,6 +189,73 @@ class Connection(base.Connection):
         opts['port'] = port and int(port) or 9090
         return opts
 
+    def update_alarm(self, alarm):
+        """Create an alarm.
+        :param alarm: The alarm to create. It is Alarm object, so we need to
+        call as_dict()
+        """
+        _id = alarm.alarm_id
+        alarm_table = self.conn.table(self.ALARM_TABLE)
+
+        alarm_to_store = serialize_entry(alarm.as_dict())
+        alarm_table.put(_id, alarm_to_store)
+        stored_alarm = deserialize_entry(alarm_table.row(_id))[0]
+        return models.Alarm(**stored_alarm)
+
+    create_alarm = update_alarm
+
+    def delete_alarm(self, alarm_id):
+        alarm_table = self.conn.table(self.ALARM_TABLE)
+        alarm_table.delete(alarm_id)
+
+    def get_alarms(self, name=None, user=None,
+                   project=None, enabled=None, alarm_id=None, pagination=None):
+
+        if pagination:
+            raise NotImplementedError(_('Pagination not implemented'))
+
+        alarm_table = self.conn.table(self.ALARM_TABLE)
+
+        q = make_query(alarm_id=alarm_id, name=name, enabled=enabled,
+                       user_id=user, project_id=project)
+
+        gen = alarm_table.scan(filter=q)
+        for ignored, data in gen:
+            stored_alarm = deserialize_entry(data)[0]
+            yield models.Alarm(**stored_alarm)
+
+    def get_alarm_changes(self, alarm_id, on_behalf_of,
+                          user=None, project=None, type=None,
+                          start_timestamp=None, start_timestamp_op=None,
+                          end_timestamp=None, end_timestamp_op=None):
+        alarm_history_table = self.conn.table(self.ALARM_HISTORY_TABLE)
+
+        q = make_query(alarm_id=alarm_id, on_behalf_of=on_behalf_of, type=type,
+                       user_id=user, project_id=project)
+
+        start_row, end_row = make_timestamp_query(
+            _make_general_rowkey_scan,
+            start=start_timestamp, start_op=start_timestamp_op,
+            end=end_timestamp, end_op=end_timestamp_op, bounds_only=True,
+            some_id=alarm_id)
+
+        gen = alarm_history_table.scan(filter=q, row_start=start_row,
+                                       row_stop=end_row)
+        for ignored, data in gen:
+            stored_entry = deserialize_entry(data)[0]
+            yield models.AlarmChange(**stored_entry)
+
+    def record_alarm_change(self, alarm_change):
+        """Record alarm change event.
+        """
+        alarm_change_dict = serialize_entry(alarm_change)
+        ts = alarm_change.get('timestamp') or datetime.datetime.now()
+        rts = reverse_timestamp(ts)
+
+        alarm_history_table = self.conn.table(self.ALARM_HISTORY_TABLE)
+        alarm_history_table.put(alarm_change.get('alarm_id') + "_" + str(rts),
+                                alarm_change_dict)
+
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
 
@@ -172,51 +267,31 @@ class Connection(base.Connection):
         resource_table = self.conn.table(self.RESOURCE_TABLE)
         meter_table = self.conn.table(self.METER_TABLE)
 
-        # store metadata fields with prefix "r_"
-        resource_metadata = {}
-        if data['resource_metadata']:
-            resource_metadata = dict(('f:r_%s' % k, v)
-                                     for (k, v)
-                                     in data['resource_metadata'].iteritems())
-
         # Make sure we know about the user and project
         if data['user_id']:
-            user = user_table.row(data['user_id'])
-            sources = _load_hbase_list(user, 's')
-            # Update if source is new
-            if data['source'] not in sources:
-                user['f:s_%s' % data['source']] = "1"
-                user_table.put(data['user_id'], user)
+            self._update_sources(user_table, data['user_id'], data['source'])
+        self._update_sources(project_table, data['project_id'], data['source'])
 
-        project = project_table.row(data['project_id'])
-        sources = _load_hbase_list(project, 's')
-        # Update if source is new
-        if data['source'] not in sources:
-            project['f:s_%s' % data['source']] = "1"
-            project_table.put(data['project_id'], project)
-
-        rts = reverse_timestamp(data['timestamp'])
-
-        resource = resource_table.row(data['resource_id'])
-
+        # Get metadata from user's data
+        resource_metadata = data.get('resource_metadata', {})
+        # Determine the name of new meter
         new_meter = _format_meter_reference(
             data['counter_name'], data['counter_type'], data['counter_unit'])
-        new_resource = {'f:resource_id': data['resource_id'],
-                        'f:project_id': data['project_id'],
-                        'f:user_id': data['user_id'],
-                        'f:source': data["source"],
-                        # store meters with prefix "m_"
-                        'f:m_%s' % new_meter: "1"
-                        }
-        new_resource.update(resource_metadata)
+
+        flatten_result, sources, meters, metadata = \
+            deserialize_entry(resource_table.row(data['resource_id']))
 
         # Update if resource has new information
-        if new_resource != resource:
-            meters = _load_hbase_list(resource, 'm')
-            if new_meter not in meters:
-                new_resource['f:m_%s' % new_meter] = "1"
-
-            resource_table.put(data['resource_id'], new_resource)
+        if (data['source'] not in sources) or (new_meter not in meters) or (
+                metadata != resource_metadata):
+            resource_table.put(data['resource_id'],
+                               serialize_entry(
+                                   **{'sources': [data['source']],
+                                      'meters': [new_meter],
+                                      'metadata': resource_metadata,
+                                      'resource_id': data['resource_id'],
+                                      'project_id': data['project_id'],
+                                      'user_id': data['user_id']}))
 
         # Rowkey consists of reversed timestamp, meter and an md5 of
         # user+resource+project for purposes of uniqueness
@@ -226,35 +301,19 @@ class Connection(base.Connection):
 
         # We use reverse timestamps in rowkeys as they are sorted
         # alphabetically.
+        rts = reverse_timestamp(data['timestamp'])
         row = "%s_%d_%s" % (data['counter_name'], rts, m.hexdigest())
-
-        # Convert timestamp to string as json.dumps won't
-        ts = timeutils.strtime(data['timestamp'])
-
-        record = {'f:timestamp': ts,
-                  'f:counter_name': data['counter_name'],
-                  'f:counter_type': data['counter_type'],
-                  'f:counter_volume': str(data['counter_volume']),
-                  'f:counter_unit': data['counter_unit'],
-                  # TODO(shengjie) consider using QualifierFilter
-                  # keep dimensions as column qualifier for quicker look up
-                  # TODO(shengjie) extra dimensions need to be added as CQ
-                  'f:user_id': data['user_id'],
-                  'f:project_id': data['project_id'],
-                  'f:message_id': data['message_id'],
-                  'f:resource_id': data['resource_id'],
-                  'f:source': data['source'],
-                  # add in reversed_ts here for time range scan
-                  'f:rts': str(rts)
-                  }
-        # Need to record resource_metadata for more robust filtering.
-        record.update(resource_metadata)
-        # Don't want to be changing the original data object.
-        data = copy.copy(data)
-        data['timestamp'] = ts
-        # Save original meter.
-        record['f:message'] = json.dumps(data)
+        record = serialize_entry(data, **{'metadata': resource_metadata,
+                                          'rts': rts,
+                                          'message': data,
+                                          'recorded_at': timeutils.utcnow()})
         meter_table.put(row, record)
+
+    def _update_sources(self, table, id, source):
+        user, sources, _, _ = deserialize_entry(table.row(id))
+        if source not in sources:
+            sources.append(source)
+            table.put(id, serialize_entry(user, **{'sources': sources}))
 
     def get_users(self, source=None):
         """Return an iterable of user id strings.
@@ -297,67 +356,47 @@ class Connection(base.Connection):
         :param resource: Optional resource filter.
         :param pagination: Optional pagination query.
         """
-
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
 
-        def make_resource(data, first_ts, last_ts):
-            """Transform HBase fields to Resource model."""
-            # convert HBase metadata e.g. f:r_display_name to display_name
-            data['f:metadata'] = _metadata_from_document(data)
-
-            return models.Resource(
-                resource_id=data['f:resource_id'],
-                first_sample_timestamp=first_ts,
-                last_sample_timestamp=last_ts,
-                project_id=data['f:project_id'],
-                source=data['f:source'],
-                user_id=data['f:user_id'],
-                metadata=data['f:metadata'],
-            )
         meter_table = self.conn.table(self.METER_TABLE)
 
-        q, start_row, stop_row = make_query(user=user,
-                                            project=project,
-                                            source=source,
-                                            resource=resource,
-                                            start=start_timestamp,
-                                            start_op=start_timestamp_op,
-                                            end=end_timestamp,
-                                            end_op=end_timestamp_op,
-                                            require_meter=False,
-                                            query_only=False)
+        sample_filter = storage.SampleFilter(
+            user=user, project=project,
+            start=start_timestamp, start_timestamp_op=start_timestamp_op,
+            end=end_timestamp, end_timestamp_op=end_timestamp_op,
+            resource=resource, source=source, metaquery=metaquery)
+        q, start_row, stop_row = make_sample_query_from_filter(
+            sample_filter, require_meter=False)
+
         LOG.debug(_("Query Meter table: %s") % q)
         meters = meter_table.scan(filter=q, row_start=start_row,
                                   row_stop=stop_row)
+        d_meters = []
+        for i, m in meters:
+            d_meters.append(deserialize_entry(m))
 
         # We have to sort on resource_id before we can group by it. According
         # to the itertools documentation a new group is generated when the
         # value of the key function changes (it breaks there).
-        meters = sorted(meters, key=_resource_id_from_record_tuple)
-
+        meters = sorted(d_meters, key=_resource_id_from_record_tuple)
         for resource_id, r_meters in itertools.groupby(
                 meters, key=_resource_id_from_record_tuple):
-            meter_rows = [data[1] for data in sorted(
+            # We need deserialized entry(data[0]) and metadata(data[3])
+            meter_rows = [(data[0], data[3]) for data in sorted(
                 r_meters, key=_timestamp_from_record_tuple)]
-
             latest_data = meter_rows[-1]
-            min_ts = timeutils.parse_strtime(meter_rows[0]['f:timestamp'])
-            max_ts = timeutils.parse_strtime(latest_data['f:timestamp'])
-            if metaquery:
-                for k, v in metaquery.iteritems():
-                    if latest_data['f:r_' + k.split('.', 1)[1]] == v:
-                        yield make_resource(
-                            latest_data,
-                            min_ts,
-                            max_ts
-                        )
-            else:
-                yield make_resource(
-                    latest_data,
-                    min_ts,
-                    max_ts
-                )
+            min_ts = meter_rows[0][0]['timestamp']
+            max_ts = latest_data[0]['timestamp']
+            yield models.Resource(
+                resource_id=resource_id,
+                first_sample_timestamp=min_ts,
+                last_sample_timestamp=max_ts,
+                project_id=latest_data[0]['project_id'],
+                source=latest_data[0]['source'],
+                user_id=latest_data[0]['user_id'],
+                metadata=latest_data[1],
+            )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}, pagination=None):
@@ -373,48 +412,28 @@ class Connection(base.Connection):
 
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
-
         resource_table = self.conn.table(self.RESOURCE_TABLE)
-        q = make_query(user=user, project=project, resource=resource,
-                       source=source, require_meter=False, query_only=True)
+        q = make_query(metaquery=metaquery, user_id=user, project_id=project,
+                       resource_id=resource, source=source)
         LOG.debug(_("Query Resource table: %s") % q)
-
-        # handle metaquery
-        if metaquery:
-            meta_q = []
-            for k, v in metaquery.iteritems():
-                meta_q.append(
-                    "SingleColumnValueFilter ('f', '%s', =, 'binary:%s')"
-                    % ('r_' + k.split('.', 1)[1], v))
-            meta_q = " AND ".join(meta_q)
-            # join query and metaquery
-            if q is not None:
-                q += " AND " + meta_q
-            else:
-                q = meta_q   # metaquery only
 
         gen = resource_table.scan(filter=q)
 
         for ignored, data in gen:
-            # Meter columns are stored like this:
-            # "m_{counter_name}|{counter_type}|{counter_unit}" => "1"
-            # where 'm' is a prefix (m for meter), value is always set to 1
-            meter = None
-            for m in data:
-                if m.startswith('f:m_'):
-                    meter = m
-                    break
-            if meter is None:
+            flatten_result, s, m, md = deserialize_entry(data)
+            if not m:
                 continue
-            name, type, unit = meter[4:].split("!")
+            # Meter table may have only one "meter" and "source". That's why
+            # only first lists element is get in this method
+            name, type, unit = m[0].split("!")
             yield models.Meter(
                 name=name,
                 type=type,
                 unit=unit,
-                resource_id=data['f:resource_id'],
-                project_id=data['f:project_id'],
-                source=data['f:source'],
-                user_id=data['f:user_id'],
+                resource_id=flatten_result['resource_id'],
+                project_id=flatten_result['project_id'],
+                source=s[0] if s else None,
+                user_id=flatten_result['user_id'],
             )
 
     def get_samples(self, sample_filter, limit=None):
@@ -423,53 +442,21 @@ class Connection(base.Connection):
         :param sample_filter: Filter.
         :param limit: Maximum number of results to return.
         """
-        def make_sample(data):
-            """Transform HBase fields to Sample model."""
-            data = json.loads(data['f:message'])
-            data['timestamp'] = timeutils.parse_strtime(data['timestamp'])
-            return models.Sample(**data)
-
         meter_table = self.conn.table(self.METER_TABLE)
 
-        q, start, stop = make_query_from_filter(sample_filter,
-                                                require_meter=False)
+        q, start, stop = make_sample_query_from_filter(
+            sample_filter, require_meter=False)
         LOG.debug(_("Query Meter Table: %s") % q)
-
         gen = meter_table.scan(filter=q, row_start=start, row_stop=stop)
-
         for ignored, meter in gen:
-            # TODO(shengjie) put this implementation here because it's failing
-            # the test. bp hbase-meter-table-enhancement will address this
-            # properly.
-            # handle metaquery
-            metaquery = sample_filter.metaquery
-            # TODO(jd) implements using HBase capabilities
-            if limit == 0:
-                break
-            if metaquery:
-                for k, v in metaquery.iteritems():
-                    message = json.loads(meter['f:message'])
-                    metadata = message['resource_metadata']
-                    keys = k.split('.')
-                    # Support the dictionary type of metadata
-                    for key in keys[1:]:
-                        if key in metadata:
-                            metadata = metadata[key]
-                        else:
-                            break
-                    # NOTE (flwang) For multiple level searching, the matadata
-                    # object will be drilled down to check if it's matched
-                    # with the searched value.
-                    if metadata != v:
-                        break
+            if limit is not None:
+                if limit == 0:
+                    break
                 else:
-                    if limit:
-                        limit -= 1
-                    yield make_sample(meter)
-            else:
-                if limit:
                     limit -= 1
-                yield make_sample(meter)
+            d_meter = deserialize_entry(meter)[0]
+            d_meter['message']['recorded_at'] = d_meter['recorded_at']
+            yield models.Sample(**d_meter['message'])
 
     @staticmethod
     def _update_meter_stats(stat, meter):
@@ -481,9 +468,9 @@ class Connection(base.Connection):
         :param start_time: query start time
         :param period: length of the time bucket
         """
-        vol = int(meter['f:counter_volume'])
-        ts = timeutils.parse_strtime(meter['f:timestamp'])
-        stat.unit = meter['f:counter_unit']
+        vol = meter['counter_volume']
+        ts = meter['timestamp']
+        stat.unit = meter['counter_unit']
         stat.min = min(vol, stat.min or vol)
         stat.max = max(vol, stat.max)
         stat.sum = vol + (stat.sum or 0)
@@ -495,7 +482,8 @@ class Connection(base.Connection):
             timeutils.delta_seconds(stat.duration_start,
                                     stat.duration_end)
 
-    def get_meter_statistics(self, sample_filter, period=None, groupby=None):
+    def get_meter_statistics(self, sample_filter, period=None, groupby=None,
+                             aggregate=None):
         """Return an iterable of models.Statistics instances containing meter
         statistics described by the query parameters.
 
@@ -511,26 +499,27 @@ class Connection(base.Connection):
         if groupby:
             raise NotImplementedError("Group by not implemented.")
 
+        if aggregate:
+            msg = _('Selectable aggregates not implemented')
+            raise NotImplementedError(msg)
+
         meter_table = self.conn.table(self.METER_TABLE)
-
-        q, start, stop = make_query_from_filter(sample_filter)
-
-        meters = list(meter for (ignored, meter) in
-                      meter_table.scan(filter=q, row_start=start,
-                                       row_stop=stop)
-                      )
+        q, start, stop = make_sample_query_from_filter(sample_filter)
+        meters = map(deserialize_entry, list(meter for (ignored, meter) in
+                     meter_table.scan(filter=q, row_start=start,
+                                      row_stop=stop)))
 
         if sample_filter.start:
             start_time = sample_filter.start
         elif meters:
-            start_time = timeutils.parse_strtime(meters[-1]['f:timestamp'])
+            start_time = meters[-1][0]['timestamp']
         else:
             start_time = None
 
         if sample_filter.end:
             end_time = sample_filter.end
         elif meters:
-            end_time = timeutils.parse_strtime(meters[0]['f:timestamp'])
+            end_time = meters[0][0]['timestamp']
         else:
             end_time = None
 
@@ -544,7 +533,7 @@ class Connection(base.Connection):
         # As our HBase meters are stored as newest-first, we need to iterate
         # in the reverse order
         for meter in meters[::-1]:
-            ts = timeutils.parse_strtime(meter['f:timestamp'])
+            ts = meter[0]['timestamp']
             if period:
                 offset = int(timeutils.delta_seconds(
                     start_time, ts) / period) * period
@@ -570,8 +559,24 @@ class Connection(base.Connection):
                                       duration_end=None,
                                       groupby=None)
                 )
-            self._update_meter_stats(results[-1], meter)
+            self._update_meter_stats(results[-1], meter[0])
         return results
+
+    def get_capabilities(self):
+        """Return an dictionary representing the capabilities of this driver.
+        """
+        available = {
+            'meters': {'query': {'simple': True,
+                                 'metadata': True}},
+            'resources': {'query': {'simple': True,
+                                    'metadata': True}},
+            'samples': {'query': {'simple': True,
+                                  'metadata': True}},
+            'statistics': {'query': {'simple': True,
+                                     'metadata': True},
+                           'aggregation': {'standard': True}},
+        }
+        return utils.update_nested(self.DEFAULT_CAPABILITIES, available)
 
 
 ###############
@@ -594,6 +599,9 @@ class MTable(object):
 
     def put(self, key, data):
         self._rows[key] = data
+
+    def delete(self, key):
+        del self._rows[key]
 
     def scan(self, filter=None, columns=[], row_start=None, row_stop=None):
         sorted_keys = sorted(self._rows)
@@ -621,7 +629,7 @@ class MTable(object):
                 # Extract filter name and its arguments
                 g = re.search("(.*)\((.*),?\)", f)
                 fname = g.group(1).strip()
-                fargs = [s.strip().replace('\'', '').replace('\"', '')
+                fargs = [s.strip().replace('\'', '')
                          for s in g.group(2).split(',')]
                 m = getattr(self, fname)
                 if callable(m):
@@ -701,51 +709,46 @@ def reverse_timestamp(dt):
     """
     epoch = datetime.datetime(1970, 1, 1)
     td = dt - epoch
-    ts = (td.microseconds +
-          (td.seconds + td.days * 24 * 3600) * 100000) / 100000
+    ts = td.microseconds + td.seconds * 1000000 + td.days * 86400000000
     return 0x7fffffffffffffff - ts
 
 
-def make_query(user=None, project=None, meter=None,
-               resource=None, source=None, start=None, start_op=None,
-               end=None, end_op=None, message_id=None, require_meter=True,
-               query_only=False):
-    """Return a filter query string based on the selected parameters.
-
-    :param user: Optional user-id
-    :param project: Optional project-id
-    :param meter: Optional counter-name
-    :param resource: Optional resource-id
-    :param source: Optional source-id
+def make_timestamp_query(func, start=None, start_op=None, end=None,
+                         end_op=None, bounds_only=False, **kwargs):
+    """Return a filter start and stop row for filtering and a query
+    which based on the fact that CF-name is 'rts'
     :param start: Optional start timestamp
     :param start_op: Optional start timestamp operator, like gt, ge
     :param end: Optional end timestamp
     :param end_op: Optional end timestamp operator, like lt, le
-    :param message_id: Optional message_id
-    :param require_meter: If true and the filter does not have a meter,
-            raise an error.
-    :param query_only: If true only returns the filter query,
-            otherwise also returns start and stop rowkeys
+    :param bounds_only: if True than query will not be returned
+    :param func: a function that provide a format of row
+    :param kwargs: kwargs for :param func
     """
+    rts_start, rts_end = get_start_end_rts(start, start_op, end, end_op)
+    start_row, end_row = func(rts_start, rts_end, **kwargs)
+
+    if bounds_only:
+        return start_row, end_row
+
     q = []
+    # We dont need to dump here because get_start_end_rts returns strings
+    if rts_start:
+        q.append("SingleColumnValueFilter ('f', 'rts', <=, 'binary:%s')" %
+                 rts_start)
+    if rts_end:
+        q.append("SingleColumnValueFilter ('f', 'rts', >=, 'binary:%s')" %
+                 rts_end)
 
-    if user:
-        q.append("SingleColumnValueFilter ('f', 'user_id', =, 'binary:%s')"
-                 % user)
-    if project:
-        q.append("SingleColumnValueFilter ('f', 'project_id', =, 'binary:%s')"
-                 % project)
-    if resource:
-        q.append("SingleColumnValueFilter ('f', 'resource_id', =, 'binary:%s')"
-                 % resource)
-    if message_id:
-        q.append("SingleColumnValueFilter ('f', 'message_id', =, 'binary:%s')"
-                 % message_id)
-    if source:
-        q.append("SingleColumnValueFilter "
-                 "('f', 'source', =, 'binary:%s')" % source)
+    res_q = None
+    if len(q):
+        res_q = " AND ".join(q)
 
-    start_row, end_row = "", ""
+    return start_row, end_row, res_q
+
+
+def get_start_end_rts(start, start_op, end, end_op):
+
     rts_start = str(reverse_timestamp(start) + 1) if start else ""
     rts_end = str(reverse_timestamp(end) + 1) if end else ""
 
@@ -755,73 +758,90 @@ def make_query(user=None, project=None, meter=None,
     if end_op == 'le':
         rts_end = str(long(rts_end) - 1)
 
-    # when start_time and end_time is provided,
-    #    if it's filtered by meter,
-    #         rowkey will be used in the query;
-    #    else it's non meter filter query(e.g. project_id, user_id etc),
-    #         SingleColumnValueFilter against rts will be appended to the query
-    #    query other tables should have no start and end passed in
-    if meter:
-        start_row, end_row = _make_rowkey_scan(meter, rts_start, rts_end)
-        q.append("SingleColumnValueFilter "
-                 "('f', 'counter_name', =, 'binary:%s')" % meter)
-    elif require_meter:
-        raise RuntimeError('Missing required meter specifier')
-    else:
-        if rts_start:
-            q.append("SingleColumnValueFilter ('f', 'rts', <=, 'binary:%s')" %
-                     rts_start)
-        if rts_end:
-            q.append("SingleColumnValueFilter ('f', 'rts', >=, 'binary:%s')" %
-                     rts_end)
-
-    sample_filter = None
-    if q:
-        sample_filter = " AND ".join(q)
-
-    if query_only:
-        return sample_filter
-    else:
-        return sample_filter, start_row, end_row
+    return rts_start, rts_end
 
 
-def make_query_from_filter(sample_filter, require_meter=True):
+def make_query(metaquery=None, **kwargs):
+    """Return a filter query string based on the selected parameters.
+
+    :param metaquery: optional metaquery dict
+    :param kwargs: key-value pairs to filter on. Key should be a real
+     column name in db
+    """
+    q = []
+    # Note: we use extended constructor for SingleColumnValueFilter here.
+    # It is explicitly specified that entry should not be returned if CF is not
+    # found in table.
+    for key, value in kwargs.items():
+        if value is not None:
+            q.append("SingleColumnValueFilter "
+                     "('f', '%s', =, 'binary:%s', true, true)" %
+                     (key, dump(value)))
+    res_q = None
+    if len(q):
+        res_q = " AND ".join(q)
+
+    if metaquery:
+        meta_q = []
+        for k, v in metaquery.items():
+            meta_q.append(
+                "SingleColumnValueFilter ('f', '%s', =, 'binary:%s', "
+                "true, true)"
+                % ('r_' + k, dump(v)))
+        meta_q = " AND ".join(meta_q)
+        # join query and metaquery
+        if res_q is not None:
+            res_q += " AND " + meta_q
+        else:
+            res_q = meta_q   # metaquery only
+
+    return res_q
+
+
+def make_sample_query_from_filter(sample_filter, require_meter=True):
     """Return a query dictionary based on the settings in the filter.
 
     :param sample_filter: SampleFilter instance
     :param require_meter: If true and the filter does not have a meter,
                           raise an error.
     """
-    return make_query(sample_filter.user, sample_filter.project,
-                      sample_filter.meter, sample_filter.resource,
-                      sample_filter.source, sample_filter.start,
-                      sample_filter.start_timestamp_op,
-                      sample_filter.end,
-                      sample_filter.end_timestamp_op,
-                      sample_filter.message_id,
-                      require_meter)
+    meter = sample_filter.meter
+    if not meter and require_meter:
+        raise RuntimeError('Missing required meter specifier')
+    start_row, end_row, ts_query = make_timestamp_query(
+        _make_general_rowkey_scan,
+        start=sample_filter.start, start_op=sample_filter.start_timestamp_op,
+        end=sample_filter.end, end_op=sample_filter.end_timestamp_op,
+        some_id=meter)
+
+    q = make_query(metaquery=sample_filter.metaquery,
+                   user_id=sample_filter.user,
+                   project_id=sample_filter.project,
+                   counter_name=meter,
+                   resource_id=sample_filter.resource,
+                   source=sample_filter.source,
+                   message_id=sample_filter.message_id)
+
+    if q:
+        ts_query = (" AND " + ts_query) if ts_query else ""
+        res_q = q + ts_query if ts_query else q
+    else:
+        res_q = ts_query if ts_query else None
+    return res_q, start_row, end_row
 
 
-def _make_rowkey_scan(meter, rts_start=None, rts_end=None):
-    """If it's meter filter without start and end,
-        start_row = meter while end_row = meter + MAX_BYTE
+def _make_general_rowkey_scan(rts_start=None, rts_end=None, some_id=None):
+    """If it's filter on some_id without start and end,
+        start_row = some_id while end_row = some_id + MAX_BYTE
     """
+    if some_id is None:
+        return None, None
     if not rts_start:
         rts_start = chr(127)
-    end_row = "%s_%s" % (meter, rts_start)
-    start_row = "%s_%s" % (meter, rts_end)
+    end_row = "%s_%s" % (some_id, rts_start)
+    start_row = "%s_%s" % (some_id, rts_end)
 
     return start_row, end_row
-
-
-def _load_hbase_list(d, prefix):
-    """Deserialise dict stored as HBase column family
-    """
-    ret = []
-    prefix = 'f:%s_' % prefix
-    for key in (k for k in d if k.startswith(prefix)):
-        ret.append(key[len(prefix):])
-    return ret
 
 
 def _format_meter_reference(counter_name, counter_type, counter_unit):
@@ -830,21 +850,108 @@ def _format_meter_reference(counter_name, counter_type, counter_unit):
     return "%s!%s!%s" % (counter_name, counter_type, counter_unit)
 
 
-def _metadata_from_document(doc):
-    """Extract resource metadata from HBase document using prefix specific
-    to HBase implementation.
-    """
-    return dict(
-        (k[4:], v) for k, v in doc.iteritems() if k.startswith('f:r_'))
-
-
 def _timestamp_from_record_tuple(record):
     """Extract timestamp from HBase tuple record
     """
-    return timeutils.parse_strtime(record[1]['f:timestamp'])
+    return record[0]['timestamp']
 
 
 def _resource_id_from_record_tuple(record):
     """Extract resource_id from HBase tuple record
     """
-    return record[1]['f:resource_id']
+    return record[0]['resource_id']
+
+
+def deserialize_entry(entry, get_raw_meta=True):
+    """Return a list of flatten_result, sources, meters and metadata
+    flatten_result contains a dict of simple structures such as 'resource_id':1
+    sources/meters are the lists of sources and meters correspondingly.
+    metadata is metadata dict. This dict may be returned as flattened if
+    get_raw_meta is False.
+
+    :param entry: entry from HBase, without row name and timestamp
+    :param get_raw_meta: If true then raw metadata will be returned
+                         If False metadata will be constructed from
+                         'f:r_metadata.' fields
+    """
+    flatten_result = {}
+    sources = []
+    meters = []
+    metadata_flattened = {}
+    for k, v in entry.items():
+        if k.startswith('f:s_'):
+            sources.append(k[4:])
+        elif k.startswith('f:m_'):
+            meters.append(k[4:])
+        elif k.startswith('f:r_metadata.'):
+            metadata_flattened[k[len('f:r_metadata.'):]] = load(v)
+        else:
+            flatten_result[k[2:]] = load(v)
+    if get_raw_meta:
+        metadata = flatten_result.get('metadata', {})
+    else:
+        metadata = metadata_flattened
+
+    return flatten_result, sources, meters, metadata
+
+
+def serialize_entry(data={}, **kwargs):
+    """Return a dict that is ready to be stored to HBase
+
+    :param data: dict to be serialized
+    :param kwargs: additional args
+    """
+    entry_dict = copy.copy(data)
+    entry_dict.update(**kwargs)
+
+    result = {}
+    for k, v in entry_dict.items():
+        if k == 'sources':
+            # user and project tables may contain several sources and meters
+            # that's why we store it separately as pairs "source/meter name:1".
+            # Resource and meter table contain only one and it's possible
+            # to store pairs like "source/meter:source name/meter name". But to
+            # keep things simple it's possible to store all variants in all
+            # tables because it doesn't break logic and overhead is not too big
+            for source in v:
+                result['f:s_%s' % source] = dump('1')
+            if v:
+                result['f:source'] = dump(v[0])
+        elif k == 'meters':
+            for meter in v:
+                result['f:m_%s' % meter] = dump('1')
+        elif k == 'metadata':
+            # keep raw metadata as well as flattened to provide
+            # capability with API v2. It will be flattened in another
+            # way on API level. But we need flattened too for quick filtering.
+            flattened_meta = dump_metadata(v)
+            for k, m in flattened_meta.items():
+                result['f:r_metadata.' + k] = dump(m)
+            result['f:metadata'] = dump(v)
+        else:
+            result['f:' + k] = dump(v)
+    return result
+
+
+def dump_metadata(meta):
+    resource_metadata = {}
+    for key, v in utils.dict_to_keyval(meta):
+        resource_metadata[key] = v
+    return resource_metadata
+
+
+def dump(data):
+    return json.dumps(data, default=bson.json_util.default)
+
+
+def load(data):
+    return json.loads(data, object_hook=object_hook)
+
+
+# We don't want to have tzinfo in decoded json.This object_hook is
+# overwritten json_util.object_hook for $date
+def object_hook(dct):
+    if "$date" in dct:
+        dt = bson.json_util.object_hook(dct)
+        return dt.replace(tzinfo=None)
+    return bson.json_util.object_hook(dct)

@@ -1,4 +1,5 @@
 # Copyright 2012 SINA Corporation
+# Copyright 2014 Cisco Systems, Inc.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -18,6 +19,7 @@
 
 from __future__ import print_function
 
+import argparse
 import imp
 import os
 import re
@@ -27,6 +29,7 @@ import textwrap
 
 from oslo.config import cfg
 import six
+import stevedore.named
 
 from ceilometer.openstack.common import gettextutils
 from ceilometer.openstack.common import importutils
@@ -38,6 +41,7 @@ BOOLOPT = "BoolOpt"
 INTOPT = "IntOpt"
 FLOATOPT = "FloatOpt"
 LISTOPT = "ListOpt"
+DICTOPT = "DictOpt"
 MULTISTROPT = "MultiStrOpt"
 
 OPT_TYPES = {
@@ -46,11 +50,12 @@ OPT_TYPES = {
     INTOPT: 'integer value',
     FLOATOPT: 'floating point value',
     LISTOPT: 'list value',
+    DICTOPT: 'dict value',
     MULTISTROPT: 'multi valued',
 }
 
 OPTION_REGEX = re.compile(r"(%s)" % "|".join([STROPT, BOOLOPT, INTOPT,
-                                              FLOATOPT, LISTOPT,
+                                              FLOATOPT, LISTOPT, DICTOPT,
                                               MULTISTROPT]))
 
 PY_EXT = ".py"
@@ -59,9 +64,17 @@ BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__),
 WORDWRAP_WIDTH = 60
 
 
-def generate(srcfiles):
+def generate(argv):
+    parser = argparse.ArgumentParser(
+        description='generate sample configuration file',
+    )
+    parser.add_argument('-m', dest='modules', action='append')
+    parser.add_argument('-l', dest='libraries', action='append')
+    parser.add_argument('srcfiles', nargs='*')
+    parsed_args = parser.parse_args(argv)
+
     mods_by_pkg = dict()
-    for filepath in srcfiles:
+    for filepath in parsed_args.srcfiles:
         pkg_name = filepath.split(os.sep)[1]
         mod_str = '.'.join(['.'.join(filepath.split(os.sep)[:-1]),
                             os.path.basename(filepath).split('.')[0]])
@@ -75,15 +88,30 @@ def generate(srcfiles):
     # The options list is a list of (module, options) tuples
     opts_by_group = {'DEFAULT': []}
 
-    extra_modules = os.getenv("CEILOMETER_CONFIG_GENERATOR_EXTRA_MODULES", "")
-    if extra_modules:
-        for module_name in extra_modules.split(','):
-            module_name = module_name.strip()
+    if parsed_args.modules:
+        for module_name in parsed_args.modules:
             module = _import_module(module_name)
             if module:
                 for group, opts in _list_opts(module):
                     opts_by_group.setdefault(group, []).append((module_name,
                                                                 opts))
+
+    # Look for entry points defined in libraries (or applications) for
+    # option discovery, and include their return values in the output.
+    #
+    # Each entry point should be a function returning an iterable
+    # of pairs with the group name (or None for the default group)
+    # and the list of Opt instances for that group.
+    if parsed_args.libraries:
+        loader = stevedore.named.NamedExtensionManager(
+            'oslo.config.opts',
+            names=list(set(parsed_args.libraries)),
+            invoke_on_load=False,
+        )
+        for ext in loader:
+            for group, opts in ext.plugin():
+                opt_list = opts_by_group.setdefault(group or 'DEFAULT', [])
+                opt_list.append((ext.name, opts))
 
     for pkg_name in pkg_names:
         mods = mods_by_pkg.get(pkg_name)
@@ -201,7 +229,7 @@ def _sanitize_default(name, value):
         return value.replace(BASEDIR, '')
     elif value == _get_my_ip():
         return '10.0.0.1'
-    elif value == socket.gethostname() and 'host' in name:
+    elif value in (socket.gethostname(), socket.getfqdn()) and 'host' in name:
         return 'ceilometer'
     elif value.strip() != value:
         return '"%s"' % value
@@ -219,7 +247,8 @@ def _print_opt(opt):
     except (ValueError, AttributeError) as err:
         sys.stderr.write("%s\n" % str(err))
         sys.exit(1)
-    opt_help += ' (' + OPT_TYPES[opt_type] + ')'
+    opt_help = u'%s (%s)' % (opt_help,
+                             OPT_TYPES[opt_type])
     print('#', "\n# ".join(textwrap.wrap(opt_help, WORDWRAP_WIDTH)))
     if opt.deprecated_opts:
         for deprecated_opt in opt.deprecated_opts:
@@ -249,6 +278,11 @@ def _print_opt(opt):
         elif opt_type == LISTOPT:
             assert(isinstance(opt_default, list))
             print('#%s=%s' % (opt_name, ','.join(opt_default)))
+        elif opt_type == DICTOPT:
+            assert(isinstance(opt_default, dict))
+            opt_default_strlist = [str(key) + ':' + str(value)
+                                   for (key, value) in opt_default.items()]
+            print('#%s=%s' % (opt_name, ','.join(opt_default_strlist)))
         elif opt_type == MULTISTROPT:
             assert(isinstance(opt_default, list))
             if not opt_default:

@@ -21,6 +21,7 @@ import datetime
 import operator
 
 from ceilometer.alarm import evaluator
+from ceilometer.alarm.evaluator import utils
 from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
@@ -51,8 +52,13 @@ class ThresholdEvaluator(evaluator.Evaluator):
     def _bound_duration(cls, alarm, constraints):
         """Bound the duration of the statistics query."""
         now = timeutils.utcnow()
+        # when exclusion of weak datapoints is enabled, we extend
+        # the look-back period so as to allow a clearer sample count
+        # trend to be established
+        look_back = (cls.look_back if not alarm.rule.get('exclude_outliers')
+                     else alarm.rule['evaluation_periods'])
         window = (alarm.rule['period'] *
-                  (alarm.rule['evaluation_periods'] + cls.look_back))
+                  (alarm.rule['evaluation_periods'] + look_back))
         start = now - datetime.timedelta(seconds=window)
         LOG.debug(_('query stats from %(start)s to '
                     '%(now)s') % {'start': start, 'now': now})
@@ -64,13 +70,25 @@ class ThresholdEvaluator(evaluator.Evaluator):
     @staticmethod
     def _sanitize(alarm, statistics):
         """Sanitize statistics.
-           Ultimately this will be the hook for the exclusion of chaotic
-           datapoints for example.
         """
         LOG.debug(_('sanitize stats %s') % statistics)
+        if alarm.rule.get('exclude_outliers'):
+            key = operator.attrgetter('count')
+            mean = utils.mean(statistics, key)
+            stddev = utils.stddev(statistics, key, mean)
+            lower = mean - 2 * stddev
+            upper = mean + 2 * stddev
+            inliers, outliers = utils.anomalies(statistics, key, lower, upper)
+            if outliers:
+                LOG.debug(_('excluded weak datapoints with sample counts %s'),
+                          [s.count for s in outliers])
+                statistics = inliers
+            else:
+                LOG.debug('no excluded weak datapoints')
+
         # in practice statistics are always sorted by period start, not
         # strictly required by the API though
-        statistics = statistics[:alarm.rule['evaluation_periods']]
+        statistics = statistics[-alarm.rule['evaluation_periods']:]
         LOG.debug(_('pruned statistics to %d') % len(statistics))
         return statistics
 
@@ -93,25 +111,35 @@ class ThresholdEvaluator(evaluator.Evaluator):
         if not sufficient and alarm.state != evaluator.UNKNOWN:
             reason = _('%d datapoints are unknown') % alarm.rule[
                 'evaluation_periods']
-            self._refresh(alarm, evaluator.UNKNOWN, reason)
+            reason_data = self._reason_data('unknown',
+                                            alarm.rule['evaluation_periods'],
+                                            None)
+            self._refresh(alarm, evaluator.UNKNOWN, reason, reason_data)
         return sufficient
 
     @staticmethod
-    def _reason(alarm, statistics, distilled, state):
+    def _reason_data(disposition, count, most_recent):
+        """Create a reason data dictionary for this evaluator type.
+        """
+        return {'type': 'threshold', 'disposition': disposition,
+                'count': count, 'most_recent': most_recent}
+
+    @classmethod
+    def _reason(cls, alarm, statistics, distilled, state):
         """Fabricate reason string."""
         count = len(statistics)
         disposition = 'inside' if state == evaluator.OK else 'outside'
         last = getattr(statistics[-1], alarm.rule['statistic'])
         transition = alarm.state != state
+        reason_data = cls._reason_data(disposition, count, last)
         if transition:
             return (_('Transition to %(state)s due to %(count)d samples'
-                      ' %(disposition)s threshold, most recent: %(last)s') %
-                    {'state': state, 'count': count,
-                     'disposition': disposition, 'last': last})
+                      ' %(disposition)s threshold, most recent:'
+                      ' %(most_recent)s')
+                    % dict(reason_data, state=state)), reason_data
         return (_('Remaining as %(state)s due to %(count)d samples'
-                  ' %(disposition)s threshold, most recent: %(last)s') %
-                {'state': state, 'count': count,
-                 'disposition': disposition, 'last': last})
+                  ' %(disposition)s threshold, most recent: %(most_recent)s')
+                % dict(reason_data, state=state)), reason_data
 
     def _transition(self, alarm, statistics, compared):
         """Transition alarm state if necessary.
@@ -133,16 +161,23 @@ class ThresholdEvaluator(evaluator.Evaluator):
 
         if unequivocal:
             state = evaluator.ALARM if distilled else evaluator.OK
-            reason = self._reason(alarm, statistics, distilled, state)
+            reason, reason_data = self._reason(alarm, statistics,
+                                               distilled, state)
             if alarm.state != state or continuous:
-                self._refresh(alarm, state, reason)
+                self._refresh(alarm, state, reason, reason_data)
         elif unknown or continuous:
             trending_state = evaluator.ALARM if compared[-1] else evaluator.OK
             state = trending_state if unknown else alarm.state
-            reason = self._reason(alarm, statistics, distilled, state)
-            self._refresh(alarm, state, reason)
+            reason, reason_data = self._reason(alarm, statistics,
+                                               distilled, state)
+            self._refresh(alarm, state, reason, reason_data)
 
     def evaluate(self, alarm):
+        if not self.within_time_constraint(alarm):
+            LOG.debug(_('Attempted to evaluate alarm %s, but it is not '
+                        'within its time constraint.') % alarm.alarm_id)
+            return
+
         query = self._bound_duration(
             alarm,
             alarm.rule['query']

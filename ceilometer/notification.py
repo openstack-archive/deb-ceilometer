@@ -28,7 +28,6 @@ from ceilometer.openstack.common import service as os_service
 from ceilometer import pipeline
 from ceilometer import service
 from ceilometer.storage import models
-from ceilometer import transformer
 
 
 LOG = log.getLogger(__name__)
@@ -38,11 +37,11 @@ OPTS = [
     cfg.BoolOpt('ack_on_event_error',
                 default=True,
                 deprecated_group='collector',
-                help='Acknowledge message when event persistence fails'),
+                help='Acknowledge message when event persistence fails.'),
     cfg.BoolOpt('store_events',
                 deprecated_group='collector',
                 default=False,
-                help='Save event details'),
+                help='Save event details.'),
 ]
 
 cfg.CONF.register_opts(OPTS, group="notification")
@@ -67,11 +66,7 @@ class NotificationService(service.DispatchedService, rpc_service.Service):
 
     def initialize_service_hook(self, service):
         '''Consumers must be declared before consume_thread start.'''
-        self.pipeline_manager = pipeline.setup_pipeline(
-            transformer.TransformerExtensionManager(
-                'ceilometer.transformer',
-            ),
-        )
+        self.pipeline_manager = pipeline.setup_pipeline()
 
         LOG.debug(_('Loading event definitions'))
         self.event_converter = event_converter.setup_events(

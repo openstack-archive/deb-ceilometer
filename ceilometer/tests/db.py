@@ -26,6 +26,7 @@ import warnings
 import six
 
 from ceilometer.openstack.common.fixture import config
+import ceilometer.openstack.common.fixture.mockpatch as oslo_mock
 from ceilometer import storage
 from ceilometer.tests import base as test_base
 
@@ -50,6 +51,9 @@ class TestBase(test_base.BaseTestCase):
             except storage.StorageBadVersion as e:
                 self.skipTest(str(e))
         self.conn.upgrade()
+
+        self.useFixture(oslo_mock.Patch('ceilometer.storage.get_connection',
+                                        return_value=self.conn))
 
         self.CONF([], project='ceilometer')
 
@@ -94,12 +98,25 @@ class DB2FakeConnectionUrl(MongoDBFakeConnectionUrl):
             self.url = self.url.replace('mongodb:', 'db2:', 1)
 
 
+class HBaseFakeConnectionUrl(object):
+    def __init__(self):
+        self.url = os.environ.get('CEILOMETER_TEST_HBASE_URL')
+        if not self.url:
+            self.url = 'hbase://__test__'
+
+    def __str__(self):
+        s = '%s?table_prefix=%s' % (
+            self.url,
+            uuid.uuid4().hex)
+        return s
+
+
 @six.add_metaclass(test_base.SkipNotImplementedMeta)
 class MixinTestsWithBackendScenarios(object):
 
     scenarios = [
         ('sqlalchemy', dict(database_connection='sqlite://')),
         ('mongodb', dict(database_connection=MongoDBFakeConnectionUrl())),
-        ('hbase', dict(database_connection='hbase://__test__')),
+        ('hbase', dict(database_connection=HBaseFakeConnectionUrl())),
         ('db2', dict(database_connection=DB2FakeConnectionUrl())),
     ]

@@ -18,7 +18,7 @@
 """Storage backend management
 """
 
-import urlparse
+import six.moves.urllib.parse as urlparse
 
 from oslo.config import cfg
 import six
@@ -38,7 +38,7 @@ OLD_STORAGE_OPTS = [
     cfg.StrOpt('database_connection',
                secret=True,
                default=None,
-               help='DEPRECATED - Database connection string',
+               help='DEPRECATED - Database connection string.',
                ),
 ]
 
@@ -48,8 +48,8 @@ cfg.CONF.register_opts(OLD_STORAGE_OPTS)
 STORAGE_OPTS = [
     cfg.IntOpt('time_to_live',
                default=-1,
-               help="""number of seconds that samples are kept
-in the database for (<= 0 means forever)"""),
+               help="Number of seconds that samples are kept "
+               "in the database for (<= 0 means forever)."),
 ]
 
 cfg.CONF.register_opts(STORAGE_OPTS, group='database')
@@ -61,6 +61,11 @@ cfg.CONF.import_opt('connection',
 
 class StorageBadVersion(Exception):
     """Error raised when the storage backend version is not good enough."""
+
+
+class StorageBadAggregate(Exception):
+    """Error raised when an aggregate is unacceptable to storage backend."""
+    code = 400
 
 
 def get_engine(conf):
@@ -161,7 +166,10 @@ def dbsync():
 
 def expirer():
     service.prepare_service()
-    LOG.debug(_("Clearing expired metering data"))
-    storage_conn = get_connection(cfg.CONF)
-    storage_conn.clear_expired_metering_data(
-        cfg.CONF.database.time_to_live)
+    if cfg.CONF.database.time_to_live > 0:
+        LOG.debug(_("Clearing expired metering data"))
+        storage_conn = get_connection(cfg.CONF)
+        storage_conn.clear_expired_metering_data(
+            cfg.CONF.database.time_to_live)
+    else:
+        LOG.info(_("Nothing to clean, database time to live is disabled"))

@@ -25,7 +25,7 @@ Please note that ceilometer uses openstack-common extensively, which requires th
 the other parameters are set appropriately. For information we are listing the configuration
 elements that we use after the ceilometer specific elements.
 
-If you use sql alchemy, its specific paramaters will need to be set.
+If you use sql alchemy, its specific parameters will need to be set.
 
 
 ===============================  ====================================  ==============================================================
@@ -269,3 +269,152 @@ dispatchers                  database                              The list of d
 A sample configuration file can be found in `ceilometer.conf.sample`_.
 
 .. _ceilometer.conf.sample: https://git.openstack.org/cgit/openstack/ceilometer/tree/etc/ceilometer/ceilometer.conf.sample
+
+Pipelines
+=========
+
+Pipelines describe a coupling between sources of samples and the
+corresponding sinks for transformation and publication of these
+data.
+
+A source is a producer of samples, in effect a set of pollsters and/or
+notification handlers emitting samples for a set of matching meters.
+
+Each source configuration encapsulates meter name matching, polling
+interval determination, optional resource enumeration or discovery,
+and mapping to one or more sinks for publication.
+
+A sink on the other hand is a consumer of samples, providing logic for
+the transformation and publication of samples emitted from related sources.
+Each sink configuration is concerned `only` with the transformation rules
+and publication conduits for samples.
+
+In effect, a sink describes a chain of handlers. The chain starts with
+zero or more transformers and ends with one or more publishers. The first
+transformer in the chain is passed samples from the corresponding source,
+takes some action such as deriving rate of change, performing unit conversion,
+or aggregating, before passing the modified sample to next step.
+
+The chains end with one or more publishers. This component makes it possible
+to persist the data into storage through the message bus or to send it to one
+or more external consumers. One chain can contain multiple publishers, see the
+:ref:`multi-publisher` section.
+
+Pipeline configuration
+----------------------
+
+Pipeline configuration by default, is stored in a separate configuration file,
+called pipeline.yaml, next to the ceilometer.conf file. The pipeline
+configuration file can be set in the *pipeline_cfg_file* parameter in
+ceilometer.conf. Multiple chains can be defined in one configuration file.
+
+The chain definition looks like the following::
+
+    ---
+    sources:
+      - name: 'source name'
+        interval: 'how often should the samples be injected into the pipeline'
+        meters:
+          - 'meter filter'
+        resources:
+          - 'list of resource URLs'
+        sinks
+          - 'sink name'
+    sinks:
+      - name: 'sink name'
+        transformers: 'definition of transformers'
+        publishers:
+          - 'list of publishers'
+
+The *interval* parameter in the sources section should be defined in seconds. It
+determines the cadence of sample injection into the pipeline, where samples are
+produced under the direct control of an agent, i.e. via a polling cycle as opposed
+to incoming notifications.
+
+There are several ways to define the list of meters for a pipeline source. The
+list of valid meters can be found in the :ref:`measurements` section. There is
+a possibility to define all the meters, or just included or excluded meters,
+with which a source should operate:
+
+* To include all meters, use the '*' wildcard symbol.
+* To define the list of meters, use either of the following:
+
+  * To define the list of included meters, use the 'meter_name' syntax
+  * To define the list of excluded meters, use the '!meter_name' syntax
+  * For meters, which identify a complex Sample field, use the wildcard
+    symbol to select all, e.g. for "instance:m1.tiny", use "instance:\*"
+
+The above definition methods can be used in the following combinations:
+
+* Only the wildcard symbol
+* The list of included meters
+* The list of excluded meters
+* Wildcard symbol with the list of excluded meters
+
+.. note::
+    At least one of the above variations should be included in the meters
+    section. Included and excluded meters cannot co-exist in the same
+    pipeline. Wildcard and included meters cannot co-exist in the same
+    pipeline definition section.
+
+The optional *resources* section of a pipeline source allows a static
+list of resource URLs to be to be configured. An amalgamated list of all
+statically configured resources for a set of pipeline sources with a
+common interval is passed to individual pollsters matching those pipelines.
+
+The *transformers* section of a pipeline sink provides the possibility to add a
+list of transformer definitions. The names of the transformers should be the same
+as the names of the related extensions in setup.cfg.
+
+The definition of transformers can contain the following fields::
+
+    transformers:
+        - name: 'name of the transformer'
+          parameters:
+
+The *parameters* section can contain transformer specific fields, like source
+and target fields with different subfields in case of the rate_of_change,
+which depends on the implementation of the transformer. In case of the
+transformer, which creates the *cpu_util* meter, the definition looks like the
+following::
+
+    transformers:
+        - name: "rate_of_change"
+          parameters:
+              target:
+                  name: "cpu_util"
+                  unit: "%"
+                  type: "gauge"
+                  scale: "100.0 / (10**9 * (resource_metadata.cpu_number or 1))"
+
+The *rate_of_change* transformer generates the *cpu_util* meter from the
+sample values of the *cpu* counter, which represents cumulative CPU time in
+nanoseconds. The transformer definition above defines a scale factor (for
+nanoseconds, multiple CPUs, etc.), which is applied before the transformation
+derives a sequence of gauge samples with unit '%', from the original values
+of the *cpu* meter.
+
+The definition for the disk I/O rate, which is also generated by the
+*rate_of_change* transformer::
+
+    transformers:
+        - name: "rate_of_change"
+          parameters:
+              source:
+                  map_from:
+                      name: "disk\\.(read|write)\\.(bytes|requests)"
+                      unit: "(B|request)"
+              target:
+                  map_to:
+                      name: "disk.\\1.\\2.rate"
+                      unit: "\\1/s"
+                  type: "gauge"
+
+The *publishers* section contains the list of publishers, where the samples
+data should be sent after the possible transformations. The names of the
+publishers should be the same as the related names of the plugins in
+setup.cfg.
+
+The default configuration can be found in `pipeline.yaml`_.
+
+.. _pipeline.yaml: https://git.openstack.org/cgit/openstack/ceilometer/tree/etc/ceilometer/pipeline.yaml

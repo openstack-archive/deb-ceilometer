@@ -17,6 +17,7 @@
 # under the License.
 """Model classes for use in the storage API.
 """
+import inspect
 
 from ceilometer.openstack.common import timeutils
 
@@ -43,6 +44,11 @@ class Model(object):
 
     def __eq__(self, other):
         return self.as_dict() == other.as_dict()
+
+    @classmethod
+    def get_field_names(cls):
+        fields = inspect.getargspec(cls.__init__)[0]
+        return set(fields) - set(["self"])
 
 
 class Event(Model):
@@ -171,7 +177,7 @@ class Meter(Model):
         """Create a new meter.
 
         :param name: name of the meter
-        :param type: type of the meter (guage, counter)
+        :param type: type of the meter (gauge, delta, cumulative)
         :param unit: unit of the meter
         :param resource_id: UUID of the resource
         :param project_id: UUID of project owning the resource
@@ -199,6 +205,7 @@ class Sample(Model):
                  timestamp, resource_metadata,
                  message_id,
                  message_signature,
+                 recorded_at,
                  ):
         """Create a new sample.
 
@@ -213,6 +220,7 @@ class Sample(Model):
         :param timestamp: the time of the measurement
         :param resource_metadata: extra details about the resource
         :param message_id: a message identifier
+        :param recorded_at: sample record timestamp
         :param message_signature: a hash created from the rest of the
                                   message data
         """
@@ -228,25 +236,20 @@ class Sample(Model):
                        timestamp=timestamp,
                        resource_metadata=resource_metadata,
                        message_id=message_id,
-                       message_signature=message_signature)
+                       message_signature=message_signature,
+                       recorded_at=recorded_at)
 
 
 class Statistics(Model):
     """Computed statistics based on a set of sample data.
     """
     def __init__(self, unit,
-                 min, max, avg, sum, count,
                  period, period_start, period_end,
                  duration, duration_start, duration_end,
-                 groupby):
+                 groupby, **data):
         """Create a new statistics object.
 
         :param unit: The unit type of the data set
-        :param min: The smallest volume found
-        :param max: The largest volume found
-        :param avg: The average of all volumes found
-        :param sum: The total of all volumes found
-        :param count: The number of samples found
         :param period: The length of the time range covered by these stats
         :param period_start: The timestamp for the start of the period
         :param period_end: The timestamp for the end of the period
@@ -254,14 +257,21 @@ class Statistics(Model):
         :param duration_start: The earliest time for the matching samples
         :param duration_end: The latest time for the matching samples
         :param groupby: The fields used to group the samples.
+        :param data: some or all of the following aggregates
+           min: The smallest volume found
+           max: The largest volume found
+           avg: The average of all volumes found
+           sum: The total of all volumes found
+           count: The number of samples found
+           aggregate: name-value pairs for selectable aggregates
         """
         Model.__init__(self, unit=unit,
-                       min=min, max=max, avg=avg, sum=sum, count=count,
                        period=period, period_start=period_start,
                        period_end=period_end, duration=duration,
                        duration_start=duration_start,
                        duration_end=duration_end,
-                       groupby=groupby)
+                       groupby=groupby,
+                       **data)
 
 
 class Alarm(Model):
@@ -289,6 +299,7 @@ class Alarm(Model):
     :param project_id: the project_id of the creator
     :param evaluation_periods: the number of periods
     :param period: the time period in seconds
+    :param time_constraints: the list of the alarm's time constraints, if any
     :param timestamp: the timestamp when the alarm was last updated
     :param state_timestamp: the timestamp of the last state change
     :param ok_actions: the list of webhooks to call when entering the ok state
@@ -302,7 +313,7 @@ class Alarm(Model):
     def __init__(self, alarm_id, type, enabled, name, description,
                  timestamp, user_id, project_id, state, state_timestamp,
                  ok_actions, alarm_actions, insufficient_data_actions,
-                 repeat_actions, rule):
+                 repeat_actions, rule, time_constraints):
         Model.__init__(
             self,
             alarm_id=alarm_id,
@@ -320,7 +331,8 @@ class Alarm(Model):
             insufficient_data_actions=
             insufficient_data_actions,
             repeat_actions=repeat_actions,
-            rule=rule)
+            rule=rule,
+            time_constraints=time_constraints)
 
 
 class AlarmChange(Model):

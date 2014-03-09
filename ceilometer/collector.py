@@ -26,16 +26,17 @@ from ceilometer.openstack.common import log
 from ceilometer.openstack.common.rpc import dispatcher as rpc_dispatcher
 from ceilometer.openstack.common.rpc import service as rpc_service
 from ceilometer.openstack.common import service as os_service
+from ceilometer.openstack.common import units
 from ceilometer import service
 
 OPTS = [
     cfg.StrOpt('udp_address',
                default='0.0.0.0',
-               help='address to bind the UDP socket to'
-               'disabled if set to an empty string'),
+               help='Address to which the UDP socket is bound. Set to '
+               'an empty string to disable.'),
     cfg.IntOpt('udp_port',
                default=4952,
-               help='port to bind the UDP socket to'),
+               help='Port to which the UDP socket is bound.'),
 ]
 
 cfg.CONF.register_opts(OPTS, group="collector")
@@ -70,7 +71,7 @@ class CollectorService(service.DispatchedService, rpc_service.Service):
         while self.udp_run:
             # NOTE(jd) Arbitrary limit of 64K because that ought to be
             # enough for anybody.
-            data, source = udp.recvfrom(64 * 1024)
+            data, source = udp.recvfrom(64 * units.Ki)
             try:
                 sample = msgpack.loads(data)
             except Exception:

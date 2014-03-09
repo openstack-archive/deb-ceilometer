@@ -33,8 +33,8 @@ from ceilometer.tests import base
 class BinTestCase(base.BaseTestCase):
     def setUp(self):
         super(BinTestCase, self).setUp()
-        content = "[database]\n"\
-                  "connection=log://localhost\n"
+        content = ("[database]\n"
+                   "connection=log://localhost\n")
         self.tempfile = fileutils.write_to_tempfile(content=content,
                                                     prefix='ceilometer',
                                                     suffix='.conf')
@@ -48,15 +48,34 @@ class BinTestCase(base.BaseTestCase):
                                  "--config-file=%s" % self.tempfile])
         self.assertEqual(subp.wait(), 0)
 
-    def test_run_expirer(self):
+    def test_run_expirer_ttl_disabled(self):
         subp = subprocess.Popen(['ceilometer-expirer',
-                                 "--config-file=%s" % self.tempfile])
-        self.assertEqual(subp.wait(), 0)
+                                 '-d',
+                                 "--config-file=%s" % self.tempfile],
+                                stderr=subprocess.PIPE)
+        __, err = subp.communicate()
+        self.assertEqual(subp.poll(), 0)
+        self.assertIn("Nothing to clean", err)
+
+    def test_run_expirer_ttl_enabled(self):
+        content = ("[database]\n"
+                   "time_to_live=1\n"
+                   "connection=log://localhost\n")
+        self.tempfile = fileutils.write_to_tempfile(content=content,
+                                                    prefix='ceilometer',
+                                                    suffix='.conf')
+        subp = subprocess.Popen(['ceilometer-expirer',
+                                 '-d',
+                                 "--config-file=%s" % self.tempfile],
+                                stderr=subprocess.PIPE)
+        __, err = subp.communicate()
+        self.assertEqual(subp.poll(), 0)
+        self.assertIn("Dropping data with TTL 1", err)
 
 
-class BinSendCounterTestCase(base.BaseTestCase):
+class BinSendSampleTestCase(base.BaseTestCase):
     def setUp(self):
-        super(BinSendCounterTestCase, self).setUp()
+        super(BinSendSampleTestCase, self).setUp()
         pipeline_cfg_file = self.path_get('etc/ceilometer/pipeline.yaml')
         content = "[DEFAULT]\n"\
                   "rpc_backend=ceilometer.openstack.common.rpc.impl_fake\n"\
@@ -67,14 +86,14 @@ class BinSendCounterTestCase(base.BaseTestCase):
                                                     suffix='.conf')
 
     def tearDown(self):
-        super(BinSendCounterTestCase, self).tearDown()
+        super(BinSendSampleTestCase, self).tearDown()
         os.remove(self.tempfile)
 
     def test_send_counter_run(self):
-        subp = subprocess.Popen([self.path_get('bin/ceilometer-send-counter'),
+        subp = subprocess.Popen(['ceilometer-send-sample',
                                  "--config-file=%s" % self.tempfile,
-                                 "--counter-resource=someuuid",
-                                 "--counter-name=mycounter"])
+                                 "--sample-resource=someuuid",
+                                 "--sample-name=mycounter"])
         self.assertEqual(subp.wait(), 0)
 
 

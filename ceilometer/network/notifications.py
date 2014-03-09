@@ -30,7 +30,7 @@ from ceilometer import sample
 OPTS = [
     cfg.StrOpt('neutron_control_exchange',
                default='neutron',
-               help="Exchange name for Neutron notifications",
+               help="Exchange name for Neutron notifications.",
                deprecated_name='quantum_control_exchange'),
 ]
 
@@ -87,7 +87,7 @@ class NetworkNotificationBase(plugin.NotificationBase):
             unit=unit_value,
             volume=1,
             user_id=message['_context_user_id'],
-            project_id=message['payload']['tenant_id'],
+            project_id=message['_context_tenant_id'],
             resource_id=message['payload']['id'],
             message=message)
 
@@ -100,7 +100,7 @@ class NetworkNotificationBase(plugin.NotificationBase):
                 unit=unit_value,
                 volume=1,
                 user_id=message['_context_user_id'],
-                project_id=message['payload']['tenant_id'],
+                project_id=message['_context_tenant_id'],
                 resource_id=message['payload']['id'],
                 message=message)
 

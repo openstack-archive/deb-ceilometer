@@ -24,6 +24,7 @@ from oslo.config import cfg
 import six
 import yaml
 
+from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models
@@ -31,7 +32,7 @@ from ceilometer.storage import models
 OPTS = [
     cfg.StrOpt('definitions_cfg_file',
                default="event_definitions.yaml",
-               help="Configuration file for event definitions"
+               help="Configuration file for event definitions."
                ),
     cfg.BoolOpt('drop_unmatched_notifications',
                 default=False,

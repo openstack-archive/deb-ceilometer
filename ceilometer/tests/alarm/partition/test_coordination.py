@@ -19,10 +19,11 @@
 """
 import datetime
 import logging
-import StringIO
+import six
 import uuid
 
 import mock
+from six import moves
 
 from ceilometer.alarm.partition import coordination
 from ceilometer.openstack.common.fixture import config
@@ -45,7 +46,7 @@ class TestCoordinate(test.BaseTestCase):
         self.partition_coordinator = coordination.PartitionCoordinator()
         self.partition_coordinator.coordination_rpc = mock.Mock()
         #add extra logger to check exception conditions and logged content
-        self.output = StringIO.StringIO()
+        self.output = six.moves.StringIO()
         self.str_handler = logging.StreamHandler(self.output)
         coordination.LOG.logger.addHandler(self.str_handler)
 
@@ -60,7 +61,7 @@ class TestCoordinate(test.BaseTestCase):
         self.api_client.alarms.list.return_value = []
 
     def _some_alarms(self, count):
-        alarm_ids = [str(uuid.uuid4()) for _ in xrange(count)]
+        alarm_ids = [str(uuid.uuid4()) for _ in moves.xrange(count)]
         alarms = [self._make_alarm(aid) for aid in alarm_ids]
         self.api_client.alarms.list.return_value = alarms
         return alarm_ids
@@ -76,7 +77,7 @@ class TestCoordinate(test.BaseTestCase):
         return alarm_ids
 
     def _add_alarms(self, boost):
-        new_alarm_ids = [str(uuid.uuid4()) for _ in xrange(boost)]
+        new_alarm_ids = [str(uuid.uuid4()) for _ in moves.xrange(boost)]
         alarms = self.api_client.alarms.list.return_value
         for aid in new_alarm_ids:
             alarms.append(self._make_alarm(aid))
@@ -99,6 +100,7 @@ class TestCoordinate(test.BaseTestCase):
                             alarm_actions=[],
                             insufficient_data_actions=[],
                             alarm_id=uuid,
+                            time_constraints=[],
                             rule=dict(
                                 statistic='avg',
                                 comparison_operator='gt',
@@ -167,7 +169,7 @@ class TestCoordinate(test.BaseTestCase):
     def test_mastership_not_assumed_during_warmup(self):
         self._no_alarms()
 
-        for _ in xrange(7):
+        for _ in moves.xrange(7):
             # still warming up
             self._advance_time(0.25)
             self._check_mastership(False)
@@ -188,7 +190,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        for offset in xrange(1, 5):
+        for offset in moves.xrange(1, 5):
             younger = self._younger_by(offset)
             self.partition_coordinator.presence(uuid.uuid4(), younger)
 
@@ -230,7 +232,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        others = [self._new_partition(i) for i in xrange(1, 5)]
+        others = [self._new_partition(i) for i in moves.xrange(1, 5)]
 
         self._check_mastership(True)
 
@@ -243,7 +245,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        others = [self._new_partition(i) for i in xrange(1, 5)]
+        others = [self._new_partition(i) for i in moves.xrange(1, 5)]
 
         self._check_mastership(True)
 
@@ -261,7 +263,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        others = [self._new_partition(i) for i in xrange(1, 5)]
+        others = [self._new_partition(i) for i in moves.xrange(1, 5)]
 
         self._check_mastership(True)
 
@@ -284,7 +286,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        others = [self._new_partition(i) for i in xrange(1, 5)]
+        others = [self._new_partition(i) for i in moves.xrange(1, 5)]
 
         self._check_mastership(True)
 
@@ -303,7 +305,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        others = [self._new_partition(i) for i in xrange(1, 5)]
+        others = [self._new_partition(i) for i in moves.xrange(1, 5)]
 
         self._check_mastership(True)
 
@@ -321,7 +323,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        others = [self._new_partition(i) for i in xrange(1, 5)]
+        others = [self._new_partition(i) for i in moves.xrange(1, 5)]
 
         self._check_mastership(True)
 
@@ -342,7 +344,7 @@ class TestCoordinate(test.BaseTestCase):
 
         self._advance_time(3)
 
-        for i in xrange(1, 5):
+        for i in moves.xrange(1, 5):
             self._new_partition(i)
 
         def overtake(*args):

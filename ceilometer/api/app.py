@@ -53,12 +53,10 @@ def get_pecan_config():
 
 
 def setup_app(pecan_config=None, extra_hooks=None):
-    storage_engine = storage.get_engine(cfg.CONF)
     # FIXME: Replace DBHook with a hooks.TransactionHook
     app_hooks = [hooks.ConfigHook(),
                  hooks.DBHook(
-                     storage_engine,
-                     storage_engine.get_connection(cfg.CONF),
+                     storage.get_connection(cfg.CONF),
                  ),
                  hooks.PipelineHook(),
                  hooks.TranslationHook()]
@@ -81,7 +79,7 @@ def setup_app(pecan_config=None, extra_hooks=None):
         guess_content_type_from_ext=False
     )
 
-    if pecan_config.app.enable_acl:
+    if getattr(pecan_config.app, 'enable_acl', True):
         return acl.install(app, cfg.CONF)
 
     return app
@@ -90,6 +88,7 @@ def setup_app(pecan_config=None, extra_hooks=None):
 class VersionSelectorApplication(object):
     def __init__(self):
         pc = get_pecan_config()
+        pc.app.debug = CONF.debug
         pc.app.enable_acl = (CONF.auth_strategy == 'keystone')
         if cfg.CONF.enable_v1_api:
             from ceilometer.api.v1 import app as v1app

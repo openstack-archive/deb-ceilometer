@@ -21,7 +21,7 @@
 
 import itertools
 import operator
-import urlparse
+import six.moves.urllib.parse as urlparse
 
 from oslo.config import cfg
 
@@ -37,7 +37,7 @@ LOG = log.getLogger(__name__)
 METER_PUBLISH_OPTS = [
     cfg.StrOpt('metering_topic',
                default='metering',
-               help='the topic ceilometer uses for metering messages',
+               help='The topic that ceilometer uses for metering messages.',
                deprecated_group="DEFAULT",
                ),
 ]

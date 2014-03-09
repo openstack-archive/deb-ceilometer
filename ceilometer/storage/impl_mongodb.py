@@ -2,9 +2,11 @@
 #
 # Copyright © 2012 New Dream Network, LLC (DreamHost)
 # Copyright © 2013 eNovance
+# Copyright © 2014 Red Hat, Inc
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#         Julien Danjou <julien@danjou.info>
+# Authors: Doug Hellmann <doug.hellmann@dreamhost.com>
+#          Julien Danjou <julien@danjou.info>
+#          Eoghan Glynn <eglynn@redhat.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -25,7 +27,6 @@ import copy
 import json
 import operator
 import uuid
-import weakref
 
 import bson.code
 import bson.objectid
@@ -35,9 +36,12 @@ from oslo.config import cfg
 
 from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
+from ceilometer.storage import pymongo_base
+from ceilometer import utils
 
 cfg.CONF.import_opt('time_to_live', 'ceilometer.storage',
                     group="database")
@@ -77,101 +81,11 @@ class MongoDBStorage(base.StorageEngine):
         return Connection(conf)
 
 
-def make_timestamp_range(start, end,
-                         start_timestamp_op=None, end_timestamp_op=None):
-    """Given two possible datetimes and their operations, create the query
-    document to find timestamps within that range.
-    By default, using $gte for the lower bound and $lt for the
-    upper bound.
-    """
-    ts_range = {}
-
-    if start:
-        if start_timestamp_op == 'gt':
-            start_timestamp_op = '$gt'
-        else:
-            start_timestamp_op = '$gte'
-        ts_range[start_timestamp_op] = start
-
-    if end:
-        if end_timestamp_op == 'le':
-            end_timestamp_op = '$lte'
-        else:
-            end_timestamp_op = '$lt'
-        ts_range[end_timestamp_op] = end
-    return ts_range
-
-
-def make_query_from_filter(sample_filter, require_meter=True):
-    """Return a query dictionary based on the settings in the filter.
-
-    :param filter: SampleFilter instance
-    :param require_meter: If true and the filter does not have a meter,
-                          raise an error.
-    """
-    q = {}
-
-    if sample_filter.user:
-        q['user_id'] = sample_filter.user
-    if sample_filter.project:
-        q['project_id'] = sample_filter.project
-
-    if sample_filter.meter:
-        q['counter_name'] = sample_filter.meter
-    elif require_meter:
-        raise RuntimeError('Missing required meter specifier')
-
-    ts_range = make_timestamp_range(sample_filter.start, sample_filter.end,
-                                    sample_filter.start_timestamp_op,
-                                    sample_filter.end_timestamp_op)
-    if ts_range:
-        q['timestamp'] = ts_range
-
-    if sample_filter.resource:
-        q['resource_id'] = sample_filter.resource
-    if sample_filter.source:
-        q['source'] = sample_filter.source
-    if sample_filter.message_id:
-        q['message_id'] = sample_filter.message_id
-
-    # so the samples call metadata resource_metadata, so we convert
-    # to that.
-    q.update(dict(('resource_%s' % k, v)
-                  for (k, v) in sample_filter.metaquery.iteritems()))
-    return q
-
-
-class ConnectionPool(object):
-
-    def __init__(self):
-        self._pool = {}
-
-    def connect(self, url):
-        connection_options = pymongo.uri_parser.parse_uri(url)
-        del connection_options['database']
-        del connection_options['username']
-        del connection_options['password']
-        del connection_options['collection']
-        pool_key = tuple(connection_options)
-
-        if pool_key in self._pool:
-            client = self._pool.get(pool_key)()
-            if client:
-                return client
-        LOG.info(_('Connecting to MongoDB on %s'),
-                 connection_options['nodelist'])
-        client = pymongo.MongoClient(
-            url,
-            safe=True)
-        self._pool[pool_key] = weakref.ref(client)
-        return client
-
-
-class Connection(base.Connection):
+class Connection(pymongo_base.Connection):
     """MongoDB connection.
     """
 
-    CONNECTION_POOL = ConnectionPool()
+    CONNECTION_POOL = pymongo_base.ConnectionPool()
 
     REDUCE_GROUP_CLEAN = bson.code.Code("""
     function ( curr, result ) {
@@ -184,12 +98,140 @@ class Connection(base.Connection):
     }
     """)
 
+    STANDARD_AGGREGATES = dict(
+        emit_initial=dict(
+            sum='',
+            count='',
+            avg='',
+            min='',
+            max=''
+        ),
+        emit_body=dict(
+            sum='sum: this.counter_volume,',
+            count='count: NumberInt(1),',
+            avg='acount: NumberInt(1), asum: this.counter_volume,',
+            min='min: this.counter_volume,',
+            max='max: this.counter_volume,'
+        ),
+        reduce_initial=dict(
+            sum='',
+            count='',
+            avg='',
+            min='',
+            max=''
+        ),
+        reduce_body=dict(
+            sum='sum: values[0].sum,',
+            count='count: values[0].count,',
+            avg='acount: values[0].acount, asum: values[0].asum,',
+            min='min: values[0].min,',
+            max='max: values[0].max,'
+        ),
+        reduce_computation=dict(
+            sum='res.sum += values[i].sum;',
+            count='res.count = NumberInt(res.count + values[i].count);',
+            avg=('res.acount = NumberInt(res.acount + values[i].acount);'
+                 'res.asum += values[i].asum;'),
+            min='if ( values[i].min < res.min ) {res.min = values[i].min;}',
+            max='if ( values[i].max > res.max ) {res.max = values[i].max;}'
+        ),
+        finalize=dict(
+            sum='',
+            count='',
+            avg='value.avg = value.asum / value.acount;',
+            min='',
+            max=''
+        ),
+    )
+
+    UNPARAMETERIZED_AGGREGATES = dict(
+        emit_initial=dict(
+            stddev=(
+                ''
+            )
+        ),
+        emit_body=dict(
+            stddev='sdsum: this.counter_volume,'
+                   'sdcount: 1,'
+                   'weighted_distances: 0,'
+                   'stddev: 0,'
+        ),
+        reduce_initial=dict(
+            stddev=''
+        ),
+        reduce_body=dict(
+            stddev='sdsum: values[0].sdsum,'
+                   'sdcount: values[0].sdcount,'
+                   'weighted_distances: values[0].weighted_distances,'
+                   'stddev: values[0].stddev,'
+        ),
+        reduce_computation=dict(
+            stddev=(
+                'var deviance = (res.sdsum / res.sdcount) - values[i].sdsum;'
+                'var weight = res.sdcount / ++res.sdcount;'
+                'res.weighted_distances += (Math.pow(deviance, 2) * weight);'
+                'res.sdsum += values[i].sdsum;'
+            )
+        ),
+        finalize=dict(
+            stddev=(
+                'value.stddev = Math.sqrt(value.weighted_distances /'
+                '  value.sdcount);'
+            )
+        ),
+    )
+
+    PARAMETERIZED_AGGREGATES = dict(
+        validate=dict(
+            cardinality=lambda p: p in ['resource_id', 'user_id', 'project_id',
+                                        'source']
+        ),
+        emit_initial=dict(
+            cardinality=(
+                'var aggregate = {};'
+                'aggregate["cardinality/%(aggregate_param)s"] ='
+                '  this["%(aggregate_param)s"];'
+            )
+        ),
+        emit_body=dict(
+            cardinality='aggregate : aggregate,'
+        ),
+        reduce_initial=dict(
+            cardinality=(
+                'var distincts = {};'
+                'distincts[values[0].aggregate['
+                '  "cardinality/%(aggregate_param)s"]] = true;'
+                'var aggregate = {};'
+                'aggregate["cardinality/%(aggregate_param)s"] = NumberInt(1);'
+            )
+        ),
+        reduce_body=dict(
+            cardinality='aggregate : aggregate,'
+        ),
+        reduce_computation=dict(
+            cardinality=(
+                'if (!(values[i].aggregate["cardinality/%(aggregate_param)s"]'
+                '    in distincts)) {'
+                '  distincts[values[i].aggregate['
+                '    "cardinality/%(aggregate_param)s"]] = true;'
+                '  res.aggregate["cardinality/%(aggregate_param)s"] ='
+                '    NumberInt(Object.keys(distincts).length);}'
+            )
+        ),
+        finalize=dict(
+            cardinality=(
+                'if (typeof value.aggregate['
+                '    "cardinality/%(aggregate_param)s"] !== "number") {'
+                '  value.aggregate["cardinality/%(aggregate_param)s"] ='
+                '     NumberInt(1);}'
+            )
+        ),
+    )
+
     EMIT_STATS_COMMON = """
+        %(aggregate_initial_placeholder)s
         emit(%(key_val)s, { unit: this.counter_unit,
-                            min : this.counter_volume,
-                            max : this.counter_volume,
-                            sum : this.counter_volume,
-                            count : NumberInt(1),
+                            %(aggregate_body_placeholder)s
                             groupby : %(groupby_val)s,
                             duration_start : this.timestamp,
                             duration_end : this.timestamp,
@@ -217,10 +259,14 @@ class Connection(base.Connection):
         }
     """
 
-    PARAMS_MAP_STATS = {'key_val': '\'statistics\'',
-                        'groupby_val': 'null',
-                        'period_start_val': 'this.timestamp',
-                        'period_end_val': 'this.timestamp'}
+    PARAMS_MAP_STATS = {
+        'key_val': '\'statistics\'',
+        'groupby_val': 'null',
+        'period_start_val': 'this.timestamp',
+        'period_end_val': 'this.timestamp',
+        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
+        'aggregate_body_placeholder': '%(aggregate_body_val)s'
+    }
 
     MAP_STATS = bson.code.Code("function () {" +
                                EMIT_STATS_COMMON % PARAMS_MAP_STATS +
@@ -230,7 +276,9 @@ class Connection(base.Connection):
         'key_val': 'period_start',
         'groupby_val': 'null',
         'period_start_val': 'new Date(period_start)',
-        'period_end_val': 'new Date(period_start + period)'
+        'period_end_val': 'new Date(period_start + period)',
+        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
+        'aggregate_body_placeholder': '%(aggregate_body_val)s'
     }
 
     MAP_STATS_PERIOD = bson.code.Code(
@@ -239,10 +287,14 @@ class Connection(base.Connection):
         EMIT_STATS_COMMON % PARAMS_MAP_STATS_PERIOD +
         "}")
 
-    PARAMS_MAP_STATS_GROUPBY = {'key_val': 'groupby_key',
-                                'groupby_val': 'groupby',
-                                'period_start_val': 'this.timestamp',
-                                'period_end_val': 'this.timestamp'}
+    PARAMS_MAP_STATS_GROUPBY = {
+        'key_val': 'groupby_key',
+        'groupby_val': 'groupby',
+        'period_start_val': 'this.timestamp',
+        'period_end_val': 'this.timestamp',
+        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
+        'aggregate_body_placeholder': '%(aggregate_body_val)s'
+    }
 
     MAP_STATS_GROUPBY = bson.code.Code(
         "function () {" +
@@ -254,7 +306,9 @@ class Connection(base.Connection):
         'key_val': 'groupby_key',
         'groupby_val': 'groupby',
         'period_start_val': 'new Date(period_start)',
-        'period_end_val': 'new Date(period_start + period)'
+        'period_end_val': 'new Date(period_start + period)',
+        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
+        'aggregate_body_placeholder': '%(aggregate_body_val)s'
     }
 
     MAP_STATS_PERIOD_GROUPBY = bson.code.Code(
@@ -267,23 +321,16 @@ class Connection(base.Connection):
 
     REDUCE_STATS = bson.code.Code("""
     function (key, values) {
+        %(aggregate_initial_val)s
         var res = { unit: values[0].unit,
-                    min: values[0].min,
-                    max: values[0].max,
-                    count: values[0].count,
-                    sum: values[0].sum,
+                    %(aggregate_body_val)s
                     groupby: values[0].groupby,
                     period_start: values[0].period_start,
                     period_end: values[0].period_end,
                     duration_start: values[0].duration_start,
                     duration_end: values[0].duration_end };
         for ( var i=1; i<values.length; i++ ) {
-            if ( values[i].min < res.min )
-               res.min = values[i].min;
-            if ( values[i].max > res.max )
-               res.max = values[i].max;
-            res.count = NumberInt(res.count + values[i].count);
-            res.sum += values[i].sum;
+            %(aggregate_computation_val)s
             if ( values[i].duration_start < res.duration_start )
                res.duration_start = values[i].duration_start;
             if ( values[i].duration_end > res.duration_end )
@@ -295,7 +342,7 @@ class Connection(base.Connection):
 
     FINALIZE_STATS = bson.code.Code("""
     function (key, value) {
-        value.avg = value.sum / value.count;
+        %(aggregate_val)s
         value.duration = (value.duration_end - value.duration_start) / 1000;
         value.period = NumberInt((value.period_end - value.period_start)
                                   / 1000);
@@ -457,6 +504,7 @@ class Connection(base.Connection):
         # modify a data structure owned by our caller (the driver adds
         # a new key '_id').
         record = copy.copy(data)
+        record['recorded_at'] = timeutils.utcnow()
         self.db.meter.insert(record)
 
     def clear_expired_metering_data(self, ttl):
@@ -533,7 +581,15 @@ class Connection(base.Connection):
         if marker is not None:
             sort_criteria_list = []
 
-            for i in range(0, len(sort_keys)):
+            for i in range(len(sort_keys)):
+                #NOTE(fengqian): Generate the query criteria recursively.
+                #sort_keys=[k1, k2, k3], maker_value=[v1, v2, v3]
+                #sort_flags = ['$lt', '$gt', 'lt'].
+                #The query criteria should be
+                #{'k3': {'$lt': 'v3'}, 'k2': {'eq': 'v2'}, 'k1': {'eq': 'v1'}},
+                #{'k2': {'$gt': 'v2'}, 'k1': {'eq': 'v1'}},
+                #{'k1': {'$lt': 'v1'}} with 'OR' operation.
+                #Each recurse will generate one items of three.
                 sort_criteria_list.append(cls._recurse_sort_keys(
                                           sort_keys[:(len(sort_keys) - i)],
                                           marker, _op))
@@ -595,32 +651,6 @@ class Connection(base.Connection):
             limit = 0
         return db_collection.find(q, limit=limit, sort=all_sort)
 
-    def get_users(self, source=None):
-        """Return an iterable of user id strings.
-
-        :param source: Optional source filter.
-        """
-        q = {}
-        if source is not None:
-            q['source'] = source
-
-        return (doc['_id'] for doc in
-                self.db.user.find(q, fields=['_id'],
-                                  sort=[('_id', pymongo.ASCENDING)]))
-
-    def get_projects(self, source=None):
-        """Return an iterable of project id strings.
-
-        :param source: Optional source filter.
-        """
-        q = {}
-        if source is not None:
-            q['source'] = source
-
-        return (doc['_id'] for doc in
-                self.db.project.find(q, fields=['_id'],
-                                     sort=[('_id', pymongo.ASCENDING)]))
-
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
@@ -662,9 +692,10 @@ class Connection(base.Connection):
             # Look for resources matching the above criteria and with
             # samples in the time range we care about, then change the
             # resource query to return just those resources by id.
-            ts_range = make_timestamp_range(start_timestamp, end_timestamp,
-                                            start_timestamp_op,
-                                            end_timestamp_op)
+            ts_range = pymongo_base.make_timestamp_range(start_timestamp,
+                                                         end_timestamp,
+                                                         start_timestamp_op,
+                                                         end_timestamp_op)
             if ts_range:
                 q['timestamp'] = ts_range
 
@@ -695,71 +726,37 @@ class Connection(base.Connection):
         finally:
             self.db[out].drop()
 
-    def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}, pagination=None):
-        """Return an iterable of models.Meter instances
+    def _aggregate_param(self, fragment_key, aggregate):
+        fragment_map = self.STANDARD_AGGREGATES[fragment_key]
 
-        :param user: Optional ID for user that owns the resource.
-        :param project: Optional ID for project that owns the resource.
-        :param resource: Optional resource filter.
-        :param source: Optional source filter.
-        :param metaquery: Optional dict with metadata to match on.
-        :param pagination: Optional pagination query.
-        """
-        if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
+        if not aggregate:
+            return ''.join([f for f in fragment_map.values()])
 
-        q = {}
-        if user is not None:
-            q['user_id'] = user
-        if project is not None:
-            q['project_id'] = project
-        if resource is not None:
-            q['_id'] = resource
-        if source is not None:
-            q['source'] = source
-        q.update(metaquery)
+        fragments = ''
 
-        for r in self.db.resource.find(q):
-            for r_meter in r['meter']:
-                yield models.Meter(
-                    name=r_meter['counter_name'],
-                    type=r_meter['counter_type'],
-                    # Return empty string if 'counter_unit' is not valid for
-                    # backward compatibility.
-                    unit=r_meter.get('counter_unit', ''),
-                    resource_id=r['_id'],
-                    project_id=r['project_id'],
-                    source=r['source'],
-                    user_id=r['user_id'],
-                )
+        for a in aggregate:
+            if a.func in self.STANDARD_AGGREGATES[fragment_key]:
+                fragment_map = self.STANDARD_AGGREGATES[fragment_key]
+                fragments += fragment_map[a.func]
+            elif a.func in self.UNPARAMETERIZED_AGGREGATES[fragment_key]:
+                fragment_map = self.UNPARAMETERIZED_AGGREGATES[fragment_key]
+                fragments += fragment_map[a.func]
+            elif a.func in self.PARAMETERIZED_AGGREGATES[fragment_key]:
+                fragment_map = self.PARAMETERIZED_AGGREGATES[fragment_key]
+                v = self.PARAMETERIZED_AGGREGATES['validate'].get(a.func)
+                if not (v and v(a.param)):
+                    raise storage.StorageBadAggregate('Bad aggregate: %s.%s'
+                                                      % (a.func, a.param))
+                params = dict(aggregate_param=a.param)
+                fragments += (fragment_map[a.func] % params)
+            else:
+                raise NotImplementedError(_('Selectable aggregate function %s'
+                                            ' is not supported') % a.func)
 
-    def get_samples(self, sample_filter, limit=None):
-        """Return an iterable of model.Sample instances.
+        return fragments
 
-        :param sample_filter: Filter.
-        :param limit: Maximum number of results to return.
-        """
-        if limit == 0:
-            return
-        q = make_query_from_filter(sample_filter, require_meter=False)
-        if limit:
-            samples = self.db.meter.find(
-                q, limit=limit, sort=[("timestamp", pymongo.DESCENDING)])
-        else:
-            samples = self.db.meter.find(
-                q, sort=[("timestamp", pymongo.DESCENDING)])
-
-        for s in samples:
-            # Remove the ObjectId generated by the database when
-            # the sample was inserted. It is an implementation
-            # detail that should not leak outside of the driver.
-            del s['_id']
-            # Backward compatibility for samples without units
-            s['counter_unit'] = s.get('counter_unit', '')
-            yield models.Sample(**s)
-
-    def get_meter_statistics(self, sample_filter, period=None, groupby=None):
+    def get_meter_statistics(self, sample_filter, period=None, groupby=None,
+                             aggregate=None):
         """Return an iterable of models.Statistics instance containing meter
         statistics described by the query parameters.
 
@@ -771,7 +768,7 @@ class Connection(base.Connection):
                                     'resource_id', 'source'])):
             raise NotImplementedError("Unable to group by these fields")
 
-        q = make_query_from_filter(sample_filter)
+        q = pymongo_base.make_query_from_filter(sample_filter)
 
         if period:
             if sample_filter.start:
@@ -781,202 +778,111 @@ class Connection(base.Connection):
                     limit=1, sort=[('timestamp',
                                     pymongo.ASCENDING)])[0]['timestamp']
             period_start = int(calendar.timegm(period_start.utctimetuple()))
-            params_period = {'period': period,
-                             'period_first': period_start,
-                             'groupby_fields': json.dumps(groupby)}
+            map_params = {'period': period,
+                          'period_first': period_start,
+                          'groupby_fields': json.dumps(groupby)}
             if groupby:
-                map_stats = self.MAP_STATS_PERIOD_GROUPBY % params_period
+                map_fragment = self.MAP_STATS_PERIOD_GROUPBY
             else:
-                map_stats = self.MAP_STATS_PERIOD % params_period
+                map_fragment = self.MAP_STATS_PERIOD
         else:
             if groupby:
-                params_groupby = {'groupby_fields': json.dumps(groupby)}
-                map_stats = self.MAP_STATS_GROUPBY % params_groupby
+                map_params = {'groupby_fields': json.dumps(groupby)}
+                map_fragment = self.MAP_STATS_GROUPBY
             else:
-                map_stats = self.MAP_STATS
+                map_params = dict()
+                map_fragment = self.MAP_STATS
+
+        sub = self._aggregate_param
+
+        map_params['aggregate_initial_val'] = sub('emit_initial', aggregate)
+        map_params['aggregate_body_val'] = sub('emit_body', aggregate)
+
+        map_stats = map_fragment % map_params
+
+        reduce_params = dict(
+            aggregate_initial_val=sub('reduce_initial', aggregate),
+            aggregate_body_val=sub('reduce_body', aggregate),
+            aggregate_computation_val=sub('reduce_computation', aggregate)
+        )
+        reduce_stats = self.REDUCE_STATS % reduce_params
+
+        finalize_params = dict(aggregate_val=sub('finalize', aggregate))
+        finalize_stats = self.FINALIZE_STATS % finalize_params
 
         results = self.db.meter.map_reduce(
             map_stats,
-            self.REDUCE_STATS,
+            reduce_stats,
             {'inline': 1},
-            finalize=self.FINALIZE_STATS,
+            finalize=finalize_stats,
             query=q,
         )
 
         # FIXME(terriyu) Fix get_meter_statistics() so we don't use sorted()
         # to return the results
         return sorted(
-            (models.Statistics(**(r['value'])) for r in results['results']),
+            (self._stats_result_to_model(r['value'], groupby, aggregate)
+             for r in results['results']),
             key=operator.attrgetter('period_start'))
 
     @staticmethod
-    def _decode_matching_metadata(matching_metadata):
-        if isinstance(matching_metadata, dict):
-            #note(sileht): keep compatibility with alarm
-            #with matching_metadata as a dict
-            return matching_metadata
-        else:
-            new_matching_metadata = {}
-            for elem in matching_metadata:
-                new_matching_metadata[elem['key']] = elem['value']
-            return new_matching_metadata
+    def _stats_result_aggregates(result, aggregate):
+        stats_args = {}
+        for attr in ['count', 'min', 'max', 'sum', 'avg']:
+            if attr in result:
+                stats_args[attr] = result[attr]
 
-    @classmethod
-    def _ensure_encapsulated_rule_format(cls, alarm):
-        """This ensure the alarm returned by the storage have the correct
-        format. The previous format looks like:
-        {
-            'alarm_id': '0ld-4l3rt',
-            'enabled': True,
-            'name': 'old-alert',
-            'description': 'old-alert',
-            'timestamp': None,
-            'meter_name': 'cpu',
-            'user_id': 'me',
-            'project_id': 'and-da-boys',
-            'comparison_operator': 'lt',
-            'threshold': 36,
-            'statistic': 'count',
-            'evaluation_periods': 1,
-            'period': 60,
-            'state': "insufficient data",
-            'state_timestamp': None,
-            'ok_actions': [],
-            'alarm_actions': ['http://nowhere/alarms'],
-            'insufficient_data_actions': [],
-            'repeat_actions': False,
-            'matching_metadata': {'key': 'value'}
-            # or 'matching_metadata': [{'key': 'key', 'value': 'value'}]
+        if aggregate:
+            stats_args['aggregate'] = {}
+            for a in aggregate:
+                ak = '%s%s' % (a.func, '/%s' % a.param if a.param else '')
+                if ak in result:
+                    stats_args['aggregate'][ak] = result[ak]
+                elif 'aggregate' in result:
+                    stats_args['aggregate'][ak] = result['aggregate'].get(ak)
+        return stats_args
+
+    @staticmethod
+    def _stats_result_to_model(result, groupby, aggregate):
+        stats_args = Connection._stats_result_aggregates(result, aggregate)
+        stats_args['unit'] = result['unit']
+        stats_args['duration'] = result['duration']
+        stats_args['duration_start'] = result['duration_start']
+        stats_args['duration_end'] = result['duration_end']
+        stats_args['period'] = result['period']
+        stats_args['period_start'] = result['period_start']
+        stats_args['period_end'] = result['period_end']
+        stats_args['groupby'] = (dict(
+            (g, result['groupby'][g]) for g in groupby) if groupby else None)
+        return models.Statistics(**stats_args)
+
+    def get_capabilities(self):
+        """Return an dictionary representing the capabilities of this driver.
+        """
+        available = {
+            'meters': {'query': {'simple': True,
+                                 'metadata': True}},
+            'resources': {'query': {'simple': True,
+                                    'metadata': True}},
+            'samples': {'query': {'simple': True,
+                                  'metadata': True,
+                                  'complex': True}},
+            'statistics': {'groupby': True,
+                           'query': {'simple': True,
+                                     'metadata': True},
+                           'aggregation': {'standard': True,
+                                           'selectable': {
+                                               'max': True,
+                                               'min': True,
+                                               'sum': True,
+                                               'avg': True,
+                                               'count': True,
+                                               'stddev': True,
+                                               'cardinality': True}}
+                           },
+            'alarms': {'query': {'simple': True,
+                                 'complex': True},
+                       'history': {'query': {'simple': True,
+                                             'complex': True}}},
         }
-        """
-
-        if isinstance(alarm.get('rule'), dict):
-            return
-
-        alarm['type'] = 'threshold'
-        alarm['rule'] = {}
-        alarm['matching_metadata'] = cls._decode_matching_metadata(
-            alarm['matching_metadata'])
-        for field in ['period', 'evaluation_periods', 'threshold',
-                      'statistic', 'comparison_operator', 'meter_name']:
-            if field in alarm:
-                alarm['rule'][field] = alarm[field]
-                del alarm[field]
-
-        query = []
-        for key in alarm['matching_metadata']:
-            query.append({'field': key,
-                          'op': 'eq',
-                          'value': alarm['matching_metadata'][key],
-                          'type': 'string'})
-        del alarm['matching_metadata']
-        alarm['rule']['query'] = query
-
-    def get_alarms(self, name=None, user=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None):
-        """Yields a lists of alarms that match filters
-        :param name: The Alarm name.
-        :param user: Optional ID for user that owns the resource.
-        :param project: Optional ID for project that owns the resource.
-        :param enabled: Optional boolean to list disable alarm.
-        :param alarm_id: Optional alarm_id to return one alarm.
-        :param pagination: Optional pagination query.
-        """
-        if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
-
-        q = {}
-        if user is not None:
-            q['user_id'] = user
-        if project is not None:
-            q['project_id'] = project
-        if name is not None:
-            q['name'] = name
-        if enabled is not None:
-            q['enabled'] = enabled
-        if alarm_id is not None:
-            q['alarm_id'] = alarm_id
-
-        for alarm in self.db.alarm.find(q):
-            a = {}
-            a.update(alarm)
-            del a['_id']
-            self._ensure_encapsulated_rule_format(a)
-            yield models.Alarm(**a)
-
-    def update_alarm(self, alarm):
-        """update alarm
-        """
-        data = alarm.as_dict()
-
-        self.db.alarm.update(
-            {'alarm_id': alarm.alarm_id},
-            {'$set': data},
-            upsert=True)
-
-        stored_alarm = self.db.alarm.find({'alarm_id': alarm.alarm_id})[0]
-        del stored_alarm['_id']
-        self._ensure_encapsulated_rule_format(stored_alarm)
-        return models.Alarm(**stored_alarm)
-
-    create_alarm = update_alarm
-
-    def delete_alarm(self, alarm_id):
-        """Delete a alarm
-        """
-        self.db.alarm.remove({'alarm_id': alarm_id})
-
-    def get_alarm_changes(self, alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
-        """Yields list of AlarmChanges describing alarm history
-
-        Changes are always sorted in reverse order of occurrence, given
-        the importance of currency.
-
-        Segregation for non-administrative users is done on the basis
-        of the on_behalf_of parameter. This allows such users to have
-        visibility on both the changes initiated by themselves directly
-        (generally creation, rule changes, or deletion) and also on those
-        changes initiated on their behalf by the alarming service (state
-        transitions after alarm thresholds are crossed).
-
-        :param alarm_id: ID of alarm to return changes for
-        :param on_behalf_of: ID of tenant to scope changes query (None for
-                             administrative user, indicating all projects)
-        :param user: Optional ID of user to return changes for
-        :param project: Optional ID of project to return changes for
-        :project type: Optional change type
-        :param start_timestamp: Optional modified timestamp start range
-        :param start_timestamp_op: Optional timestamp start range operation
-        :param end_timestamp: Optional modified timestamp end range
-        :param end_timestamp_op: Optional timestamp end range operation
-        """
-        q = dict(alarm_id=alarm_id)
-        if on_behalf_of is not None:
-            q['on_behalf_of'] = on_behalf_of
-        if user is not None:
-            q['user_id'] = user
-        if project is not None:
-            q['project_id'] = project
-        if type is not None:
-            q['type'] = type
-        if start_timestamp or end_timestamp:
-            ts_range = make_timestamp_range(start_timestamp, end_timestamp,
-                                            start_timestamp_op,
-                                            end_timestamp_op)
-            if ts_range:
-                q['timestamp'] = ts_range
-
-        sort = [("timestamp", pymongo.DESCENDING)]
-        for alarm_change in self.db.alarm_history.find(q, sort=sort):
-            ac = {}
-            ac.update(alarm_change)
-            del ac['_id']
-            yield models.AlarmChange(**ac)
-
-    def record_alarm_change(self, alarm_change):
-        """Record alarm change event.
-        """
-        self.db.alarm_history.insert(alarm_change)
+        return utils.update_nested(self.DEFAULT_CAPABILITIES, available)

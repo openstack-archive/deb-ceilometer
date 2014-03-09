@@ -17,9 +17,7 @@
 
 import os
 
-import alembic
 from alembic import config as alembic_config
-
 from migrate import exceptions as versioning_exceptions
 from migrate.versioning import api as versioning_api
 from migrate.versioning.repository import Repository
@@ -32,7 +30,8 @@ def db_sync(engine):
     db_version(engine)  # This is needed to create a version stamp in empty DB
     repository = _find_migrate_repo()
     versioning_api.upgrade(engine, repository)
-    alembic.command.upgrade(_alembic_config(), "head")
+    config = _alembic_config()
+    config._engine = engine
 
 
 def _alembic_config():

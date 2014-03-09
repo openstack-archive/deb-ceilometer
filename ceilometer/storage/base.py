@@ -23,6 +23,8 @@ import datetime
 import math
 import six
 
+from six import moves
+
 from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import timeutils
 
@@ -39,7 +41,7 @@ def iter_period(start, end, period):
     """
     period_start = start
     increment = datetime.timedelta(seconds=period)
-    for i in xrange(int(math.ceil(
+    for i in moves.xrange(int(math.ceil(
             timeutils.delta_seconds(start, end)
             / float(period)))):
         next_start = period_start + increment
@@ -115,6 +117,44 @@ class StorageEngine(object):
 
 class Connection(object):
     """Base class for storage system connections."""
+
+    """A dictionary representing the capabilities of this driver.
+    """
+    DEFAULT_CAPABILITIES = {
+        'meters': {'pagination': False,
+                   'query': {'simple': False,
+                             'metadata': False,
+                             'complex': False}},
+        'resources': {'pagination': False,
+                      'query': {'simple': False,
+                                'metadata': False,
+                                'complex': False}},
+        'samples': {'pagination': False,
+                    'groupby': False,
+                    'query': {'simple': False,
+                              'metadata': False,
+                              'complex': False}},
+        'statistics': {'pagination': False,
+                       'groupby': False,
+                       'query': {'simple': False,
+                                 'metadata': False,
+                                 'complex': False},
+                       'aggregation': {'standard': False,
+                                       'selectable': {
+                                           'max': False,
+                                           'min': False,
+                                           'sum': False,
+                                           'avg': False,
+                                           'count': False,
+                                           'stddev': False,
+                                           'cardinality': False}}
+                       },
+        'alarms': {'query': {'simple': False,
+                             'complex': False},
+                   'history': {'query': {'simple': False,
+                                         'complex': False}}},
+        'events': {'query': {'simple': False}},
+    }
 
     @staticmethod
     def __init__(conf):
@@ -207,7 +247,8 @@ class Connection(object):
         raise NotImplementedError(_('Samples not implemented'))
 
     @staticmethod
-    def get_meter_statistics(sample_filter, period=None, groupby=None):
+    def get_meter_statistics(sample_filter, period=None, groupby=None,
+                             aggregate=None):
         """Return an iterable of model.Statistics instances.
 
         The filter must have a meter value set.
@@ -315,4 +356,47 @@ class Connection(object):
         :param event_type: the type of the Event to filter by
         :param trait_type: the name of the Trait to filter by
         """
+
         raise NotImplementedError(_('Events not implemented.'))
+
+    @staticmethod
+    def query_samples(filter_expr=None, orderby=None, limit=None):
+        """Return an iterable of model.Sample objects.
+
+        :param filter_expr: Filter expression for query.
+        :param orderby: List of field name and direction pairs for order by.
+        :param limit: Maximum number of results to return.
+        """
+
+        raise NotImplementedError(_('Complex query for samples \
+            is not implemented.'))
+
+    @staticmethod
+    def query_alarms(filter_expr=None, orderby=None, limit=None):
+        """Return an iterable of model.Alarm objects.
+
+        :param filter_expr: Filter expression for query.
+        :param orderby: List of field name and direction pairs for order by.
+        :param limit: Maximum number of results to return.
+        """
+
+        raise NotImplementedError(_('Complex query for alarms \
+            is not implemented.'))
+
+    @staticmethod
+    def query_alarm_history(filter_expr=None, orderby=None, limit=None):
+        """Return an iterable of model.AlarmChange objects.
+
+        :param filter_expr: Filter expression for query.
+        :param orderby: List of field name and direction pairs for order by.
+        :param limit: Maximum number of results to return.
+        """
+
+        raise NotImplementedError(_('Complex query for alarms \
+            history is not implemented.'))
+
+    @staticmethod
+    def get_capabilities():
+        """Return an dictionary representing the capabilities of this driver.
+        """
+        raise NotImplementedError(_('Capabilities not implemented.'))

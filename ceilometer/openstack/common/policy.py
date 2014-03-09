@@ -59,12 +59,13 @@ import re
 
 from oslo.config import cfg
 import six
+import six.moves.urllib.parse as urlparse
+import six.moves.urllib.request as urlrequest
 
 from ceilometer.openstack.common import fileutils
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import jsonutils
 from ceilometer.openstack.common import log as logging
-from ceilometer.openstack.common.py3kcompat import urlutils
 
 
 policy_opts = [
@@ -118,11 +119,16 @@ class Rules(dict):
 
         # If the default rule isn't actually defined, do something
         # reasonably intelligent
-        if not self.default_rule or self.default_rule not in self:
+        if not self.default_rule:
             raise KeyError(key)
 
         if isinstance(self.default_rule, BaseCheck):
             return self.default_rule
+
+        # We need to check this or we can get infinite recursion
+        if self.default_rule not in self:
+            raise KeyError(key)
+
         elif isinstance(self.default_rule, six.string_types):
             return self[self.default_rule]
 
@@ -824,8 +830,8 @@ class HttpCheck(Check):
         url = ('http:' + self.match) % target
         data = {'target': jsonutils.dumps(target),
                 'credentials': jsonutils.dumps(creds)}
-        post_data = urlutils.urlencode(data)
-        f = urlutils.urlopen(url, post_data)
+        post_data = urlparse.urlencode(data)
+        f = urlrequest.urlopen(url, post_data)
         return f.read() == "True"
 
 

@@ -30,10 +30,10 @@ file_dispatcher_opts = [
                     'meters.'),
     cfg.IntOpt('max_bytes',
                default=0,
-               help='The max size of the file'),
+               help='The max size of the file.'),
     cfg.IntOpt('backup_count',
                default=0,
-               help='The max number of the files to keep'),
+               help='The max number of the files to keep.'),
 ]
 
 cfg.CONF.register_opts(file_dispatcher_opts, group="dispatcher_file")
@@ -62,7 +62,7 @@ class FileDispatcher(dispatcher.Base):
 
         # if the directory and path are configured, then log to the file
         if self.conf.dispatcher_file.file_path:
-            dispatcher_logger = logging.Logger('dispather.file')
+            dispatcher_logger = logging.Logger('dispatcher.file')
             dispatcher_logger.setLevel(logging.INFO)
             # create rotating file handler which logs meters
             rfh = logging.handlers.RotatingFileHandler(

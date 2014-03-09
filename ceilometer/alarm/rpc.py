@@ -27,11 +27,12 @@ from ceilometer.storage import models
 OPTS = [
     cfg.StrOpt('notifier_rpc_topic',
                default='alarm_notifier',
-               help='the topic ceilometer uses for alarm notifier messages'),
+               help='The topic that ceilometer uses for alarm notifier '
+                    'messages.'),
     cfg.StrOpt('partition_rpc_topic',
                default='alarm_partition_coordination',
-               help='the topic ceilometer uses for alarm partition '
-                    'coordination messages'),
+               help='The topic that ceilometer uses for alarm partition '
+                    'coordination messages.'),
 ]
 
 cfg.CONF.register_opts(OPTS, group='alarm')
@@ -45,7 +46,7 @@ class RPCAlarmNotifier(rpc_proxy.RpcProxy):
             default_version='1.0',
             topic=cfg.CONF.alarm.notifier_rpc_topic)
 
-    def notify(self, alarm, previous, reason):
+    def notify(self, alarm, previous, reason, reason_data):
         actions = getattr(alarm, models.Alarm.ALARM_ACTIONS_MAP[alarm.state])
         if not actions:
             LOG.debug(_('alarm %(alarm_id)s has no action configured '
@@ -60,7 +61,8 @@ class RPCAlarmNotifier(rpc_proxy.RpcProxy):
             'alarm_id': alarm.alarm_id,
             'previous': previous,
             'current': alarm.state,
-            'reason': unicode(reason)})
+            'reason': unicode(reason),
+            'reason_data': reason_data})
         self.cast(context.get_admin_context(), msg)
 
 

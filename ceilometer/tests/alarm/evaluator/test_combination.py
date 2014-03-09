@@ -17,10 +17,13 @@
 # under the License.
 """Tests for ceilometer/alarm/threshold_evaluation.py
 """
+import datetime
 import mock
+import pytz
 import uuid
 
 from ceilometer.alarm.evaluator import combination
+from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models
 from ceilometer.tests.alarm.evaluator import base
 from ceilometerclient import exc
@@ -46,6 +49,7 @@ class TestEvaluate(base.TestEvaluatorBase):
                          ok_actions=[],
                          alarm_actions=[],
                          repeat_actions=False,
+                         time_constraints=[],
                          rule=dict(
                              alarm_ids=[
                                  '9cfc3e51-2ff1-4b1d-ac01-c1bd4c6d0d1e',
@@ -66,6 +70,7 @@ class TestEvaluate(base.TestEvaluatorBase):
                          ok_actions=[],
                          alarm_actions=[],
                          repeat_actions=False,
+                         time_constraints=[],
                          rule=dict(
                              alarm_ids=[
                                  'b82734f4-9d06-48f3-8a86-fa59a0c99dc8',
@@ -78,25 +83,27 @@ class TestEvaluate(base.TestEvaluatorBase):
     def _get_alarm(state):
         return alarms.Alarm(None, {'state': state})
 
-    def _combination_transition_reason(self, state):
-        return ['Transition to %(state)s due at least to one alarm in'
-                ' 9cfc3e51-2ff1-4b1d-ac01-c1bd4c6d0d1e,'
-                '1d441595-d069-4e05-95ab-8693ba6a8302'
-                ' in state %(state)s' % {'state': state},
-                'Transition to %(state)s due to all alarms'
-                ' (b82734f4-9d06-48f3-8a86-fa59a0c99dc8,'
-                '15a700e5-2fe8-4b3d-8c55-9e92831f6a2b)'
-                ' in state %(state)s' % {'state': state}]
+    @staticmethod
+    def _reason_data(alarm_ids):
+        return {'type': 'combination', 'alarm_ids': alarm_ids}
 
-    def _combination_remaining_reason(self, state):
-        return ['Remaining as %(state)s due at least to one alarm in'
-                ' 9cfc3e51-2ff1-4b1d-ac01-c1bd4c6d0d1e,'
-                '1d441595-d069-4e05-95ab-8693ba6a8302'
-                ' in state %(state)s' % {'state': state},
-                'Remaining as %(state)s due to all alarms'
-                ' (b82734f4-9d06-48f3-8a86-fa59a0c99dc8,'
-                '15a700e5-2fe8-4b3d-8c55-9e92831f6a2b)'
-                ' in state %(state)s' % {'state': state}]
+    def _combination_transition_reason(self, state, alarm_ids1, alarm_ids2):
+        return ([('Transition to %(state)s due to alarms %(alarm_ids)s'
+                ' in state %(state)s')
+                % {'state': state, 'alarm_ids': ",".join(alarm_ids1)},
+                ('Transition to %(state)s due to alarms %(alarm_ids)s'
+                ' in state %(state)s')
+                % {'state': state, 'alarm_ids': ",".join(alarm_ids2)}],
+                [self._reason_data(alarm_ids1), self._reason_data(alarm_ids2)])
+
+    def _combination_remaining_reason(self, state, alarm_ids1, alarm_ids2):
+        return ([('Remaining as %(state)s due to alarms %(alarm_ids)s'
+                 ' in state %(state)s')
+                % {'state': state, 'alarm_ids': ",".join(alarm_ids1)},
+                ('Remaining as %(state)s due to alarms %(alarm_ids)s'
+                 ' in state %(state)s')
+                % {'state': state, 'alarm_ids': ",".join(alarm_ids2)}],
+                [self._reason_data(alarm_ids1), self._reason_data(alarm_ids2)])
 
     def test_retry_transient_api_failure(self):
         with mock.patch('ceilometerclient.client.get_client',
@@ -129,11 +136,13 @@ class TestEvaluate(base.TestEvaluatorBase):
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, expected)
-            expected = [mock.call(alarm,
-                                  'ok',
-                                  ('%d alarms in %s are in unknown state' %
-                                   (2, ",".join(alarm.rule['alarm_ids']))))
-                        for alarm in self.alarms]
+            expected = [mock.call(
+                alarm,
+                'ok',
+                ('Alarms %s are in unknown state' %
+                 (",".join(alarm.rule['alarm_ids']))),
+                self._reason_data(alarm.rule['alarm_ids']))
+                for alarm in self.alarms]
             self.assertEqual(self.notifier.notify.call_args_list, expected)
 
     def test_to_ok_with_all_ok(self):
@@ -151,9 +160,14 @@ class TestEvaluate(base.TestEvaluatorBase):
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, expected)
-            reasons = self._combination_transition_reason('ok')
-            expected = [mock.call(alarm, 'insufficient data', reason)
-                        for alarm, reason in zip(self.alarms, reasons)]
+            reasons, reason_datas = self._combination_transition_reason(
+                'ok',
+                self.alarms[0].rule['alarm_ids'],
+                self.alarms[1].rule['alarm_ids'])
+            expected = [mock.call(alarm, 'insufficient data',
+                                  reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
             self.assertEqual(self.notifier.notify.call_args_list, expected)
 
     def test_to_ok_with_one_alarm(self):
@@ -171,9 +185,13 @@ class TestEvaluate(base.TestEvaluatorBase):
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, expected)
-            reasons = self._combination_transition_reason('ok')
-            expected = [mock.call(alarm, 'alarm', reason)
-                        for alarm, reason in zip(self.alarms, reasons)]
+            reasons, reason_datas = self._combination_transition_reason(
+                'ok',
+                self.alarms[0].rule['alarm_ids'],
+                [self.alarms[1].rule['alarm_ids'][1]])
+            expected = [mock.call(alarm, 'alarm', reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
             self.assertEqual(self.notifier.notify.call_args_list, expected)
 
     def test_to_alarm_with_all_alarm(self):
@@ -191,9 +209,13 @@ class TestEvaluate(base.TestEvaluatorBase):
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, expected)
-            reasons = self._combination_transition_reason('alarm')
-            expected = [mock.call(alarm, 'ok', reason)
-                        for alarm, reason in zip(self.alarms, reasons)]
+            reasons, reason_datas = self._combination_transition_reason(
+                'alarm',
+                self.alarms[0].rule['alarm_ids'],
+                self.alarms[1].rule['alarm_ids'])
+            expected = [mock.call(alarm, 'ok', reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
             self.assertEqual(self.notifier.notify.call_args_list, expected)
 
     def test_to_alarm_with_one_ok(self):
@@ -211,9 +233,13 @@ class TestEvaluate(base.TestEvaluatorBase):
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, expected)
-            reasons = self._combination_transition_reason('alarm')
-            expected = [mock.call(alarm, 'ok', reason)
-                        for alarm, reason in zip(self.alarms, reasons)]
+            reasons, reason_datas = self._combination_transition_reason(
+                'alarm',
+                [self.alarms[0].rule['alarm_ids'][1]],
+                self.alarms[1].rule['alarm_ids'])
+            expected = [mock.call(alarm, 'ok', reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
             self.assertEqual(self.notifier.notify.call_args_list, expected)
 
     def test_to_unknown(self):
@@ -232,16 +258,16 @@ class TestEvaluate(base.TestEvaluatorBase):
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, expected)
-            reasons = ['1 alarms in'
-                       ' 9cfc3e51-2ff1-4b1d-ac01-c1bd4c6d0d1e,'
-                       '1d441595-d069-4e05-95ab-8693ba6a8302'
-                       ' are in unknown state',
-                       '1 alarms in'
-                       ' b82734f4-9d06-48f3-8a86-fa59a0c99dc8,'
-                       '15a700e5-2fe8-4b3d-8c55-9e92831f6a2b'
-                       ' are in unknown state']
-            expected = [mock.call(alarm, 'ok', reason)
-                        for alarm, reason in zip(self.alarms, reasons)]
+            reasons = ['Alarms %s are in unknown state'
+                       % self.alarms[0].rule['alarm_ids'][0],
+                       'Alarms %s are in unknown state'
+                       % self.alarms[1].rule['alarm_ids'][0]]
+            reason_datas = [
+                self._reason_data([self.alarms[0].rule['alarm_ids'][0]]),
+                self._reason_data([self.alarms[1].rule['alarm_ids'][0]])]
+            expected = [mock.call(alarm, 'ok', reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
             self.assertEqual(self.notifier.notify.call_args_list, expected)
 
     def test_no_state_change(self):
@@ -274,7 +300,78 @@ class TestEvaluate(base.TestEvaluatorBase):
             self._evaluate_all_alarms()
             update_calls = self.api_client.alarms.set_state.call_args_list
             self.assertEqual(update_calls, [])
-            reasons = self._combination_remaining_reason('ok')
-            expected = [mock.call(alarm, 'ok', reason)
-                        for alarm, reason in zip(self.alarms, reasons)]
+            reasons, reason_datas = self._combination_remaining_reason(
+                'ok',
+                self.alarms[0].rule['alarm_ids'],
+                self.alarms[1].rule['alarm_ids'])
+            expected = [mock.call(alarm, 'ok', reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
+
             self.assertEqual(self.notifier.notify.call_args_list, expected)
+
+    def test_state_change_inside_time_constraint(self):
+        self._set_all_alarms('insufficient data')
+        self.alarms[0].time_constraints = [
+            {'name': 'test',
+             'description': 'test',
+             'start': '0 11 * * *',  # daily at 11:00
+             'duration': 10800,  # 3 hours
+             'timezone': 'Europe/Ljubljana'}
+        ]
+        self.alarms[1].time_constraints = self.alarms[0].time_constraints
+        dt = datetime.datetime(2014, 1, 1, 12, 0, 0,
+                               tzinfo=pytz.timezone('Europe/Ljubljana'))
+        with mock.patch('ceilometerclient.client.get_client',
+                        return_value=self.api_client):
+            timeutils.set_time_override(dt.astimezone(pytz.UTC))
+            self.api_client.alarms.get.side_effect = [
+                self._get_alarm('ok'),
+                self._get_alarm('ok'),
+                self._get_alarm('ok'),
+                self._get_alarm('ok'),
+            ]
+            self._evaluate_all_alarms()
+            expected = [mock.call(alarm.alarm_id, state='ok')
+                        for alarm in self.alarms]
+            update_calls = self.api_client.alarms.set_state.call_args_list
+            self.assertEqual(expected, update_calls,
+                             "Alarm should change state if the current "
+                             "time is inside its time constraint.")
+            reasons, reason_datas = self._combination_transition_reason(
+                'ok',
+                self.alarms[0].rule['alarm_ids'],
+                self.alarms[1].rule['alarm_ids'])
+            expected = [mock.call(alarm, 'insufficient data',
+                                  reason, reason_data)
+                        for alarm, reason, reason_data
+                        in zip(self.alarms, reasons, reason_datas)]
+            self.assertEqual(expected, self.notifier.notify.call_args_list)
+
+    def test_no_state_change_outside_time_constraint(self):
+        self._set_all_alarms('insufficient data')
+        self.alarms[0].time_constraints = [
+            {'name': 'test',
+             'description': 'test',
+             'start': '0 11 * * *',  # daily at 11:00
+             'duration': 10800,  # 3 hours
+             'timezone': 'Europe/Ljubljana'}
+        ]
+        self.alarms[1].time_constraints = self.alarms[0].time_constraints
+        dt = datetime.datetime(2014, 1, 1, 15, 0, 0,
+                               tzinfo=pytz.timezone('Europe/Ljubljana'))
+        with mock.patch('ceilometerclient.client.get_client',
+                        return_value=self.api_client):
+            timeutils.set_time_override(dt.astimezone(pytz.UTC))
+            self.api_client.alarms.get.side_effect = [
+                self._get_alarm('ok'),
+                self._get_alarm('ok'),
+                self._get_alarm('ok'),
+                self._get_alarm('ok'),
+            ]
+            self._evaluate_all_alarms()
+            update_calls = self.api_client.alarms.set_state.call_args_list
+            self.assertEqual([], update_calls,
+                             "Alarm should not change state if the current "
+                             " time is outside its time constraint.")
+            self.assertEqual([], self.notifier.notify.call_args_list)
