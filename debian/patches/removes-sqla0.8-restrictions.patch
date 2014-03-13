@@ -1,0 +1,16 @@
+Description: Fixes SQLA 0.8 restriction to allow higher versions
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: not-needed
+Last-Update: 2014-03-14
+
+--- ceilometer-2014.1~b3.orig/requirements.txt
++++ ceilometer-2014.1~b3/requirements.txt
+@@ -26,7 +26,7 @@ pytz>=2010h
+ PyYAML>=3.1.0
+ requests>=1.1
+ six>=1.5.2
+-SQLAlchemy>=0.7.8,<=0.8.99
++SQLAlchemy>=0.7.8
+ sqlalchemy-migrate>=0.8.2
+ stevedore>=0.14
+ WebOb>=1.2.3
