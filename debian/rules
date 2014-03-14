@@ -36,7 +36,7 @@ override_dh_auto_clean:
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	bash -x ./setup-test-env.sh python setup.py testr --slowest '(?!tests.test_bin)' || true
+	bash -x ./setup-test-env.sh python setup.py testr --slowest --testr-args='tests\.(?!.*test_bin.*)' || true
 	#./run-tests.sh || true
 	#PYTHONPATH=. nosetests -P || true
 endif
