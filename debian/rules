@@ -34,9 +34,12 @@ override_dh_auto_clean:
 	rm -rf debian/ceilometer-common.postinst
 	find . -iname '*.pyc' -delete
 
-ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	bash -x ./setup-test-env.sh python setup.py testr --slowest --testr-args='tests\.(?!.*test_bin.*)' || true
+ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+	set -e && TEMP_REZ=`mktemp -t` && \
+		bash -x ./setup-test-env.sh python setup.py testr --slowest  --testr-args='--subunit  --omit=test_bin.py  ' | tee $$TEMP_REZ | subunit2pyunit || true ; \
+		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats || true ; \
+		rm -f $$TEMP_REZ
 	#./run-tests.sh || true
 	#PYTHONPATH=. nosetests -P || true
 endif

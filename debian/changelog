@@ -1,3 +1,9 @@
+ceilometer (2014.1~b3-2) UNRELEASED; urgency=low
+
+  * Better testr/subunit output.
+
+ -- Thomas Goirand <zigo@debian.org>  Sun, 30 Mar 2014 13:25:59 +0800
+
 ceilometer (2014.1~b3-1) experimental; urgency=low
 
   * New upstream release (Icehouse beta 3).
