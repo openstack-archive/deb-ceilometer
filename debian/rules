@@ -11,6 +11,7 @@ export OSLO_PACKAGE_VERSION=$(VERSION)
 
 override_dh_clean:
 	dh_clean
+	rm -rf .testrepository
 	rm -rf ceilometer.egg-info
 	rm -f debian/ceilometer-common.config debian/ceilometer-common.postinst debian/ceilometer-api.config debian/ceilometer-api.postinst
 
@@ -37,7 +38,9 @@ override_dh_auto_clean:
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 	set -e && TEMP_REZ=`mktemp -t` && \
-		bash -x ./setup-test-env.sh python setup.py testr --slowest  --testr-args='--subunit  --omit=test_bin.py  ' | tee $$TEMP_REZ | subunit2pyunit || true ; \
+		rm -rf .testrepository ; \
+		testr init ; \
+		bash -x ./setup-test-env.sh testr run --subunit 'tests\.(?!.*test_bin.*)' | tee $$TEMP_REZ | subunit2pyunit || true ; \
 		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats || true ; \
 		rm -f $$TEMP_REZ
 	#./run-tests.sh || true
