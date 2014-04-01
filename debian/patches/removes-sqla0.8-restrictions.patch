@@ -3,9 +3,11 @@ Author: Thomas Goirand <zigo@debian.org>
 Forwarded: not-needed
 Last-Update: 2014-03-14
 
---- ceilometer-2014.1~b3.orig/requirements.txt
-+++ ceilometer-2014.1~b3/requirements.txt
-@@ -26,7 +26,7 @@ pytz>=2010h
+Index: ceilometer/requirements.txt
+===================================================================
+--- ceilometer.orig/requirements.txt	2014-04-01 16:37:51.000000000 +0800
++++ ceilometer/requirements.txt	2014-04-01 16:46:54.000000000 +0800
+@@ -27,7 +27,7 @@
  PyYAML>=3.1.0
  requests>=1.1
  six>=1.5.2
