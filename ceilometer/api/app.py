@@ -18,8 +18,10 @@
 
 import logging
 import os
+import socket
 from wsgiref import simple_server
 
+import netaddr
 from oslo.config import cfg
 import pecan
 
@@ -28,7 +30,6 @@ from ceilometer.api import config as api_config
 from ceilometer.api import hooks
 from ceilometer.api import middleware
 from ceilometer.openstack.common import log
-from ceilometer import service
 from ceilometer import storage
 
 LOG = log.getLogger(__name__)
@@ -106,15 +107,28 @@ class VersionSelectorApplication(object):
         return self.v2(environ, start_response)
 
 
-def start():
-    service.prepare_service()
+def get_server_cls(host):
+    """Return an appropriate WSGI server class base on provided host
 
+    :param host: The listen host for the ceilometer API server.
+    """
+    server_cls = simple_server.WSGIServer
+    if netaddr.valid_ipv6(host):
+        # NOTE(dzyu) make sure use IPv6 sockets if host is in IPv6 pattern
+        if getattr(server_cls, 'address_family') == socket.AF_INET:
+            class server_cls(server_cls):
+                address_family = socket.AF_INET6
+    return server_cls
+
+
+def build_server():
     # Build the WSGI app
     root = VersionSelectorApplication()
 
     # Create the WSGI server and start it
     host, port = cfg.CONF.api.host, cfg.CONF.api.port
-    srv = simple_server.make_server(host, port, root)
+    server_cls = get_server_cls(host)
+    srv = simple_server.make_server(host, port, root, server_cls)
 
     LOG.info(_('Starting server in PID %s') % os.getpid())
     LOG.info(_("Configuration:"))
@@ -127,5 +141,4 @@ def start():
     else:
         LOG.info(_("serving on http://%(host)s:%(port)s") % (
                  {'host': host, 'port': port}))
-
-    srv.serve_forever()
+    return srv

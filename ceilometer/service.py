@@ -21,7 +21,6 @@ import os
 import socket
 import sys
 
-import eventlet
 from oslo.config import cfg
 from stevedore import named
 
@@ -29,6 +28,7 @@ from ceilometer.openstack.common import gettextutils
 from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import rpc
+from ceilometer import utils
 
 
 OPTS = [
@@ -41,6 +41,14 @@ OPTS = [
                     deprecated_group="collector",
                     default=['database'],
                     help='Dispatcher to process data.'),
+    cfg.IntOpt('collector_workers',
+               default=1,
+               help='Number of workers for collector service. A single '
+               'collector is enabled by default.'),
+    cfg.IntOpt('notification_workers',
+               default=1,
+               help='Number of workers for notification service. A single '
+               'notification agent is enabled by default.'),
 ]
 cfg.CONF.register_opts(OPTS)
 
@@ -89,12 +97,17 @@ cfg.CONF.register_cli_opts(CLI_OPTIONS, group="service_credentials")
 LOG = log.getLogger(__name__)
 
 
+class WorkerException(Exception):
+    """Exception for errors relating to service workers
+    """
+
+
 class DispatchedService(object):
 
     DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
 
-    def __init__(self, *args, **kwargs):
-        super(DispatchedService, self).__init__(*args, **kwargs)
+    def start(self):
+        super(DispatchedService, self).start()
         LOG.debug(_('loading dispatchers from %s'),
                   self.DISPATCHER_NAMESPACE)
         self.dispatcher_manager = named.NamedExtensionManager(
@@ -107,11 +120,20 @@ class DispatchedService(object):
                         self.DISPATCHER_NAMESPACE)
 
 
+def get_workers(name):
+    workers = (cfg.CONF.get('%s_workers' % name) or
+               utils.cpu_count())
+    if workers and workers < 1:
+        msg = (_("%(worker_name)s value of %(workers)s is invalid, "
+                 "must be greater than 0") %
+               {'worker_name': '%s_workers' % name, 'workers': str(workers)})
+        raise WorkerException(msg)
+    return workers
+
+
 def prepare_service(argv=None):
-    # NOTE(jd) We need to monkey patch the socket module for, at least,
-    # oslo.rpc, otherwise everything's blocked on its first read()
-    eventlet.monkey_patch(socket=True)
     gettextutils.install('ceilometer', lazy=True)
+    gettextutils.enable_lazy()
     rpc.set_defaults(control_exchange='ceilometer')
     cfg.set_defaults(log.log_opts,
                      default_log_levels=['amqplib=WARN',

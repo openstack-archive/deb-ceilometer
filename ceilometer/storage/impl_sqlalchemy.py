@@ -129,9 +129,39 @@ PARAMETERIZED_AGGREGATES = dict(
     compute=dict(
         cardinality=lambda p: func.count(
             distinct(getattr(models.Sample, p))
-        ).label('cardinality')
+        ).label('cardinality/%s' % p)
     )
 )
+
+AVAILABLE_CAPABILITIES = {
+    'meters': {'query': {'simple': True,
+                         'metadata': True}},
+    'resources': {'query': {'simple': True,
+                            'metadata': True}},
+    'samples': {'pagination': True,
+                'groupby': True,
+                'query': {'simple': True,
+                          'metadata': True,
+                          'complex': True}},
+    'statistics': {'groupby': True,
+                   'query': {'simple': True,
+                             'metadata': True},
+                   'aggregation': {'standard': True,
+                                   'selectable': {
+                                       'max': True,
+                                       'min': True,
+                                       'sum': True,
+                                       'avg': True,
+                                       'count': True,
+                                       'stddev': True,
+                                       'cardinality': True}}
+                   },
+    'alarms': {'query': {'simple': True,
+                         'complex': True},
+               'history': {'query': {'simple': True,
+                                     'complex': True}}},
+    'events': {'query': {'simple': True}},
+}
 
 
 def apply_metaquery_filter(session, query, metaquery):
@@ -147,8 +177,8 @@ def apply_metaquery_filter(session, query, metaquery):
         try:
             _model = META_TYPE_MAP[type(v)]
         except KeyError:
-            raise NotImplementedError(_('Query on %(key)s is of %(value)s '
-                                        'type and is not supported') %
+            raise NotImplementedError('Query on %(key)s is of %(value)s '
+                                      'type and is not supported' %
                                       {"key": k, "value": type(v)})
         else:
             meta_q = session.query(_model).\
@@ -171,7 +201,7 @@ def make_query_from_filter(session, query, sample_filter, require_meter=True):
     if sample_filter.meter:
         query = query.filter(models.Meter.name == sample_filter.meter)
     elif require_meter:
-        raise RuntimeError(_('Missing required meter specifier'))
+        raise RuntimeError('Missing required meter specifier')
     if sample_filter.source:
         query = query.filter(models.Sample.sources.any(
             id=sample_filter.source))
@@ -223,6 +253,8 @@ class Connection(base.Connection):
         self._maker = sqlalchemy_session.get_maker(self._engine)
         sqlalchemy_session._ENGINE = None
         sqlalchemy_session._MAKER = None
+        self._CAPABILITIES = utils.update_nested(self.DEFAULT_CAPABILITIES,
+                                                 AVAILABLE_CAPABILITIES)
 
     def _get_db_session(self):
         return self._maker()
@@ -240,56 +272,39 @@ class Connection(base.Connection):
     def _create_or_update(session, model_class, _id, source=None, **kwargs):
         if not _id:
             return None
-
         try:
-            # create a nested session for the case of two call of
-            # record_metering_data run in parallel to not fail the
-            # record of this sample
-            # (except for sqlite, that doesn't support nested
-            # transaction and doesn't have concurrency problem)
-            nested = session.connection().dialect.name != 'sqlite'
+            with session.begin(subtransactions=True):
+                obj = session.query(model_class).get(str(_id))
+                if obj is None:
+                    obj = model_class(id=str(_id))
+                    session.add(obj)
 
-            # raise dbexc.DBDuplicateEntry manually for sqlite
-            # to not break the current session
-            if not nested and session.query(model_class).get(str(_id)):
-                raise dbexc.DBDuplicateEntry()
-
-            with session.begin(nested=nested,
-                               subtransactions=not nested):
-                obj = model_class(id=str(_id))
-                session.add(obj)
+                if source and not filter(lambda x: x.id == source.id,
+                                         obj.sources):
+                    obj.sources.append(source)
+                for k in kwargs:
+                    setattr(obj, k, kwargs[k])
         except dbexc.DBDuplicateEntry:
             # requery the object from the db if this is an other
             # parallel/previous call of record_metering_data that
             # have successfully created this object
-            obj = session.query(model_class).get(str(_id))
-
-        # update the object
-        if source and not filter(lambda x: x.id == source.id, obj.sources):
-            obj.sources.append(source)
-        for k in kwargs:
-            setattr(obj, k, kwargs[k])
+            obj = Connection._create_or_update(session, model_class,
+                                               _id, source, **kwargs)
         return obj
 
     @staticmethod
     def _create_meter(session, name, type, unit):
         try:
-            nested = session.connection().dialect.name != 'sqlite'
-            if not nested and session.query(models.Meter)\
+            with session.begin(subtransactions=True):
+                obj = session.query(models.Meter)\
                     .filter(models.Meter.name == name)\
                     .filter(models.Meter.type == type)\
-                    .filter(models.Meter.unit == unit).count() > 0:
-                raise dbexc.DBDuplicateEntry()
-
-            with session.begin(nested=nested,
-                               subtransactions=not nested):
-                obj = models.Meter(name=name, type=type, unit=unit)
-                session.add(obj)
+                    .filter(models.Meter.unit == unit).first()
+                if obj is None:
+                    obj = models.Meter(name=name, type=type, unit=unit)
+                    session.add(obj)
         except dbexc.DBDuplicateEntry:
-            obj = session.query(models.Meter)\
-                .filter(models.Meter.name == name)\
-                .filter(models.Meter.type == type)\
-                .filter(models.Meter.unit == unit).first()
+            obj = Connection._create_meter(session, name, type, unit)
 
         return obj
 
@@ -422,97 +437,74 @@ class Connection(base.Connection):
         :param project: Optional ID for project that owns the resource.
         :param source: Optional source filter.
         :param start_timestamp: Optional modified timestamp start range.
-        :param start_timestamp_op: Optonal start time operator, like gt, ge.
+        :param start_timestamp_op: Optional start time operator, like gt, ge.
         :param end_timestamp: Optional modified timestamp end range.
         :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
         :param pagination: Optional pagination query.
         """
-
-        # We probably want to raise these early, since we don't know from here
-        # if they will be handled. We don't want extra wait or work for it to
-        # just fail.
         if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
+            raise NotImplementedError('Pagination not implemented')
+
+        def _apply_filters(query):
+            #TODO(gordc) this should be merged with make_query_from_filter
+            for column, value in [(models.Sample.resource_id, resource),
+                                  (models.Sample.user_id, user),
+                                  (models.Sample.project_id, project)]:
+                if value:
+                    query = query.filter(column == value)
+            if source:
+                query = query.filter(
+                    models.Sample.sources.any(id=source))
+            if metaquery:
+                query = apply_metaquery_filter(session, query, metaquery)
+            if start_timestamp:
+                if start_timestamp_op == 'gt':
+                    query = query.filter(
+                        models.Sample.timestamp > start_timestamp)
+                else:
+                    query = query.filter(
+                        models.Sample.timestamp >= start_timestamp)
+            if end_timestamp:
+                if end_timestamp_op == 'le':
+                    query = query.filter(
+                        models.Sample.timestamp <= end_timestamp)
+                else:
+                    query = query.filter(
+                        models.Sample.timestamp < end_timestamp)
+            return query
 
         session = self._get_db_session()
+        # get list of resource_ids
+        res_q = session.query(distinct(models.Sample.resource_id))
+        res_q = _apply_filters(res_q)
 
-        # (thomasm) We need to get the max timestamp first, since that's the
-        # most accurate. We also need to filter down in the subquery to
-        # constrain what we have to JOIN on later.
-        ts_subquery = session.query(
-            models.Sample.resource_id,
-            func.max(models.Sample.timestamp).label("max_ts"),
-            func.min(models.Sample.timestamp).label("min_ts")
-        ).group_by(models.Sample.resource_id)
+        for res_id in res_q.all():
+            # get latest Sample
+            max_q = session.query(models.Sample)\
+                .filter(models.Sample.resource_id == res_id[0])
+            max_q = _apply_filters(max_q)
+            max_q = max_q.order_by(models.Sample.timestamp.desc(),
+                                   models.Sample.id.desc()).limit(1)
 
-        # Here are the basic 'eq' operation filters for the sample data.
-        for column, value in [(models.Sample.resource_id, resource),
-                              (models.Sample.user_id, user),
-                              (models.Sample.project_id, project)]:
-            if value:
-                ts_subquery = ts_subquery.filter(column == value)
+            # get the min timestamp value.
+            min_q = session.query(models.Sample.timestamp)\
+                .filter(models.Sample.resource_id == res_id[0])
+            min_q = _apply_filters(min_q)
+            min_q = min_q.order_by(models.Sample.timestamp.asc()).limit(1)
 
-        if source:
-            ts_subquery = ts_subquery.filter(
-                models.Sample.sources.any(id=source))
-
-        if metaquery:
-            ts_subquery = apply_metaquery_filter(session,
-                                                 ts_subquery,
-                                                 metaquery)
-
-        # Here we limit the samples being used to a specific time period,
-        # if requested.
-        if start_timestamp:
-            if start_timestamp_op == 'gt':
-                ts_subquery = ts_subquery.filter(
-                    models.Sample.timestamp > start_timestamp)
-            else:
-                ts_subquery = ts_subquery.filter(
-                    models.Sample.timestamp >= start_timestamp)
-        if end_timestamp:
-            if end_timestamp_op == 'le':
-                ts_subquery = ts_subquery.filter(
-                    models.Sample.timestamp <= end_timestamp)
-            else:
-                ts_subquery = ts_subquery.filter(
-                    models.Sample.timestamp < end_timestamp)
-        ts_subquery = ts_subquery.subquery()
-
-        # Now we need to get the max Sample.id out of the leftover results, to
-        # break any ties.
-        agg_subquery = session.query(
-            func.max(models.Sample.id).label("max_id"),
-            ts_subquery
-        ).filter(
-            models.Sample.resource_id == ts_subquery.c.resource_id,
-            models.Sample.timestamp == ts_subquery.c.max_ts
-        ).group_by(
-            ts_subquery.c.resource_id,
-            ts_subquery.c.max_ts,
-            ts_subquery.c.min_ts
-        ).subquery()
-
-        query = session.query(
-            models.Sample,
-            agg_subquery.c.min_ts,
-            agg_subquery.c.max_ts
-        ).filter(
-            models.Sample.id == agg_subquery.c.max_id
-        )
-
-        for sample, first_ts, last_ts in query.all():
-            yield api_models.Resource(
-                resource_id=sample.resource_id,
-                project_id=sample.project_id,
-                first_sample_timestamp=first_ts,
-                last_sample_timestamp=last_ts,
-                source=sample.sources[0].id,
-                user_id=sample.user_id,
-                metadata=sample.resource_metadata
-            )
+            sample = max_q.first()
+            if sample:
+                yield api_models.Resource(
+                    resource_id=sample.resource_id,
+                    project_id=sample.project_id,
+                    first_sample_timestamp=min_q.first().timestamp,
+                    last_sample_timestamp=sample.timestamp,
+                    source=sample.sources[0].id,
+                    user_id=sample.user_id,
+                    metadata=sample.resource_metadata
+                )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
                    metaquery={}, pagination=None):
@@ -527,68 +519,50 @@ class Connection(base.Connection):
         """
 
         if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
+            raise NotImplementedError('Pagination not implemented')
+
+        def _apply_filters(query):
+            #TODO(gordc) this should be merged with make_query_from_filter
+            for column, value in [(models.Sample.resource_id, resource),
+                                  (models.Sample.user_id, user),
+                                  (models.Sample.project_id, project)]:
+                if value:
+                    query = query.filter(column == value)
+            if source is not None:
+                query = query.filter(
+                    models.Sample.sources.any(id=source))
+            if metaquery:
+                query = apply_metaquery_filter(session, query, metaquery)
+            return query
 
         session = self._get_db_session()
 
-        # Sample table will store large records and join with resource
-        # will be very slow.
-        # subquery_sample is used to reduce sample records
-        # by selecting a record for each (resource_id, counter_name).
+        # sample_subq is used to reduce sample records
+        # by selecting a record for each (resource_id, meter_id).
         # max() is used to choice a sample record, so the latest record
-        # is selected for each (resource_id, meter.name).
-
-        subquery_sample = session.query(
+        # is selected for each (resource_id, meter_id).
+        sample_subq = session.query(
             func.max(models.Sample.id).label('id'))\
-            .join(models.Meter)\
-            .group_by(models.Sample.resource_id,
-                      models.Meter.name).subquery()
+            .group_by(models.Sample.meter_id, models.Sample.resource_id)
+        sample_subq = sample_subq.subquery()
 
-        # The SQL of query_sample is essentially:
-        #
         # SELECT sample.* FROM sample INNER JOIN
         #  (SELECT max(sample.id) AS id FROM sample
-        #   GROUP BY sample.resource_id, meter.name) AS anon_2
+        #   GROUP BY sample.resource_id, sample.meter_id) AS anon_2
         # ON sample.id = anon_2.id
-
         query_sample = session.query(models.MeterSample).\
-            join(subquery_sample,
-                 models.MeterSample.id == subquery_sample.c.id)
+            join(sample_subq, models.MeterSample.id == sample_subq.c.id)
+        query_sample = _apply_filters(query_sample)
 
-        if metaquery:
-            query_sample = apply_metaquery_filter(session,
-                                                  query_sample,
-                                                  metaquery)
-
-        alias_sample = aliased(models.MeterSample,
-                               query_sample.with_labels().subquery())
-        query = session.query(models.Resource, alias_sample)\
-            .filter(models.Resource.id == alias_sample.resource_id)
-
-        if user is not None:
-            query = query.filter(models.Resource.user_id == user)
-        if source is not None:
-            query = query.filter(models.Resource.sources.any(id=source))
-        if resource:
-            query = query.filter(models.Resource.id == resource)
-        if project is not None:
-            query = query.filter(models.Resource.project_id == project)
-
-        for resource, sample in query.all():
+        for sample in query_sample.all():
             yield api_models.Meter(
                 name=sample.counter_name,
                 type=sample.counter_type,
                 unit=sample.counter_unit,
-                resource_id=resource.id,
-                project_id=resource.project_id,
-                source=resource.sources[0].id,
-                user_id=resource.user_id)
-
-    def _apply_options(self, query, orderby, limit, table):
-        query = self._apply_order_by(query, orderby, table)
-        if limit is not None:
-            query = query.limit(limit)
-        return query
+                resource_id=sample.resource_id,
+                project_id=sample.project_id,
+                source=sample.sources[0].id,
+                user_id=sample.user_id)
 
     def _retrieve_samples(self, query):
         samples = query.all()
@@ -679,8 +653,8 @@ class Connection(base.Connection):
                 compute = PARAMETERIZED_AGGREGATES['compute'][a.func]
                 functions.append(compute(a.param))
             else:
-                raise NotImplementedError(_('Selectable aggregate function %s'
-                                            ' is not supported') % a.func)
+                raise NotImplementedError('Selectable aggregate function %s'
+                                          ' is not supported' % a.func)
 
         return functions
 
@@ -700,7 +674,8 @@ class Connection(base.Connection):
             group_attributes = [getattr(models.Sample, g) for g in groupby]
             select.extend(group_attributes)
 
-        query = session.query(*select)
+        query = session.query(*select).filter(
+            models.Meter.id == models.Sample.meter_id)
 
         if groupby:
             query = query.group_by(*group_attributes)
@@ -716,10 +691,10 @@ class Connection(base.Connection):
             if hasattr(result, attr):
                 stats_args[attr] = getattr(result, attr)
         if aggregate:
-            stats_args['aggregate'] = dict(
-                ('%s%s' % (a.func, '/%s' % a.param if a.param else ''),
-                 getattr(result, a.func)) for a in aggregate
-            )
+            stats_args['aggregate'] = {}
+            for a in aggregate:
+                key = '%s%s' % (a.func, '/%s' % a.param if a.param else '')
+                stats_args['aggregate'][key] = getattr(result, key)
         return stats_args
 
     @staticmethod
@@ -751,8 +726,8 @@ class Connection(base.Connection):
         if groupby:
             for group in groupby:
                 if group not in ['user_id', 'project_id', 'resource_id']:
-                    raise NotImplementedError(
-                        _("Unable to group by these fields"))
+                    raise NotImplementedError('Unable to group by '
+                                              'these fields')
 
         if not period:
             for res in self._make_stats_query(sample_filter,
@@ -796,7 +771,7 @@ class Connection(base.Connection):
 
     @staticmethod
     def _row_to_alarm_model(row):
-        return api_models.Alarm(alarm_id=row.id,
+        return api_models.Alarm(alarm_id=row.alarm_id,
                                 enabled=row.enabled,
                                 type=row.type,
                                 name=row.name,
@@ -828,7 +803,7 @@ class Connection(base.Connection):
         """
 
         if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
+            raise NotImplementedError('Pagination not implemented')
 
         session = self._get_db_session()
         query = session.query(models.Alarm)
@@ -841,7 +816,7 @@ class Connection(base.Connection):
         if project is not None:
             query = query.filter(models.Alarm.project_id == project)
         if alarm_id is not None:
-            query = query.filter(models.Alarm.id == alarm_id)
+            query = query.filter(models.Alarm.alarm_id == alarm_id)
 
         return self._retrieve_alarms(query)
 
@@ -852,7 +827,7 @@ class Connection(base.Connection):
         """
         session = self._get_db_session()
         with session.begin():
-            alarm_row = models.Alarm(id=alarm.alarm_id)
+            alarm_row = models.Alarm(alarm_id=alarm.alarm_id)
             alarm_row.update(alarm.as_dict())
             session.add(alarm_row)
 
@@ -869,7 +844,7 @@ class Connection(base.Connection):
                                          alarm.user_id)
             Connection._create_or_update(session, models.Project,
                                          alarm.project_id)
-            alarm_row = session.merge(models.Alarm(id=alarm.alarm_id))
+            alarm_row = session.merge(models.Alarm(alarm_id=alarm.alarm_id))
             alarm_row.update(alarm.as_dict())
 
         return self._row_to_alarm_model(alarm_row)
@@ -882,7 +857,7 @@ class Connection(base.Connection):
         session = self._get_db_session()
         with session.begin():
             session.query(models.Alarm).filter(
-                models.Alarm.id == alarm_id).delete()
+                models.Alarm.alarm_id == alarm_id).delete()
 
     @staticmethod
     def _row_to_alarm_change_model(row):
@@ -1261,6 +1236,11 @@ class Connection(base.Connection):
                                        dtype=type.data_type,
                                        value=trait.get_value())
 
+    def get_capabilities(self):
+        """Return an dictionary representing the capabilities of this driver.
+        """
+        return self._CAPABILITIES
+
 
 class QueryTransformer(object):
     operators = {"=": operator.eq,
@@ -1305,8 +1285,8 @@ class QueryTransformer(object):
 
     def _handle_metadata(self, op, field_name, value):
         if op == self.operators["in"]:
-            raise NotImplementedError(
-                _("Metadata query with in operator is not implemented"))
+            raise NotImplementedError('Metadata query with in '
+                                      'operator is not implemented')
 
         field_name = field_name[len('resource_metadata.'):]
         meta_table = META_TYPE_MAP[type(value)]
@@ -1348,37 +1328,3 @@ class QueryTransformer(object):
 
     def get_query(self):
         return self.query
-
-    def get_capabilities(self):
-        """Return an dictionary representing the capabilities of this driver.
-        """
-        available = {
-            'meters': {'query': {'simple': True,
-                                 'metadata': True}},
-            'resources': {'query': {'simple': True,
-                                    'metadata': True}},
-            'samples': {'pagination': True,
-                        'groupby': True,
-                        'query': {'simple': True,
-                                  'metadata': True,
-                                  'complex': True}},
-            'statistics': {'groupby': True,
-                           'query': {'simple': True,
-                                     'metadata': True},
-                           'aggregation': {'standard': True,
-                                           'selectable': {
-                                               'max': True,
-                                               'min': True,
-                                               'sum': True,
-                                               'avg': True,
-                                               'count': True,
-                                               'stddev': True,
-                                               'cardinality': True}}
-                           },
-            'alarms': {'query': {'simple': True,
-                                 'complex': True},
-                       'history': {'query': {'simple': True,
-                                             'complex': True}}},
-            'events': {'query': {'simple': True}},
-        }
-        return utils.update_nested(self.DEFAULT_CAPABILITIES, available)

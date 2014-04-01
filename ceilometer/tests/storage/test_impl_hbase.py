@@ -39,7 +39,7 @@ class ConnectionTest(HBaseEngineTestBase):
     def test_hbase_connection(self):
         self.CONF.database.connection = str(self.database_connection)
         conn = hbase.Connection(self.CONF)
-        self.assertIsInstance(conn.conn, hbase.MConnection)
+        self.assertIsInstance(conn.conn_pool.connection(), hbase.MConnection)
 
         class TestConn(object):
             def __init__(self, host, port):
@@ -48,11 +48,56 @@ class ConnectionTest(HBaseEngineTestBase):
             def open(self):
                 pass
 
-        def get_connection(conf):
+        def get_connection_pool(conf):
             return TestConn(conf['host'], conf['port'])
 
         self.CONF.database.connection = 'hbase://test_hbase:9090'
-        with patch.object(hbase.Connection, '_get_connection',
-                          side_effect=get_connection):
+        with patch.object(hbase.Connection, '_get_connection_pool',
+                          side_effect=get_connection_pool):
             conn = hbase.Connection(self.CONF)
-        self.assertIsInstance(conn.conn, TestConn)
+        self.assertIsInstance(conn.conn_pool, TestConn)
+
+
+class CapabilitiesTest(HBaseEngineTestBase):
+    # Check the returned capabilities list, which is specific to each DB
+    # driver
+
+    def test_capabilities(self):
+        expected_capabilities = {
+            'meters': {'pagination': False,
+                       'query': {'simple': True,
+                                 'metadata': True,
+                                 'complex': False}},
+            'resources': {'pagination': False,
+                          'query': {'simple': True,
+                                    'metadata': True,
+                                    'complex': False}},
+            'samples': {'pagination': False,
+                        'groupby': False,
+                        'query': {'simple': True,
+                                  'metadata': True,
+                                  'complex': False}},
+            'statistics': {'pagination': False,
+                           'groupby': False,
+                           'query': {'simple': True,
+                                     'metadata': True,
+                                     'complex': False},
+                           'aggregation': {'standard': True,
+                                           'selectable': {
+                                               'max': False,
+                                               'min': False,
+                                               'sum': False,
+                                               'avg': False,
+                                               'count': False,
+                                               'stddev': False,
+                                               'cardinality': False}}
+                           },
+            'alarms': {'query': {'simple': False,
+                                 'complex': False},
+                       'history': {'query': {'simple': False,
+                                             'complex': False}}},
+            'events': {'query': {'simple': False}}
+        }
+
+        actual_capabilities = self.conn.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)

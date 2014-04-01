@@ -61,7 +61,7 @@ class TestSingletonAlarmService(test.BaseTestCase):
                 mock.call(604800, mock.ANY),
             ]
             actual = self.singleton.tg.add_timer.call_args_list
-            self.assertEqual(actual, expected)
+            self.assertEqual(expected, actual)
 
     def test_evaluation_cycle(self):
         alarm = mock.Mock(type='threshold')
@@ -101,6 +101,7 @@ class TestSingletonAlarmService(test.BaseTestCase):
                                       os_password=conf.os_password,
                                       os_username=conf.os_username,
                                       os_cacert=conf.os_cacert,
-                                      os_endpoint_type=conf.os_endpoint_type)]
+                                      os_endpoint_type=conf.os_endpoint_type,
+                                      insecure=conf.insecure)]
                 actual = client.call_args_list
-                self.assertEqual(actual, expected)
+                self.assertEqual(expected, actual)

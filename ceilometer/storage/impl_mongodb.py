@@ -24,6 +24,7 @@
 
 import calendar
 import copy
+import datetime
 import json
 import operator
 import uuid
@@ -79,6 +80,34 @@ class MongoDBStorage(base.StorageEngine):
         """Return a Connection instance based on the configuration settings.
         """
         return Connection(conf)
+
+
+AVAILABLE_CAPABILITIES = {
+    'meters': {'query': {'simple': True,
+                         'metadata': True}},
+    'resources': {'query': {'simple': True,
+                            'metadata': True}},
+    'samples': {'query': {'simple': True,
+                          'metadata': True,
+                          'complex': True}},
+    'statistics': {'groupby': True,
+                   'query': {'simple': True,
+                             'metadata': True},
+                   'aggregation': {'standard': True,
+                                   'selectable': {
+                                       'max': True,
+                                       'min': True,
+                                       'sum': True,
+                                       'avg': True,
+                                       'count': True,
+                                       'stddev': True,
+                                       'cardinality': True}}
+                   },
+    'alarms': {'query': {'simple': True,
+                         'complex': True},
+               'history': {'query': {'simple': True,
+                                     'complex': True}}},
+}
 
 
 class Connection(pymongo_base.Connection):
@@ -188,49 +217,48 @@ class Connection(pymongo_base.Connection):
         ),
         emit_initial=dict(
             cardinality=(
-                'var aggregate = {};'
-                'aggregate["cardinality/%(aggregate_param)s"] ='
-                '  this["%(aggregate_param)s"];'
+                'aggregate["cardinality/%(aggregate_param)s"] = 1;'
+                'var distinct_%(aggregate_param)s = {};'
+                'distinct_%(aggregate_param)s[this["%(aggregate_param)s"]]'
+                '   = true;'
             )
         ),
         emit_body=dict(
-            cardinality='aggregate : aggregate,'
-        ),
-        reduce_initial=dict(
             cardinality=(
-                'var distincts = {};'
-                'distincts[values[0].aggregate['
-                '  "cardinality/%(aggregate_param)s"]] = true;'
-                'var aggregate = {};'
-                'aggregate["cardinality/%(aggregate_param)s"] = NumberInt(1);'
+                'distinct_%(aggregate_param)s : distinct_%(aggregate_param)s,'
+                '%(aggregate_param)s : this["%(aggregate_param)s"],'
             )
         ),
+        reduce_initial=dict(
+            cardinality=''
+        ),
         reduce_body=dict(
-            cardinality='aggregate : aggregate,'
+            cardinality=(
+                'aggregate : values[0].aggregate,'
+                'distinct_%(aggregate_param)s:'
+                '  values[0].distinct_%(aggregate_param)s,'
+                '%(aggregate_param)s : values[0]["%(aggregate_param)s"],'
+            )
         ),
         reduce_computation=dict(
             cardinality=(
-                'if (!(values[i].aggregate["cardinality/%(aggregate_param)s"]'
-                '    in distincts)) {'
-                '  distincts[values[i].aggregate['
-                '    "cardinality/%(aggregate_param)s"]] = true;'
-                '  res.aggregate["cardinality/%(aggregate_param)s"] ='
-                '    NumberInt(Object.keys(distincts).length);}'
+                'if (!(values[i]["%(aggregate_param)s"] in'
+                '      res.distinct_%(aggregate_param)s)) {'
+                '  res.distinct_%(aggregate_param)s[values[i]'
+                '    ["%(aggregate_param)s"]] = true;'
+                '  res.aggregate["cardinality/%(aggregate_param)s"] += 1;}'
             )
         ),
         finalize=dict(
-            cardinality=(
-                'if (typeof value.aggregate['
-                '    "cardinality/%(aggregate_param)s"] !== "number") {'
-                '  value.aggregate["cardinality/%(aggregate_param)s"] ='
-                '     NumberInt(1);}'
-            )
+            cardinality=''
         ),
     )
 
     EMIT_STATS_COMMON = """
+        var aggregate = {};
         %(aggregate_initial_placeholder)s
         emit(%(key_val)s, { unit: this.counter_unit,
+                            aggregate : aggregate,
                             %(aggregate_body_placeholder)s
                             groupby : %(groupby_val)s,
                             duration_start : this.timestamp,
@@ -323,6 +351,7 @@ class Connection(pymongo_base.Connection):
     function (key, values) {
         %(aggregate_initial_val)s
         var res = { unit: values[0].unit,
+                    aggregate: values[0].aggregate,
                     %(aggregate_body_val)s
                     groupby: values[0].groupby,
                     period_start: values[0].period_start,
@@ -385,6 +414,10 @@ class Connection(pymongo_base.Connection):
         return merge;
       }""")
 
+    _GENESIS = datetime.datetime(year=datetime.MINYEAR, month=1, day=1)
+    _APOCALYPSE = datetime.datetime(year=datetime.MAXYEAR, month=12, day=31,
+                                    hour=23, minute=59, second=59)
+
     def __init__(self, conf):
         url = conf.database.connection
 
@@ -394,15 +427,18 @@ class Connection(pymongo_base.Connection):
         # requires a new storage connection.
         self.conn = self.CONNECTION_POOL.connect(url)
 
-        # Require MongoDB 2.2 to use TTL
-        if self.conn.server_info()['versionArray'] < [2, 2]:
-            raise storage.StorageBadVersion("Need at least MongoDB 2.2")
+        # Require MongoDB 2.4 to use $setOnInsert
+        if self.conn.server_info()['versionArray'] < [2, 4]:
+            raise storage.StorageBadVersion("Need at least MongoDB 2.4")
 
         connection_options = pymongo.uri_parser.parse_uri(url)
         self.db = getattr(self.conn, connection_options['database'])
         if connection_options.get('username'):
             self.db.authenticate(connection_options['username'],
                                  connection_options['password'])
+
+        self.CAPABILITIES = utils.update_nested(self.DEFAULT_CAPABILITIES,
+                                                AVAILABLE_CAPABILITIES)
 
         # NOTE(jd) Upgrading is just about creating index, so let's do this
         # on connection to be sure at least the TTL is correcly updated if
@@ -417,18 +453,28 @@ class Connection(pymongo_base.Connection):
         # project_id values are usually mutually exclusive in the
         # queries, so the database won't take advantage of an index
         # including both.
+        name_qualifier = dict(user_id='', project_id='project_')
+        background = dict(user_id=False, project_id=True)
         for primary in ['user_id', 'project_id']:
+            name = 'resource_%sidx' % name_qualifier[primary]
             self.db.resource.ensure_index([
                 (primary, pymongo.ASCENDING),
                 ('source', pymongo.ASCENDING),
-            ], name='resource_idx')
+            ], name=name, background=background[primary])
+
+            name = 'meter_%sidx' % name_qualifier[primary]
             self.db.meter.ensure_index([
                 ('resource_id', pymongo.ASCENDING),
                 (primary, pymongo.ASCENDING),
                 ('counter_name', pymongo.ASCENDING),
                 ('timestamp', pymongo.ASCENDING),
                 ('source', pymongo.ASCENDING),
-            ], name='meter_idx')
+            ], name=name, background=background[primary])
+
+        self.db.resource.ensure_index([('last_sample_timestamp',
+                                        pymongo.DESCENDING)],
+                                      name='last_sample_timestamp_idx',
+                                      sparse=True)
         self.db.meter.ensure_index([('timestamp', pymongo.DESCENDING)],
                                    name='timestamp_idx')
 
@@ -483,14 +529,20 @@ class Connection(pymongo_base.Connection):
             upsert=True,
         )
 
-        # Record the updated resource metadata
-        self.db.resource.update(
+        # Record the updated resource metadata - we use $setOnInsert to
+        # unconditionally insert sample timestamps and resource metadata
+        # (in the update case, this must be conditional on the sample not
+        # being out-of-order)
+        resource = self.db.resource.find_and_modify(
             {'_id': data['resource_id']},
             {'$set': {'project_id': data['project_id'],
                       'user_id': data['user_id'],
-                      'metadata': data['resource_metadata'],
                       'source': data['source'],
                       },
+             '$setOnInsert': {'metadata': data['resource_metadata'],
+                              'first_sample_timestamp': data['timestamp'],
+                              'last_sample_timestamp': data['timestamp'],
+                              },
              '$addToSet': {'meter': {'counter_name': data['counter_name'],
                                      'counter_type': data['counter_type'],
                                      'counter_unit': data['counter_unit'],
@@ -498,7 +550,32 @@ class Connection(pymongo_base.Connection):
                            },
              },
             upsert=True,
+            new=True,
         )
+
+        # only update last sample timestamp if actually later (the usual
+        # in-order case)
+        last_sample_timestamp = resource.get('last_sample_timestamp')
+        if (last_sample_timestamp is None or
+                last_sample_timestamp <= data['timestamp']):
+            self.db.resource.update(
+                {'_id': data['resource_id']},
+                {'$set': {'metadata': data['resource_metadata'],
+                          'last_sample_timestamp': data['timestamp']}}
+            )
+
+        # only update first sample timestamp if actually earlier (the unusual
+        # out-of-order case)
+        # NOTE: a null first sample timestamp is not updated as this indicates
+        # a pre-existing resource document dating from before we started
+        # recording these timestamps in the resource collection
+        first_sample_timestamp = resource.get('first_sample_timestamp')
+        if (first_sample_timestamp is not None and
+                first_sample_timestamp > data['timestamp']):
+            self.db.resource.update(
+                {'_id': data['resource_id']},
+                {'$set': {'first_sample_timestamp': data['timestamp']}}
+            )
 
         # Record the raw data for the meter. Use a copy so we do not
         # modify a data structure owned by our caller (the driver adds
@@ -651,6 +728,100 @@ class Connection(pymongo_base.Connection):
             limit = 0
         return db_collection.find(q, limit=limit, sort=all_sort)
 
+    def _get_time_constrained_resources(self, query,
+                                        start_timestamp, start_timestamp_op,
+                                        end_timestamp, end_timestamp_op,
+                                        metaquery, resource):
+        """Return an iterable of models.Resource instances constrained
+           by sample timestamp.
+
+        :param query: project/user/source query
+        :param start_timestamp: modified timestamp start range.
+        :param start_timestamp_op: start time operator, like gt, ge.
+        :param end_timestamp: modified timestamp end range.
+        :param end_timestamp_op: end time operator, like lt, le.
+        :param metaquery: dict with metadata to match on.
+        :param resource: resource filter.
+        """
+        if resource is not None:
+            query['resource_id'] = resource
+
+        # Add resource_ prefix so it matches the field in the db
+        query.update(dict(('resource_' + k, v)
+                          for (k, v) in metaquery.iteritems()))
+
+        # FIXME(dhellmann): This may not perform very well,
+        # but doing any better will require changing the database
+        # schema and that will need more thought than I have time
+        # to put into it today.
+        # Look for resources matching the above criteria and with
+        # samples in the time range we care about, then change the
+        # resource query to return just those resources by id.
+        ts_range = pymongo_base.make_timestamp_range(start_timestamp,
+                                                     end_timestamp,
+                                                     start_timestamp_op,
+                                                     end_timestamp_op)
+        if ts_range:
+            query['timestamp'] = ts_range
+
+        sort_keys = base._handle_sort_key('resource')
+        sort_instructions = self._build_sort_instructions(sort_keys)[0]
+
+        # use a unique collection name for the results collection,
+        # as result post-sorting (as oppposed to reduce pre-sorting)
+        # is not possible on an inline M-R
+        out = 'resource_list_%s' % uuid.uuid4()
+        self.db.meter.map_reduce(self.MAP_RESOURCES,
+                                 self.REDUCE_RESOURCES,
+                                 out=out,
+                                 sort={'resource_id': 1},
+                                 query=query)
+
+        try:
+            for r in self.db[out].find(sort=sort_instructions):
+                resource = r['value']
+                yield models.Resource(
+                    resource_id=r['_id'],
+                    user_id=resource['user_id'],
+                    project_id=resource['project_id'],
+                    first_sample_timestamp=resource['first_timestamp'],
+                    last_sample_timestamp=resource['last_timestamp'],
+                    source=resource['source'],
+                    metadata=resource['metadata'])
+        finally:
+            self.db[out].drop()
+
+    def _get_floating_resources(self, query, metaquery, resource):
+        """Return an iterable of models.Resource instances unconstrained
+           by timestamp.
+
+        :param query: project/user/source query
+        :param metaquery: dict with metadata to match on.
+        :param resource: resource filter.
+        """
+        if resource is not None:
+            query['_id'] = resource
+
+        query.update(dict((k, v)
+                          for (k, v) in metaquery.iteritems()))
+
+        keys = base._handle_sort_key('resource')
+        sort_keys = ['last_sample_timestamp' if i == 'timestamp' else i
+                     for i in keys]
+        sort_instructions = self._build_sort_instructions(sort_keys)[0]
+
+        for r in self.db.resource.find(query, sort=sort_instructions):
+            yield models.Resource(
+                resource_id=r['_id'],
+                user_id=r['user_id'],
+                project_id=r['project_id'],
+                first_sample_timestamp=r.get('first_sample_timestamp',
+                                             self._GENESIS),
+                last_sample_timestamp=r.get('last_sample_timestamp',
+                                            self._APOCALYPSE),
+                source=r['source'],
+                metadata=r['metadata'])
+
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
@@ -669,62 +840,25 @@ class Connection(pymongo_base.Connection):
         :param pagination: Optional pagination query.
         """
         if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
+            raise NotImplementedError('Pagination not implemented')
 
-        q = {}
+        query = {}
         if user is not None:
-            q['user_id'] = user
+            query['user_id'] = user
         if project is not None:
-            q['project_id'] = project
+            query['project_id'] = project
         if source is not None:
-            q['source'] = source
-        if resource is not None:
-            q['resource_id'] = resource
-        # Add resource_ prefix so it matches the field in the db
-        q.update(dict(('resource_' + k, v)
-                      for (k, v) in metaquery.iteritems()))
+            query['source'] = source
 
-        # FIXME(dhellmann): This may not perform very well,
-        # but doing any better will require changing the database
-        # schema and that will need more thought than I have time
-        # to put into it today.
         if start_timestamp or end_timestamp:
-            # Look for resources matching the above criteria and with
-            # samples in the time range we care about, then change the
-            # resource query to return just those resources by id.
-            ts_range = pymongo_base.make_timestamp_range(start_timestamp,
-                                                         end_timestamp,
-                                                         start_timestamp_op,
-                                                         end_timestamp_op)
-            if ts_range:
-                q['timestamp'] = ts_range
-
-        sort_keys = base._handle_sort_key('resource')
-        sort_instructions = self._build_sort_instructions(sort_keys)[0]
-
-        # use a unique collection name for the results collection,
-        # as result post-sorting (as oppposed to reduce pre-sorting)
-        # is not possible on an inline M-R
-        out = 'resource_list_%s' % uuid.uuid4()
-        self.db.meter.map_reduce(self.MAP_RESOURCES,
-                                 self.REDUCE_RESOURCES,
-                                 out=out,
-                                 sort={'resource_id': 1},
-                                 query=q)
-
-        try:
-            for r in self.db[out].find(sort=sort_instructions):
-                resource = r['value']
-                yield models.Resource(
-                    resource_id=r['_id'],
-                    user_id=resource['user_id'],
-                    project_id=resource['project_id'],
-                    first_sample_timestamp=resource['first_timestamp'],
-                    last_sample_timestamp=resource['last_timestamp'],
-                    source=resource['source'],
-                    metadata=resource['metadata'])
-        finally:
-            self.db[out].drop()
+            return self._get_time_constrained_resources(query,
+                                                        start_timestamp,
+                                                        start_timestamp_op,
+                                                        end_timestamp,
+                                                        end_timestamp_op,
+                                                        metaquery, resource)
+        else:
+            return self._get_floating_resources(query, metaquery, resource)
 
     def _aggregate_param(self, fragment_key, aggregate):
         fragment_map = self.STANDARD_AGGREGATES[fragment_key]
@@ -750,8 +884,8 @@ class Connection(pymongo_base.Connection):
                 params = dict(aggregate_param=a.param)
                 fragments += (fragment_map[a.func] % params)
             else:
-                raise NotImplementedError(_('Selectable aggregate function %s'
-                                            ' is not supported') % a.func)
+                raise NotImplementedError('Selectable aggregate function %s'
+                                          ' is not supported' % a.func)
 
         return fragments
 
@@ -859,30 +993,4 @@ class Connection(pymongo_base.Connection):
     def get_capabilities(self):
         """Return an dictionary representing the capabilities of this driver.
         """
-        available = {
-            'meters': {'query': {'simple': True,
-                                 'metadata': True}},
-            'resources': {'query': {'simple': True,
-                                    'metadata': True}},
-            'samples': {'query': {'simple': True,
-                                  'metadata': True,
-                                  'complex': True}},
-            'statistics': {'groupby': True,
-                           'query': {'simple': True,
-                                     'metadata': True},
-                           'aggregation': {'standard': True,
-                                           'selectable': {
-                                               'max': True,
-                                               'min': True,
-                                               'sum': True,
-                                               'avg': True,
-                                               'count': True,
-                                               'stddev': True,
-                                               'cardinality': True}}
-                           },
-            'alarms': {'query': {'simple': True,
-                                 'complex': True},
-                       'history': {'query': {'simple': True,
-                                             'complex': True}}},
-        }
-        return utils.update_nested(self.DEFAULT_CAPABILITIES, available)
+        return self.CAPABILITIES

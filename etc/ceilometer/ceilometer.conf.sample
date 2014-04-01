@@ -40,6 +40,14 @@
 # Dispatcher to process data. (multi valued)
 #dispatcher=database
 
+# Number of workers for collector service. A single
+# collector is enabled by default. (integer value)
+#collector_workers=1
+
+# Number of workers for notification service. A single
+# notification agent is enabled by default. (integer value)
+#notification_workers=1
+
 
 #
 # Options defined in ceilometer.api.app
@@ -62,7 +70,7 @@
 
 
 #
-# Options defined in ceilometer.compute.pollsters.util
+# Options defined in ceilometer.compute.util
 #
 
 # List of metadata prefixes reserved for metering use. (list
@@ -521,6 +529,14 @@
 [alarm]
 
 #
+# Options defined in ceilometer.cli
+#
+
+# Class to launch as alarm evaluation service. (string value)
+#evaluation_service=ceilometer.alarm.service.SingletonAlarmService
+
+
+#
 # Options defined in ceilometer.alarm.notifier.rest
 #
 
@@ -557,9 +573,6 @@
 # (integer value)
 # Deprecated group/name - [alarm]/threshold_evaluation_interval
 #evaluation_interval=60
-
-# Class to launch as alarm evaluation service. (string value)
-#evaluation_service=ceilometer.alarm.service.SingletonAlarmService
 
 
 #
@@ -980,5 +993,29 @@
 # Private key file to use when starting the server securely
 # (string value)
 #key_file=<None>
+
+
+[vmware]
+
+#
+# Options defined in ceilometer.compute.virt.vmware.inspector
+#
+
+# IP address of the VMware Vsphere host (string value)
+#host_ip=
+
+# Username of VMware Vsphere (string value)
+#host_username=
+
+# Password of VMware Vsphere (string value)
+#host_password=
+
+# Number of times a VMware Vsphere API must be retried
+# (integer value)
+#api_retry_count=10
+
+# Sleep time in seconds for polling an ongoing async task
+# (floating point value)
+#task_poll_interval=0.5
 
 

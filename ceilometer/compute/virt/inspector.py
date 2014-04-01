@@ -53,6 +53,18 @@ Instance = collections.namedtuple('Instance', ['name', 'UUID'])
 #
 CPUStats = collections.namedtuple('CPUStats', ['number', 'time'])
 
+# Named tuple representing CPU Utilization statistics.
+#
+# util: CPU utilization in percentage
+#
+CPUUtilStats = collections.namedtuple('CPUUtilStats', ['util'])
+
+# Named tuple representing Memory usage statistics.
+#
+# usage: Amount of memory used
+#
+MemoryUsageStats = collections.namedtuple('MemoryUsageStats', ['usage'])
+
 
 # Named tuple representing vNICs.
 #
@@ -77,6 +89,15 @@ InterfaceStats = collections.namedtuple('InterfaceStats',
                                          'tx_bytes', 'tx_packets'])
 
 
+# Named tuple representing vNIC rate statistics.
+#
+# rx_bytes_rate: rate of received bytes
+# tx_bytes_rate: rate of transmitted bytes
+#
+InterfaceRateStats = collections.namedtuple('InterfaceRateStats',
+                                            ['rx_bytes_rate', 'tx_bytes_rate'])
+
+
 # Named tuple representing disks.
 #
 # device: the device name for the disk
@@ -96,6 +117,19 @@ DiskStats = collections.namedtuple('DiskStats',
                                    ['read_bytes', 'read_requests',
                                     'write_bytes', 'write_requests',
                                     'errors'])
+
+# Named tuple representing disk rate statistics.
+#
+# read_bytes_rate: number of bytes read per second
+# read_requests_rate: number of read operations per second
+# write_bytes_rate: number of bytes written per second
+# write_requests_rate: number of write operations per second
+#
+DiskRateStats = collections.namedtuple('DiskRateStats',
+                                       ['read_bytes_rate',
+                                        'read_requests_rate',
+                                        'write_bytes_rate',
+                                        'write_requests_rate'])
 
 
 # Exception types
@@ -125,11 +159,32 @@ class Inspector(object):
         """
         raise NotImplementedError()
 
+    def inspect_cpu_util(self, instance, duration=None):
+        """Inspect the CPU Utilization (%) for an instance.
+
+        :param instance: the target instance
+        :param duration: the last 'n' seconds, over which the value should be
+               inspected
+        :return: the percentage of CPU utilization
+        """
+        raise NotImplementedError()
+
     def inspect_vnics(self, instance_name):
         """Inspect the vNIC statistics for an instance.
 
         :param instance_name: the name of the target instance
         :return: for each vNIC, the number of bytes & packets
+                 received and transmitted
+        """
+        raise NotImplementedError()
+
+    def inspect_vnic_rates(self, instance, duration=None):
+        """Inspect the vNIC rate statistics for an instance.
+
+        :param instance: the target instance
+        :param duration: the last 'n' seconds, over which the value should be
+               inspected
+        :return: for each vNIC, the rate of bytes & packets
                  received and transmitted
         """
         raise NotImplementedError()
@@ -140,6 +195,27 @@ class Inspector(object):
         :param instance_name: the name of the target instance
         :return: for each disk, the number of bytes & operations
                  read and written, and the error count
+        """
+        raise NotImplementedError()
+
+    def inspect_memory_usage(self, instance, duration=None):
+        """Inspect the memory usage statistics for an instance.
+
+        :param instance: the target instance
+        :param duration: the last 'n' seconds, over which the value should be
+               inspected
+        :return: the amount of memory used
+        """
+        raise NotImplementedError()
+
+    def inspect_disk_rates(self, instance, duration=None):
+        """Inspect the disk statistics as rates for an instance.
+
+        :param instance: the target instance
+        :param duration: the last 'n' seconds, over which the value should be
+               inspected
+        :return: for each disk, the number of bytes & operations
+                 read and written per second, with the error count
         """
         raise NotImplementedError()
 

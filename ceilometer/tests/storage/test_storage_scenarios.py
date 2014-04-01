@@ -262,9 +262,21 @@ class ResourceTest(DBTestBase,
 
     def test_get_resources_by_user(self):
         resources = list(self.conn.get_resources(user='user-id'))
-        self.assertEqual(len(resources), 2)
+        self.assertTrue(len(resources) == 2 or len(resources) == 1)
         ids = set(r.resource_id for r in resources)
-        self.assertEqual(ids, set(['resource-id', 'resource-id-alternate']))
+        # tolerate storage driver only reporting latest owner of resource
+        resources_ever_owned_by = set(['resource-id',
+                                       'resource-id-alternate'])
+        resources_now_owned_by = set(['resource-id'])
+        self.assertTrue(ids == resources_ever_owned_by or
+                        ids == resources_now_owned_by,
+                        'unexpected resources: %s' % ids)
+
+    def test_get_resources_by_alternate_user(self):
+        resources = list(self.conn.get_resources(user='user-id-alternate'))
+        self.assertEqual(1, len(resources))
+        # only a single resource owned by this user ever
+        self.assertEqual('resource-id-alternate', resources[0].resource_id)
 
     def test_get_resources_by_project(self):
         resources = list(self.conn.get_resources(project='project-id'))
@@ -1153,6 +1165,39 @@ class StatisticsTest(DBTestBase,
                 secret='not-so-secret',
             )
             self.conn.record_metering_data(msg)
+        for i in range(3):
+            c = sample.Sample(
+                'memory',
+                'gauge',
+                'MB',
+                8 + i,
+                'user-5',
+                'project2',
+                'resource-6',
+                timestamp=datetime.datetime(2012, 9, 25, 10 + i, 30 + i),
+                resource_metadata={},
+                source='test',
+            )
+            msg = utils.meter_message_from_counter(
+                c,
+                secret='not-so-secret',
+            )
+            self.conn.record_metering_data(msg)
+
+    def test_by_meter(self):
+        f = storage.SampleFilter(
+            meter='memory'
+        )
+        results = list(self.conn.get_meter_statistics(f))[0]
+        self.assertEqual(results.duration,
+                         (datetime.datetime(2012, 9, 25, 12, 32)
+                          - datetime.datetime(2012, 9, 25, 10, 30)).seconds)
+        self.assertEqual(results.count, 3)
+        self.assertEqual(results.unit, 'MB')
+        self.assertEqual(results.min, 8)
+        self.assertEqual(results.max, 10)
+        self.assertEqual(results.sum, 27)
+        self.assertEqual(results.avg, 9)
 
     def test_by_user(self):
         f = storage.SampleFilter(
@@ -2549,6 +2594,16 @@ class ComplexAlarmQueryTest(AlarmTestBase,
         for a in result:
             self.assertIn(a.name, set(["yellow-alert", "red-alert"]))
             self.assertTrue(a.enabled)
+
+    def test_filter_for_alarm_id(self):
+        self.add_some_alarms()
+        filter_expr = {"=": {"alarm_id": "0r4ng3"}}
+
+        result = list(self.conn.query_alarms(filter_expr=filter_expr))
+
+        self.assertEqual(1, len(result))
+        for a in result:
+            self.assertEqual(a.alarm_id, "0r4ng3")
 
     def test_filter_and_orderby(self):
         self.add_some_alarms()

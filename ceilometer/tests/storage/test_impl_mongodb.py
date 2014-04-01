@@ -24,12 +24,6 @@
 
 """
 
-import copy
-import datetime
-from mock import patch
-
-from ceilometer.publisher import utils
-from ceilometer import sample
 from ceilometer.storage import base
 from ceilometer.storage import impl_mongodb
 from ceilometer.tests import db as tests_db
@@ -61,7 +55,7 @@ class MongoDBConnection(MongoDBEngineTestBase):
                                                          marker=marker,
                                                          flag=flag)
         expect = {'k3': {'$lt': 'v3'}, 'k2': {'eq': 'v2'}, 'k1': {'eq': 'v1'}}
-        self.assertEqual(ret, expect)
+        self.assertEqual(expect, ret)
 
 
 class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase,
@@ -72,14 +66,14 @@ class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase,
         marker_pairs = {'user_id': 'user-id-4'}
         ret = impl_mongodb.Connection._get_marker(self.conn.db.resource,
                                                   marker_pairs)
-        self.assertEqual(ret['project_id'], 'project-id-4')
+        self.assertEqual('project-id-4', ret['project_id'])
 
     def test_get_marker_None(self):
         marker_pairs = {'user_id': 'user-id-foo'}
         try:
             ret = impl_mongodb.Connection._get_marker(self.conn.db.resource,
                                                       marker_pairs)
-            self.assertEqual(ret['project_id'], 'project-id-foo')
+            self.assertEqual('project-id-foo', ret['project_id'])
         except base.NoResultFound:
             self.assertTrue(True)
 
@@ -88,7 +82,7 @@ class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase,
             marker_pairs = {'project_id': 'project-id'}
             ret = impl_mongodb.Connection._get_marker(self.conn.db.resource,
                                                       marker_pairs)
-            self.assertEqual(ret['project_id'], 'project-id-foo')
+            self.assertEqual('project-id-foo', ret['project_id'])
         except base.MultipleResultsFound:
             self.assertTrue(True)
 
@@ -111,158 +105,14 @@ class IndexTest(MongoDBEngineTestBase):
         self.conn.upgrade()
         self.assertFalse(self.conn.db.meter.ensure_index('foo',
                                                          name='meter_ttl'))
-        self.assertEqual(self.conn.db.meter.index_information()[
-            'meter_ttl']['expireAfterSeconds'], 456789)
+        self.assertEqual(456789,
+                         self.conn.db.meter.index_information()
+                         ['meter_ttl']['expireAfterSeconds'])
 
         self.CONF.set_override('time_to_live', -1, group='database')
         self.conn.upgrade()
         self.assertTrue(self.conn.db.meter.ensure_index('foo',
                                                         name='meter_ttl'))
-
-
-class CompatibilityTest(test_storage_scenarios.DBTestBase,
-                        MongoDBEngineTestBase):
-    def prepare_data(self):
-        def old_record_metering_data(self, data):
-            self.db.user.update(
-                {'_id': data['user_id']},
-                {'$addToSet': {'source': data['source'],
-                               },
-                 },
-                upsert=True,
-            )
-            self.db.project.update(
-                {'_id': data['project_id']},
-                {'$addToSet': {'source': data['source'],
-                               },
-                 },
-                upsert=True,
-            )
-            received_timestamp = datetime.datetime.utcnow()
-            self.db.resource.update(
-                {'_id': data['resource_id']},
-                {'$set': {'project_id': data['project_id'],
-                          'user_id': data['user_id'],
-                          # Current metadata being used and when it was
-                          # last updated.
-                          'timestamp': data['timestamp'],
-                          'received_timestamp': received_timestamp,
-                          'metadata': data['resource_metadata'],
-                          'source': data['source'],
-                          },
-                 '$addToSet': {'meter': {'counter_name': data['counter_name'],
-                                         'counter_type': data['counter_type'],
-                                         },
-                               },
-                 },
-                upsert=True,
-            )
-
-            record = copy.copy(data)
-            self.db.meter.insert(record)
-
-        # Stubout with the old version DB schema, the one w/o 'counter_unit'
-        with patch.object(self.conn, 'record_metering_data',
-                          side_effect=old_record_metering_data):
-            self.counters = []
-            c = sample.Sample(
-                'volume.size',
-                'gauge',
-                'GiB',
-                5,
-                'user-id',
-                'project1',
-                'resource-id',
-                timestamp=datetime.datetime(2012, 9, 25, 10, 30),
-                resource_metadata={'display_name': 'test-volume',
-                                   'tag': 'self.counter',
-                                   },
-                source='test',
-            )
-            self.counters.append(c)
-            msg = utils.meter_message_from_counter(
-                c,
-                secret='not-so-secret')
-            self.conn.record_metering_data(self.conn, msg)
-
-        # Create the old format alarm with a dict instead of a
-        # array for matching_metadata
-        alarm = dict(alarm_id='0ld-4l3rt',
-                     enabled=True,
-                     name='old-alert',
-                     description='old-alert',
-                     timestamp=None,
-                     meter_name='cpu',
-                     user_id='me',
-                     project_id='and-da-boys',
-                     comparison_operator='lt',
-                     threshold=36,
-                     statistic='count',
-                     evaluation_periods=1,
-                     period=60,
-                     state="insufficient data",
-                     state_timestamp=None,
-                     ok_actions=[],
-                     alarm_actions=['http://nowhere/alarms'],
-                     insufficient_data_actions=[],
-                     repeat_actions=False,
-                     matching_metadata={'key': 'value'})
-
-        self.conn.db.alarm.update(
-            {'alarm_id': alarm['alarm_id']},
-            {'$set': alarm},
-            upsert=True)
-
-        alarm['alarm_id'] = 'other-kind-of-0ld-4l3rt'
-        alarm['name'] = 'other-old-alaert'
-        alarm['matching_metadata'] = [{'key': 'key1', 'value': 'value1'},
-                                      {'key': 'key2', 'value': 'value2'}]
-        self.conn.db.alarm.update(
-            {'alarm_id': alarm['alarm_id']},
-            {'$set': alarm},
-            upsert=True)
-
-    def test_alarm_get_old_format_matching_metadata_dict(self):
-        old = list(self.conn.get_alarms(name='old-alert'))[0]
-        self.assertEqual(old.type, 'threshold')
-        self.assertEqual(old.rule['query'],
-                         [{'field': 'key',
-                           'op': 'eq',
-                           'value': 'value',
-                           'type': 'string'}])
-        self.assertEqual(old.rule['period'], 60)
-        self.assertEqual(old.rule['meter_name'], 'cpu')
-        self.assertEqual(old.rule['evaluation_periods'], 1)
-        self.assertEqual(old.rule['statistic'], 'count')
-        self.assertEqual(old.rule['comparison_operator'], 'lt')
-        self.assertEqual(old.rule['threshold'], 36)
-
-    def test_alarm_get_old_format_matching_metadata_array(self):
-        old = list(self.conn.get_alarms(name='other-old-alaert'))[0]
-        self.assertEqual(old.type, 'threshold')
-        self.assertEqual(sorted(old.rule['query']),
-                         sorted([{'field': 'key1',
-                                  'op': 'eq',
-                                  'value': 'value1',
-                                  'type': 'string'},
-                                 {'field': 'key2',
-                                  'op': 'eq',
-                                  'value': 'value2',
-                                  'type': 'string'}]))
-        self.assertEqual(old.rule['meter_name'], 'cpu')
-        self.assertEqual(old.rule['period'], 60)
-        self.assertEqual(old.rule['evaluation_periods'], 1)
-        self.assertEqual(old.rule['statistic'], 'count')
-        self.assertEqual(old.rule['comparison_operator'], 'lt')
-        self.assertEqual(old.rule['threshold'], 36)
-
-    def test_alarm_without_time_constraints(self):
-        old = list(self.conn.get_alarms(name='other-old-alaert'))[0]
-        self.assertEqual([], old.time_constraints)
-
-    def test_counter_unit(self):
-        meters = list(self.conn.get_meters())
-        self.assertEqual(len(meters), 1)
 
 
 class AlarmTestPagination(test_storage_scenarios.AlarmTestBase,
@@ -272,7 +122,7 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase,
         marker_pairs = {'name': 'red-alert'}
         ret = impl_mongodb.Connection._get_marker(self.conn.db.alarm,
                                                   marker_pairs=marker_pairs)
-        self.assertEqual(ret['rule']['meter_name'], 'test.one')
+        self.assertEqual('test.one', ret['rule']['meter_name'])
 
     def test_alarm_get_marker_None(self):
         self.add_some_alarms()
@@ -280,8 +130,7 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase,
             marker_pairs = {'name': 'user-id-foo'}
             ret = impl_mongodb.Connection._get_marker(self.conn.db.alarm,
                                                       marker_pairs)
-            self.assertEqual(ret['rule']['meter_name'],
-                             'meter_name-foo')
+            self.assertEqual('meter_name-foo', ret['rule']['meter_name'])
         except base.NoResultFound:
             self.assertTrue(True)
 
@@ -291,7 +140,51 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase,
             marker_pairs = {'user_id': 'me'}
             ret = impl_mongodb.Connection._get_marker(self.conn.db.alarm,
                                                       marker_pairs)
-            self.assertEqual(ret['rule']['meter_name'],
-                             'counter-name-foo')
+            self.assertEqual('counter-name-foo', ret['rule']['meter_name'])
         except base.MultipleResultsFound:
             self.assertTrue(True)
+
+
+class CapabilitiesTest(MongoDBEngineTestBase):
+    # Check the returned capabilities list, which is specific to each DB
+    # driver
+
+    def test_capabilities(self):
+        expected_capabilities = {
+            'meters': {'pagination': False,
+                       'query': {'simple': True,
+                                 'metadata': True,
+                                 'complex': False}},
+            'resources': {'pagination': False,
+                          'query': {'simple': True,
+                                    'metadata': True,
+                                    'complex': False}},
+            'samples': {'pagination': False,
+                        'groupby': False,
+                        'query': {'simple': True,
+                                  'metadata': True,
+                                  'complex': True}},
+            'statistics': {'pagination': False,
+                           'groupby': True,
+                           'query': {'simple': True,
+                                     'metadata': True,
+                                     'complex': False},
+                           'aggregation': {'standard': True,
+                                           'selectable': {
+                                               'max': True,
+                                               'min': True,
+                                               'sum': True,
+                                               'avg': True,
+                                               'count': True,
+                                               'stddev': True,
+                                               'cardinality': True}}
+                           },
+            'alarms': {'query': {'simple': True,
+                                 'complex': True},
+                       'history': {'query': {'simple': True,
+                                             'complex': True}}},
+            'events': {'query': {'simple': False}}
+        }
+
+        actual_capabilities = self.conn.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)

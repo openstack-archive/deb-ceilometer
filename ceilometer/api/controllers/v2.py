@@ -272,9 +272,10 @@ class Query(_Base):
 
 
 class ProjectNotAuthorized(ClientSideError):
-    def __init__(self, id):
+    def __init__(self, id, aspect='project'):
+        params = dict(aspect=aspect, id=id)
         super(ProjectNotAuthorized, self).__init__(
-            _("Not Authorized to access project %s") % id,
+            _("Not Authorized to access %(aspect)s %(id)s") % params,
             status_code=401)
 
 
@@ -332,7 +333,29 @@ def _verify_query_segregation(query, auth_project=None):
 
 
 def _validate_query(query, db_func, internal_keys=[],
-                    is_timestamp_valid=True):
+                    allow_timestamps=True):
+    """Validates the syntax of the query and verifies that the query
+    request is authorized for the included project.
+
+    :param query: Query expression that should be validated
+    :param db_func: the function on the storage level, of which arguments
+        will form the valid_keys list, which defines the valid fields for a
+        query expression
+    :param internal_keys: internally used field names, that should not be
+        used for querying
+    :param allow_timestamps: defines whether the timestamp-based constraint is
+        applicable for this query or not
+
+    :returns: None, if the query is valid
+
+    :raises InvalidInput: if an operator is not supported for a given field
+    :raises InvalidInput: if timestamp constraints are allowed, but
+        search_offset was included without timestamp constraint
+    :raises: UnknownArgument: if a field name is not a timestamp field, nor
+        in the list of valid keys
+
+    """
+
     _verify_query_segregation(query)
 
     valid_keys = inspect.getargspec(db_func)[0]
@@ -345,45 +368,73 @@ def _validate_query(query, db_func, internal_keys=[],
     has_timestamp_query = _validate_timestamp_fields(query,
                                                      'timestamp',
                                                      ('lt', 'le', 'gt', 'ge'),
-                                                     is_timestamp_valid)
+                                                     allow_timestamps)
     has_search_offset_query = _validate_timestamp_fields(query,
                                                          'search_offset',
                                                          ('eq'),
-                                                         is_timestamp_valid)
+                                                         allow_timestamps)
 
     if has_search_offset_query and not has_timestamp_query:
         raise wsme.exc.InvalidInput('field', 'search_offset',
                                     "search_offset cannot be used without " +
                                     "timestamp")
 
+    def _is_field_metadata(field):
+        return (field.startswith('metadata.') or
+                field.startswith('resource_metadata.'))
+
     for i in query:
         if i.field not in ('timestamp', 'search_offset'):
-            if i.op == 'eq':
-                if i.field == 'enabled':
-                    i._get_value_as_type('boolean')
-                elif (i.field.startswith('metadata.') or
-                      i.field.startswith('resource_metadata.')):
-                    i._get_value_as_type()
+            key = translation.get(i.field, i.field)
+            operator = i.op
+            if (key in valid_keys or _is_field_metadata(i.field)):
+                if operator == 'eq':
+                    if key == 'enabled':
+                        i._get_value_as_type('boolean')
+                    elif _is_field_metadata(key):
+                        i._get_value_as_type()
                 else:
-                    key = translation.get(i.field, i.field)
-                    if key not in valid_keys:
-                        msg = ("unrecognized field in query: %s, "
-                               "valid keys: %s") % (query, valid_keys)
-                        raise wsme.exc.UnknownArgument(key, msg)
+                    raise wsme.exc.InvalidInput('op', i.op,
+                                                'unimplemented operator for '
+                                                '%s' % i.field)
             else:
-                raise wsme.exc.InvalidInput('op', i.op,
-                                            'unimplemented operator for %s' %
-                                            i.field)
+                msg = ("unrecognized field in query: %s, "
+                       "valid keys: %s") % (query, valid_keys)
+                raise wsme.exc.UnknownArgument(key, msg)
 
 
 def _validate_timestamp_fields(query, field_name, operator_list,
-                               is_timestamp_valid):
+                               allow_timestamps):
+    """Validates the timestamp related constraints in a query expression, if
+    there are any.
+
+    :param query: query expression that may contain the timestamp fields
+    :param field_name: timestamp name, which should be checked (timestamp,
+        search_offset)
+    :param operator_list: list of operators that are supported for that
+        timestamp, which was specified in the parameter field_name
+    :param allow_timestamps: defines whether the timestamp-based constraint is
+        applicable to this query or not
+
+    :returns: True, if there was a timestamp constraint, containing
+        a timestamp field named as defined in field_name, in the query and it
+        was allowed and syntactically correct.
+    :returns: False, if there wasn't timestamp constraint, containing a
+        timestamp field named as defined in field_name, in the query
+
+    :raises InvalidInput: if an operator is unsupported for a given timestamp
+        field
+    :raises UnknownArgument: if the timestamp constraint is not allowed in
+        the query
+
+    """
+
     for item in query:
         if item.field == field_name:
             #If *timestamp* or *search_offset* field was specified in the
             #query, but timestamp is not supported on that resource, on
             #which the query was invoked, then raise an exception.
-            if not is_timestamp_valid:
+            if not allow_timestamps:
                 raise wsme.exc.UnknownArgument(field_name,
                                                "not valid for " +
                                                "this resource")
@@ -396,9 +447,9 @@ def _validate_timestamp_fields(query, field_name, operator_list,
 
 
 def _query_to_kwargs(query, db_func, internal_keys=[],
-                     is_timestamp_valid=True):
+                     allow_timestamps=True):
     _validate_query(query, db_func, internal_keys=internal_keys,
-                    is_timestamp_valid=is_timestamp_valid)
+                    allow_timestamps=allow_timestamps)
     query = _sanitize_query(query, db_func)
     internal_keys.append('self')
     valid_keys = set(inspect.getargspec(db_func)[0]) - set(internal_keys)
@@ -848,6 +899,8 @@ class MeterController(rest.RestController):
         kwargs['meter'] = self.meter_name
         f = storage.SampleFilter(**kwargs)
         g = _validate_groupby_fields(groupby)
+
+        aggregate = utils.uniq(aggregate, ['func', 'param'])
         computed = pecan.request.storage_conn.get_meter_statistics(f,
                                                                    period,
                                                                    g,
@@ -930,7 +983,7 @@ class MetersController(rest.RestController):
         """
         #Timestamp field is not supported for Meter queries
         kwargs = _query_to_kwargs(q, pecan.request.storage_conn.get_meters,
-                                  is_timestamp_valid=False)
+                                  allow_timestamps=False)
         return [Meter.from_db_model(m)
                 for m in pecan.request.storage_conn.get_meters(**kwargs)]
 
@@ -1088,14 +1141,14 @@ class ValidatedComplexQuery(object):
     order_directions = _list_to_regexp(order_directions, regexp_prefix)
 
     timestamp_fields = ["timestamp", "state_timestamp"]
-    name_mapping = {"user": "user_id",
-                    "project": "project_id",
-                    "resource": "resource_id"}
 
-    def __init__(self, query, db_model, additional_valid_keys,
+    def __init__(self, query, db_model, additional_name_mapping={},
                  metadata_allowed=False):
+        self.name_mapping = {"user": "user_id",
+                             "project": "project_id"}
+        self.name_mapping.update(additional_name_mapping)
         valid_keys = db_model.get_field_names()
-        valid_keys = list(valid_keys) + additional_valid_keys
+        valid_keys = list(valid_keys) + self.name_mapping.keys()
         valid_fields = _list_to_regexp(valid_keys)
 
         if metadata_allowed:
@@ -1333,10 +1386,10 @@ class Resource(_Base):
     "The ID of the user who created the resource or updated it last"
 
     first_sample_timestamp = datetime.datetime
-    "UTC date & time of the first sample associated with the resource"
+    "UTC date & time not later than the first sample known for this resource"
 
     last_sample_timestamp = datetime.datetime
-    "UTC date & time of the last sample associated with the resource"
+    "UTC date & time not earlier than the last sample known for this resource"
 
     metadata = {wtypes.text: wtypes.text}
     "Arbitrary metadata associated with the resource"
@@ -1374,14 +1427,15 @@ class Resource(_Base):
 class ResourcesController(rest.RestController):
     """Works on resources."""
 
-    def _resource_links(self, resource_id):
+    def _resource_links(self, resource_id, meter_links=1):
         links = [_make_link('self', pecan.request.host_url, 'resources',
                             resource_id)]
-        for meter in pecan.request.storage_conn.get_meters(resource=
-                                                           resource_id):
-            query = {'field': 'resource_id', 'value': resource_id}
-            links.append(_make_link(meter.name, pecan.request.host_url,
-                                    'meters', meter.name, query=query))
+        if meter_links:
+            for meter in pecan.request.storage_conn.get_meters(resource=
+                                                               resource_id):
+                query = {'field': 'resource_id', 'value': resource_id}
+                links.append(_make_link(meter.name, pecan.request.host_url,
+                                        'meters', meter.name, query=query))
         return links
 
     @wsme_pecan.wsexpose(Resource, unicode)
@@ -1398,16 +1452,18 @@ class ResourcesController(rest.RestController):
         return Resource.from_db_and_links(resources[0],
                                           self._resource_links(resource_id))
 
-    @wsme_pecan.wsexpose([Resource], [Query])
-    def get_all(self, q=[]):
+    @wsme_pecan.wsexpose([Resource], [Query], int)
+    def get_all(self, q=[], meter_links=1):
         """Retrieve definitions of all of the resources.
 
         :param q: Filter rules for the resources to be returned.
+        :param meter_links: option to include related meter links
         """
         kwargs = _query_to_kwargs(q, pecan.request.storage_conn.get_resources)
         resources = [
             Resource.from_db_and_links(r,
-                                       self._resource_links(r.resource_id))
+                                       self._resource_links(r.resource_id,
+                                                            meter_links))
             for r in pecan.request.storage_conn.get_resources(**kwargs)]
         return resources
 
@@ -1442,7 +1498,7 @@ class AlarmThresholdRule(_Base):
     "The number of historical periods to evaluate the threshold"
 
     exclude_outliers = wsme.wsattr(bool, default=False)
-    "Whether datapoints with anomolously low sample counts are excluded"
+    "Whether datapoints with anomalously low sample counts are excluded"
 
     def __init__(self, query=None, **kwargs):
         if query:
@@ -1461,7 +1517,7 @@ class AlarmThresholdRule(_Base):
         #statistics queries as the sliding evaluation window advances
         #over time.
         _validate_query(threshold_rule.query, storage.SampleFilter.__init__,
-                        is_timestamp_valid=False)
+                        allow_timestamps=False)
         return threshold_rule
 
     @property
@@ -1662,17 +1718,8 @@ class Alarm(_Base):
 
     @staticmethod
     def validate(alarm):
-        if (alarm.threshold_rule in (wtypes.Unset, None)
-                and alarm.combination_rule in (wtypes.Unset, None)):
-            error = _("either threshold_rule or combination_rule "
-                      "must be set")
-            raise ClientSideError(error)
 
-        if alarm.threshold_rule and alarm.combination_rule:
-            error = _("threshold_rule and combination_rule "
-                      "cannot be set at the same time")
-            raise ClientSideError(error)
-
+        Alarm.check_rule(alarm)
         if alarm.threshold_rule:
             # ensure an implicit constraint on project_id is added to
             # the query if not already present
@@ -1691,7 +1738,25 @@ class Alarm(_Base):
                 if not alarms:
                     raise EntityNotFound(_('Alarm'), id)
 
+        tc_names = [tc.name for tc in alarm.time_constraints]
+        if len(tc_names) > len(set(tc_names)):
+            error = _("Time constraint names must be "
+                      "unique for a given alarm.")
+            raise ClientSideError(error)
+
         return alarm
+
+    @staticmethod
+    def check_rule(alarm):
+        rule = '%s_rule' % alarm.type
+        if getattr(alarm, rule) in (wtypes.Unset, None):
+            error = _("%(rule)s must be set for %(type)s"
+                      " type alarm") % {"rule": rule, "type": alarm.type}
+            raise ClientSideError(error)
+        if alarm.threshold_rule and alarm.combination_rule:
+            error = _("threshold_rule and combination_rule "
+                      "cannot be set at the same time")
+            raise ClientSideError(error)
 
     @classmethod
     def sample(cls):
@@ -1850,6 +1915,15 @@ class AlarmController(rest.RestController):
         else:
             data.state_timestamp = alarm_in.state_timestamp
 
+        # make sure alarms are unique by name per project.
+        if alarm_in.name != data.name:
+            alarms = list(self.conn.get_alarms(name=data.name,
+                                               project=data.project_id))
+            if alarms:
+                raise ClientSideError(
+                    _("Alarm with name=%s exists") % data.name,
+                    status_code=409)
+
         old_alarm = Alarm.from_db_model(alarm_in).as_dict(storage.models.Alarm)
         updated_alarm = data.as_dict(storage.models.Alarm)
         try:
@@ -1969,15 +2043,24 @@ class AlarmsController(rest.RestController):
         now = timeutils.utcnow()
 
         data.alarm_id = str(uuid.uuid4())
-        user, project = acl.get_limited_to(pecan.request.headers)
-        if user:
-            data.user_id = user
-        elif data.user_id == wtypes.Unset:
-            data.user_id = pecan.request.headers.get('X-User-Id')
-        if project:
-            data.project_id = project
-        elif data.project_id == wtypes.Unset:
-            data.project_id = pecan.request.headers.get('X-Project-Id')
+        user_limit, project_limit = acl.get_limited_to(pecan.request.headers)
+
+        def _set_ownership(aspect, owner_limitation, header):
+            attr = '%s_id' % aspect
+            requested_owner = getattr(data, attr)
+            explicit_owner = requested_owner != wtypes.Unset
+            caller = pecan.request.headers.get(header)
+            if (owner_limitation and explicit_owner
+                    and requested_owner != caller):
+                raise ProjectNotAuthorized(requested_owner, aspect)
+
+            actual_owner = (owner_limitation or
+                            requested_owner if explicit_owner else caller)
+            setattr(data, attr, actual_owner)
+
+        _set_ownership('user', user_limit, 'X-User-Id')
+        _set_ownership('project', project_limit, 'X-Project-Id')
+
         data.timestamp = now
         data.state_timestamp = now
 
@@ -2010,7 +2093,7 @@ class AlarmsController(rest.RestController):
         #Timestamp is not supported field for Simple Alarm queries
         kwargs = _query_to_kwargs(q,
                                   pecan.request.storage_conn.get_alarms,
-                                  is_timestamp_valid=False)
+                                  allow_timestamps=False)
         return [Alarm.from_db_model(m)
                 for m in pecan.request.storage_conn.get_alarms(**kwargs)]
 
@@ -2254,9 +2337,15 @@ class QuerySamplesController(rest.RestController):
 
         :param body: Query rules for the samples to be returned.
         """
+        sample_name_mapping = {"resource": "resource_id",
+                               "meter": "counter_name",
+                               "type": "counter_type",
+                               "unit": "counter_unit",
+                               "volume": "counter_volume"}
+
         query = ValidatedComplexQuery(body,
                                       storage.models.Sample,
-                                      ["user", "project", "resource"],
+                                      sample_name_mapping,
                                       metadata_allowed=True)
         query.validate(visibility_field="project_id")
         conn = pecan.request.storage_conn
@@ -2276,8 +2365,7 @@ class QueryAlarmHistoryController(rest.RestController):
         :param body: Query rules for the alarm history to be returned.
         """
         query = ValidatedComplexQuery(body,
-                                      storage.models.AlarmChange,
-                                      ["user", "project"])
+                                      storage.models.AlarmChange)
         query.validate(visibility_field="on_behalf_of")
         conn = pecan.request.storage_conn
         return [AlarmChange.from_db_model(s)
@@ -2298,8 +2386,7 @@ class QueryAlarmsController(rest.RestController):
         :param body: Query rules for the alarms to be returned.
         """
         query = ValidatedComplexQuery(body,
-                                      storage.models.Alarm,
-                                      ["user", "project"])
+                                      storage.models.Alarm)
         query.validate(visibility_field="project_id")
         conn = pecan.request.storage_conn
         return [Alarm.from_db_model(s)
@@ -2373,6 +2460,9 @@ class CapabilitiesController(rest.RestController):
 
     @wsme_pecan.wsexpose(Capabilities)
     def get(self):
+        """Returns a flattened dictionary of API capabilities supported
+           by the currently configured storage driver.
+        """
         # variation in API capabilities is effectively determined by
         # the lack of strict feature parity across storage drivers
         driver_capabilities = pecan.request.storage_conn.get_capabilities()
