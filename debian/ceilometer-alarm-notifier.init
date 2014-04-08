@@ -26,7 +26,7 @@ LOCK_DIR=/var/lock/${SYS_NAME}
 PID_DIR=/var/run/${SYS_NAME}
 PID_FILE=${PID_DIR}/${NAME}.pid
 LOGFILE=/var/log/${SYS_NAME}/${NAME}.log
-DAEMON_ARGS="--config-file=/etc/${SYS_NAME}/ceilometer.conf --log-file=$LOGFILE"
+DAEMON_ARGS="--config-file=/etc/${SYS_NAME}/ceilometer.conf"
 
 [ -x $DAEMON ] || exit 0
 
@@ -36,6 +36,12 @@ for i in ${LOCK_DIR} ${PID_DIR} ; do
 done
 
 . /lib/lsb/init-functions
+
+[ -r /etc/default/openstack ] && . /etc/default/openstack
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+[ "x$USE_SYSLOG" = "xyes" ] && DAEMON_ARGS="$DAEMON_ARGS --use-syslog"
+[ "x$USE_LOGFILE" != "xno" ] && DAEMON_ARGS="$DAEMON_ARGS --log-file=$LOGFILE"
 
 do_start() {
 	start-stop-daemon --start \

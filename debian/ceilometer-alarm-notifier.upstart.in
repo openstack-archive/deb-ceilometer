@@ -14,4 +14,12 @@ pre-start script
 	chown ceilometer:ceilometer /var/lock/ceilometer
 end script
 
-exec su -s /bin/sh -c "exec ceilometer-alarm-notifier --config-file /etc/ceilometer/ceilometer.conf --log-file /var/log/ceilometer/ceilometer-alarm-notifier.log" ceilometer
+script
+	[ -r /etc/default/openstack ] && . /etc/default/openstack
+	[ -r /etc/default/$UPSTART_JOB ] && . /etc/default/$UPSTART_JOB
+
+	[ "x$USE_SYSLOG" = "xyes" ] && DAEMON_ARGS="$DAEMON_ARGS --use-syslog"
+	[ "x$USE_LOGFILE" != "xno" ] && DAEMON_ARGS="$DAEMON_ARGS --log-file /var/log/ceilometer/$UPSTART_JOB.log"
+
+	exec su -s /bin/sh -c "exec ceilometer-alarm-notifier --config-file /etc/ceilometer/ceilometer.conf $DAEMON_ARGS" ceilometer
+end script
