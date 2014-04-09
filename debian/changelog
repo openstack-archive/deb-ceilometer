@@ -1,5 +1,6 @@
-ceilometer (2014.1~rc1-2) experimental; urgency=medium
+ceilometer (2014.1~rc2-1) experimental; urgency=medium
 
+  * New upstream release.
   * Documents: using mongodb by default.
 
  -- Thomas Goirand <zigo@debian.org>  Fri, 04 Apr 2014 09:27:37 +0000
