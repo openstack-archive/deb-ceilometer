@@ -1,3 +1,9 @@
+ceilometer (2013.2.3-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 09 Apr 2014 20:02:01 +0800
+
 ceilometer (2013.2.2-4) unstable; urgency=medium
 
   * Updated ru.po thanks to Yuri Kozlov (Closes: #736703).
