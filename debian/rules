@@ -35,8 +35,14 @@ override_dh_auto_clean:
 	find . -iname '*.pyc' -delete
 	rm -rf .testrepository nova_tests/.testrepository
 
-ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	./run-tests.sh || true
-	#PYTHONPATH=. nosetests -P || true
+ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+	rm -rf .testrepository
+	testr init
+	set -e && \
+		TEMP_REZ=`mktemp -t` && \
+		bash -x ./setup-test-env.sh testr run --subunit 'tests\.(?!.*test_bin.*)' | tee $$TEMP_REZ | subunit2pyunit || true ; \
+		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats || true ; \
+		rm -f $$TEMP_REZ ;
+	testr slowest
 endif

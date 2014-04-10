@@ -2,6 +2,8 @@ ceilometer (2013.2.3-1) unstable; urgency=low
 
   * New upstream release.
   * Refreshed patches.
+  * Using testr directly to run unit tests, and skipping binary tests which
+    will only work once Ceilometer itself is installed.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 09 Apr 2014 20:02:01 +0800
 
