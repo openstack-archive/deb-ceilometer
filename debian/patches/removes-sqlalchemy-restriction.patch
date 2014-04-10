@@ -5,8 +5,8 @@ Last-Update: 2013-09-22
 
 Index: ceilometer/requirements.txt
 ===================================================================
---- ceilometer.orig/requirements.txt	2013-12-16 16:08:38.000000000 +0800
-+++ ceilometer/requirements.txt	2013-12-16 16:15:27.000000000 +0800
+--- ceilometer.orig/requirements.txt	2014-04-10 13:57:50.000000000 +0800
++++ ceilometer/requirements.txt	2014-04-10 13:57:51.000000000 +0800
 @@ -3,7 +3,7 @@
  kombu>=2.4.8
  iso8601>=0.1.8
@@ -14,5 +14,5 @@ Index: ceilometer/requirements.txt
 -SQLAlchemy>=0.7.8,<=0.7.99
 +SQLAlchemy>=0.7.8
  sqlalchemy-migrate>=0.7.2
- alembic>=0.4.1
+ alembic>=0.4.1,<0.6.4
  netaddr

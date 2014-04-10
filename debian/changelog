@@ -1,6 +1,7 @@
 ceilometer (2013.2.3-1) unstable; urgency=low
 
   * New upstream release.
+  * Refreshed patches.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 09 Apr 2014 20:02:01 +0800
 
