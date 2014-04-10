@@ -37,11 +37,12 @@ override_dh_auto_clean:
 
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+	chmod +x ./debian/setup-test-env.sh
 	rm -rf .testrepository
 	testr init
 	set -e && \
 		TEMP_REZ=`mktemp -t` && \
-		testr run --subunit 'tests\.(?!.*test_bin.*)' | tee $$TEMP_REZ | subunit2pyunit || true ; \
+		bash -x ./debian/setup-test-env.sh testr run --subunit 'tests\.(?!.*test_bin.*)' | tee $$TEMP_REZ | subunit2pyunit || true ; \
 		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats || true ; \
 		rm -f $$TEMP_REZ ;
 	testr slowest
