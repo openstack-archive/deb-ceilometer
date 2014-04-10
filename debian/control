@@ -63,8 +63,9 @@ Build-Depends-Indep: alembic (>= 0.4.2),
                      python-webob (>= 1.2.3),
                      python-wsme (>= 0.5b6),
                      python-yaml,
+                     subunit,
                      testrepository (>= 0.0.13)
-Standards-Version: 3.9.4
+Standards-Version: 3.9.5
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=openstack/ceilometer.git;a=summary
 Vcs-Git: git://anonscm.debian.org/openstack/ceilometer.git
 Homepage: http://wiki.openstack.org/Ceilometer
