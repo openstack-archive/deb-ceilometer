@@ -1,3 +1,9 @@
+ceilometer (2014.1-2) UNRELEASED; urgency=low
+
+  * Fixed long description typo (Closes: #745321).
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 21 Apr 2014 11:33:25 +0800
+
 ceilometer (2014.1-1) unstable; urgency=medium
 
   * New upstream release.
