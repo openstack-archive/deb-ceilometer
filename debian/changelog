@@ -2,6 +2,7 @@ ceilometer (2014.1-2) UNRELEASED; urgency=low
 
   * Fixed long description typo (Closes: #745321).
   * Delete var/lib/ceilometer & /var/log/ceilometer on purge (Closes: #732457).
+  * Updated it.po debconf translation (Closes: #745387).
 
  -- Thomas Goirand <zigo@debian.org>  Fri, 02 May 2014 19:20:36 +0800
 
