@@ -11,6 +11,7 @@ if [ "${1}" = "purge" ] ; then
 	rmdir --ignore-fail-on-non-empty /var/lib/nova/cache || true
 	rmdir --ignore-fail-on-non-empty /var/lib/nova || true
 	rmdir --ignore-fail-on-non-empty /var/log/nova || true
+	rm -rf /var/lib/ceilometer /var/log/ceilometer
 fi
 
 #DEBHELPER#
