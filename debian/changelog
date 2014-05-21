@@ -1,3 +1,9 @@
+ceilometer (2014.1-6) unstable; urgency=medium
+
+  * Adds Add_aggregator_transformer.patch.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 22 May 2014 00:06:15 +0800
+
 ceilometer (2014.1-5) unstable; urgency=medium
 
   * Added Opencontrail_network_statistics_driver.patch.
