@@ -1,6 +1,7 @@
 ceilometer (2014.1-5) unstable; urgency=medium
 
   * Added Opencontrail_network_statistics_driver.patch.
+  * Added version depends for python-pysnmp4 (now >= 4.2.1).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 21 May 2014 08:20:48 +0800
 
