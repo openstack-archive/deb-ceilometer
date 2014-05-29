@@ -1,3 +1,9 @@
+ceilometer (2014.1-7) unstable; urgency=medium
+
+  * Switched from restarting daemons to copytruncate for logrotate.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 29 May 2014 13:51:53 +0800
+
 ceilometer (2014.1-6) unstable; urgency=medium
 
   * Adds Add_aggregator_transformer.patch.
