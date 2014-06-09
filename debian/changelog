@@ -1,3 +1,9 @@
+ceilometer (2014.1.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 09 Jun 2014 21:46:22 +0800
+
 ceilometer (2014.1-7) unstable; urgency=medium
 
   * Switched from restarting daemons to copytruncate for logrotate.
