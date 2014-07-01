@@ -17,9 +17,12 @@ override_dh_clean:
 
 override_dh_install:
 	dh_install
+
+	# Manage ceilometer.conf
 	PYTHONPATH=. bash tools/config/generate_sample.sh -b . -p ceilometer -o $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common
 	mv $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
 	chmod 0644 $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
+	sed -i 's|#connection=|connection=mongodb://localhost:27017/ceilometer|' $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
 
 override_dh_auto_build:
 	dh_auto_build
