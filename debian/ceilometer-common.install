@@ -3,4 +3,3 @@
 tools/show_data.py usr/share/doc/ceilometer
 etc/ceilometer/pipeline.yaml	/etc/ceilometer
 etc/ceilometer/policy.json	/etc/ceilometer
-etc/ceilometer/sources.json	/etc/ceilometer
