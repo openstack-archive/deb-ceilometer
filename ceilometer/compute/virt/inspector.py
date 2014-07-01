@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
 #         Doug Hellmann <doug.hellmann@dreamhost.com>
@@ -23,7 +22,7 @@ import collections
 from oslo.config import cfg
 from stevedore import driver
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 
 

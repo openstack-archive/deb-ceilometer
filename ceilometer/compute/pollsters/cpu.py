@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -21,7 +20,7 @@
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -56,9 +55,8 @@ class CPUPollster(plugin.ComputePollster):
                 LOG.debug(_('Obtaining CPU time is not implemented for %s'
                             ), manager.inspector.__class__.__name__)
             except Exception as err:
-                LOG.error(_('could not get CPU time for %(id)s: %(e)s') % (
-                          {'id': instance.id, 'e': err}))
-                LOG.exception(err)
+                LOG.exception(_('could not get CPU time for %(id)s: %(e)s'),
+                              {'id': instance.id, 'e': err})
 
 
 class CPUUtilPollster(plugin.ComputePollster):
@@ -85,8 +83,8 @@ class CPUUtilPollster(plugin.ComputePollster):
                 LOG.debug(_('Exception while getting samples %s'), err)
             except NotImplementedError:
                 # Selected inspector does not implement this pollster.
-                LOG.debug(_('Obtaining CPU Util is not implemented for %s'
-                            ), manager.inspector.__class__.__name__)
+                LOG.debug(_('Obtaining CPU Util is not implemented for %s'),
+                          manager.inspector.__class__.__name__)
             except Exception as err:
-                LOG.error(_('Could not get CPU Util for %(id)s: %(e)s'), (
-                          {'id': instance.id, 'e': err}))
+                LOG.exception(_('Could not get CPU Util for %(id)s: %(e)s'),
+                              {'id': instance.id, 'e': err})

@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright Ericsson AB 2013. All rights reserved
 #
@@ -29,11 +28,11 @@ from ceilometer import storage as storage
 
 
 class FakeComplexQuery(api.ValidatedComplexQuery):
-    def __init__(self, db_model, additional_name_mapping={}, metadata=False):
+    def __init__(self, db_model, additional_name_mapping=None, metadata=False):
         super(FakeComplexQuery, self).__init__(query=None,
                                                db_model=db_model,
                                                additional_name_mapping=
-                                               additional_name_mapping,
+                                               additional_name_mapping or {},
                                                metadata_allowed=metadata)
 
 
@@ -389,6 +388,12 @@ class TestFilterSyntaxValidation(test.BaseTestCase):
     def test_not_with_more_than_one_child_is_invalid(self):
         filter = {"not": {"=": {"project_id": "value"},
                           "!=": {"resource_id": "value"}}}
+        self.assertRaises(jsonschema.ValidationError,
+                          self.query._validate_filter,
+                          filter)
+
+    def test_empty_in_query_not_passing(self):
+        filter = {"in": {"resource_id": []}}
         self.assertRaises(jsonschema.ValidationError,
                           self.query._validate_filter,
                           filter)

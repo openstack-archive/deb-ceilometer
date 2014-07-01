@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -46,7 +45,7 @@ class TestDiskPollsters(base.TestPollsterBase):
         mgr = manager.AgentManager()
         cache = {}
         samples = list(pollster.get_samples(mgr, cache, [self.instance]))
-        assert samples
+        self.assertIsNotEmpty(samples)
         self.assertIn(pollster.CACHE_KEY_DISK, cache)
         self.assertIn(self.instance.name, cache[pollster.CACHE_KEY_DISK])
 
@@ -96,7 +95,7 @@ class TestDiskRatePollsters(base.TestPollsterBase):
         mgr = manager.AgentManager()
         cache = {}
         samples = list(pollster.get_samples(mgr, cache, [self.instance]))
-        assert samples
+        self.assertIsNotEmpty(samples)
         self.assertIsNotNone(samples)
         self.assertIn(pollster.CACHE_KEY_DISK_RATE, cache)
         self.assertIn(self.instance.id, cache[pollster.CACHE_KEY_DISK_RATE])

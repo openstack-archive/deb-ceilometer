@@ -1,7 +1,6 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 eNovance <licensing@enovance.com>
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -41,15 +40,14 @@ reseller_prefix = AUTH_
 from __future__ import absolute_import
 
 from swift.common import utils
-import webob
 
-REQUEST = webob
 try:
     # Swift >= 1.7.5
     import swift.common.swob
     REQUEST = swift.common.swob
 except ImportError:
-    pass
+    import webob
+    REQUEST = webob
 
 try:
     # Swift > 1.7.5 ... module exists but doesn't contain class.

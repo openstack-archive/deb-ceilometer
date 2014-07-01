@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -30,6 +29,12 @@ API_SERVICE_OPTS = [
                default='0.0.0.0',
                help='The listen IP for the ceilometer API server.',
                ),
+    cfg.BoolOpt('enable_reverse_dns_lookup',
+                default=False,
+                help=('Set it to False if your environment does not need '
+                      'or have dns server, otherwise it will delay the '
+                      'response from api.')
+                ),
 ]
 
 CONF = cfg.CONF

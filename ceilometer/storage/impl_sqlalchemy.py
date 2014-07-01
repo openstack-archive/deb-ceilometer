@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Author: John Tran <jhtran@att.com>
 #         Julien Danjou <julien@danjou.info>
@@ -23,6 +22,7 @@ import operator
 import os
 import types
 
+from oslo.config import cfg
 from sqlalchemy import and_
 from sqlalchemy import asc
 from sqlalchemy import desc
@@ -33,73 +33,18 @@ from sqlalchemy import or_
 from sqlalchemy.orm import aliased
 
 from ceilometer.openstack.common.db import exception as dbexc
+from ceilometer.openstack.common.db.sqlalchemy import migration
 import ceilometer.openstack.common.db.sqlalchemy.session as sqlalchemy_session
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models as api_models
-from ceilometer.storage.sqlalchemy import migration
 from ceilometer.storage.sqlalchemy import models
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
-
-
-class SQLAlchemyStorage(base.StorageEngine):
-    """Put the data into a SQLAlchemy database.
-
-    Tables::
-
-        - user
-          - { id: user uuid }
-        - source
-          - { id: source id }
-        - project
-          - { id: project uuid }
-        - meter
-          - meter definition
-          - { id: meter def id
-              name: meter name
-              type: meter type
-              unit: meter unit
-              }
-        - sample
-          - the raw incoming data
-          - { id: sample id
-              meter_id: meter id            (->meter.id)
-              user_id: user uuid            (->user.id)
-              project_id: project uuid      (->project.id)
-              resource_id: resource uuid    (->resource.id)
-              resource_metadata: metadata dictionaries
-              volume: sample volume
-              timestamp: datetime
-              message_signature: message signature
-              message_id: message uuid
-              }
-        - resource
-          - the metadata for resources
-          - { id: resource uuid
-              resource_metadata: metadata dictionaries
-              project_id: project uuid      (->project.id)
-              user_id: user uuid            (->user.id)
-              }
-        - sourceassoc
-          - the relationships
-          - { sample_id: sample id           (->sample.id)
-              project_id: project uuid      (->project.id)
-              resource_id: resource uuid    (->resource.id)
-              user_id: user uuid            (->user.id)
-              source_id: source id          (->source.id)
-              }
-    """
-
-    @staticmethod
-    def get_connection(conf):
-        """Return a Connection instance based on the configuration settings.
-        """
-        return Connection(conf)
 
 
 META_TYPE_MAP = {bool: models.MetaBool,
@@ -164,6 +109,11 @@ AVAILABLE_CAPABILITIES = {
 }
 
 
+AVAILABLE_STORAGE_CAPABILITIES = {
+    'storage': {'production_ready': True},
+}
+
+
 def apply_metaquery_filter(session, query, metaquery):
     """Apply provided metaquery filter to existing query.
 
@@ -171,20 +121,25 @@ def apply_metaquery_filter(session, query, metaquery):
     :param query: Query instance
     :param metaquery: dict with metadata to match on.
     """
-
-    for k, v in metaquery.iteritems():
+    for k, value in metaquery.iteritems():
         key = k[9:]  # strip out 'metadata.' prefix
         try:
-            _model = META_TYPE_MAP[type(v)]
+            _model = META_TYPE_MAP[type(value)]
         except KeyError:
             raise NotImplementedError('Query on %(key)s is of %(value)s '
                                       'type and is not supported' %
-                                      {"key": k, "value": type(v)})
+                                      {"key": k, "value": type(value)})
         else:
-            meta_q = session.query(_model).\
-                filter(and_(_model.meta_key == key,
-                            _model.value == v)).subquery()
-            query = query.filter(models.Sample.id == meta_q.c.id)
+            meta_alias = aliased(_model)
+            on_clause = and_(models.Sample.id == meta_alias.id,
+                             meta_alias.meta_key == key)
+            # outer join is needed to support metaquery
+            # with or operator on non existent metadata field
+            # see: test_query_non_existing_metadata_with_result
+            # test case.
+            query = query.outerjoin(meta_alias, on_clause)
+            query = query.filter(meta_alias.value == value)
+
     return query
 
 
@@ -203,8 +158,8 @@ def make_query_from_filter(session, query, sample_filter, require_meter=True):
     elif require_meter:
         raise RuntimeError('Missing required meter specifier')
     if sample_filter.source:
-        query = query.filter(models.Sample.sources.any(
-            id=sample_filter.source))
+        query = query.filter(
+            models.Sample.source_id == sample_filter.source)
     if sample_filter.start:
         ts_start = sample_filter.start
         if sample_filter.start_timestamp_op == 'gt':
@@ -237,65 +192,63 @@ def make_query_from_filter(session, query, sample_filter, require_meter=True):
 
 
 class Connection(base.Connection):
-    """SqlAlchemy connection."""
+    """Put the data into a SQLAlchemy database.
 
-    def __init__(self, conf):
-        url = conf.database.connection
-        if url == 'sqlite://':
-            conf.database.connection = \
-                os.environ.get('CEILOMETER_TEST_SQL_URL', url)
+    Tables::
 
-        # NOTE(Alexei_987) Related to bug #1271103
-        #                  we steal objects from sqlalchemy_session
-        #                  to manage their lifetime on our own.
-        #                  This is needed to open several db connections
-        self._engine = sqlalchemy_session.get_engine()
-        self._maker = sqlalchemy_session.get_maker(self._engine)
-        sqlalchemy_session._ENGINE = None
-        sqlalchemy_session._MAKER = None
-        self._CAPABILITIES = utils.update_nested(self.DEFAULT_CAPABILITIES,
-                                                 AVAILABLE_CAPABILITIES)
+        - meter
+          - meter definition
+          - { id: meter def id
+              name: meter name
+              type: meter type
+              unit: meter unit
+              }
+        - sample
+          - the raw incoming data
+          - { id: sample id
+              meter_id: meter id            (->meter.id)
+              user_id: user uuid
+              project_id: project uuid
+              resource_id: resource uuid
+              source_id: source id
+              resource_metadata: metadata dictionaries
+              volume: sample volume
+              timestamp: datetime
+              message_signature: message signature
+              message_id: message uuid
+              }
+    """
+    CAPABILITIES = utils.update_nested(base.Connection.CAPABILITIES,
+                                       AVAILABLE_CAPABILITIES)
+    STORAGE_CAPABILITIES = utils.update_nested(
+        base.Connection.STORAGE_CAPABILITIES,
+        AVAILABLE_STORAGE_CAPABILITIES,
+    )
 
-    def _get_db_session(self):
-        return self._maker()
+    def __init__(self, url):
+        self._engine_facade = sqlalchemy_session.EngineFacade.from_config(
+            url,
+            cfg.CONF  # TODO(Alexei_987) Remove access to global CONF object
+        )
 
     def upgrade(self):
-        migration.db_sync(self._engine)
+        path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                            'sqlalchemy', 'migrate_repo')
+        migration.db_sync(self._engine_facade.get_engine(), path)
 
     def clear(self):
+        engine = self._engine_facade.get_engine()
         for table in reversed(models.Base.metadata.sorted_tables):
-            self._engine.execute(table.delete())
-        self._maker.close_all()
-        self._engine.dispose()
-
-    @staticmethod
-    def _create_or_update(session, model_class, _id, source=None, **kwargs):
-        if not _id:
-            return None
-        try:
-            with session.begin(subtransactions=True):
-                obj = session.query(model_class).get(str(_id))
-                if obj is None:
-                    obj = model_class(id=str(_id))
-                    session.add(obj)
-
-                if source and not filter(lambda x: x.id == source.id,
-                                         obj.sources):
-                    obj.sources.append(source)
-                for k in kwargs:
-                    setattr(obj, k, kwargs[k])
-        except dbexc.DBDuplicateEntry:
-            # requery the object from the db if this is an other
-            # parallel/previous call of record_metering_data that
-            # have successfully created this object
-            obj = Connection._create_or_update(session, model_class,
-                                               _id, source, **kwargs)
-        return obj
+            engine.execute(table.delete())
+        self._engine_facade._session_maker.close_all()
+        engine.dispose()
 
     @staticmethod
     def _create_meter(session, name, type, unit):
         try:
-            with session.begin(subtransactions=True):
+            nested = session.connection().dialect.name != 'sqlite'
+            with session.begin(nested=nested,
+                               subtransactions=not nested):
                 obj = session.query(models.Meter)\
                     .filter(models.Meter.name == name)\
                     .filter(models.Meter.type == type)\
@@ -304,6 +257,7 @@ class Connection(base.Connection):
                     obj = models.Meter(name=name, type=type, unit=unit)
                     session.add(obj)
         except dbexc.DBDuplicateEntry:
+            # retry function to pick up duplicate committed object
             obj = Connection._create_meter(session, name, type, unit)
 
         return obj
@@ -314,38 +268,25 @@ class Connection(base.Connection):
         :param data: a dictionary such as returned by
                      ceilometer.meter.meter_message_from_counter
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
-            # Record the updated resource metadata
-            rmetadata = data['resource_metadata']
-            source = self._create_or_update(session, models.Source,
-                                            data['source'])
-            user = self._create_or_update(session, models.User,
-                                          data['user_id'], source)
-            project = self._create_or_update(session, models.Project,
-                                             data['project_id'], source)
-            resource = self._create_or_update(session, models.Resource,
-                                              data['resource_id'], source,
-                                              user=user, project=project,
-                                              resource_metadata=rmetadata)
-
             # Record the raw data for the sample.
+            rmetadata = data['resource_metadata']
             meter = self._create_meter(session,
                                        data['counter_name'],
                                        data['counter_type'],
                                        data['counter_unit'])
-            sample = models.Sample(meter_id=meter.id,
-                                   resource=resource)
+            sample = models.Sample(meter_id=meter.id)
             session.add(sample)
-            if not filter(lambda x: x.id == source.id, sample.sources):
-                sample.sources.append(source)
-            sample.project = project
-            sample.user = user
+            sample.resource_id = data['resource_id']
+            sample.project_id = data['project_id']
+            sample.user_id = data['user_id']
             sample.timestamp = data['timestamp']
             sample.resource_metadata = rmetadata
             sample.volume = data['counter_volume']
             sample.message_signature = data['message_signature']
             sample.message_id = data['message_id']
+            sample.source_id = data['source']
             session.flush()
 
             if rmetadata:
@@ -369,7 +310,7 @@ class Connection(base.Connection):
 
         """
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
             end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
             sample_query = session.query(models.Sample)\
@@ -377,60 +318,10 @@ class Connection(base.Connection):
             for sample_obj in sample_query.all():
                 session.delete(sample_obj)
 
-            query = session.query(models.User).filter(
-                ~models.User.id.in_(session.query(models.Sample.user_id)
-                                    .group_by(models.Sample.user_id)),
-                ~models.User.id.in_(session.query(models.AlarmChange.user_id)
-                                    .group_by(models.AlarmChange.user_id))
-            )
-            for user_obj in query.all():
-                session.delete(user_obj)
-
-            query = session.query(models.Project)\
-                .filter(~models.Project.id.in_(
-                    session.query(models.Sample.project_id)
-                        .group_by(models.Sample.project_id)),
-                        ~models.Project.id.in_(
-                            session.query(models.AlarmChange.project_id)
-                            .group_by(models.AlarmChange.project_id)),
-                        ~models.Project.id.in_(
-                            session.query(models.AlarmChange.on_behalf_of)
-                            .group_by(models.AlarmChange.on_behalf_of))
-                        )
-            for project_obj in query.all():
-                session.delete(project_obj)
-
-            query = session.query(models.Resource)\
-                .filter(~models.Resource.id.in_(
-                    session.query(models.Sample.resource_id).group_by(
-                        models.Sample.resource_id)))
-            for res_obj in query.all():
-                session.delete(res_obj)
-
-    def get_users(self, source=None):
-        """Return an iterable of user id strings.
-
-        :param source: Optional source filter.
-        """
-        query = self._get_db_session().query(models.User.id)
-        if source is not None:
-            query = query.filter(models.User.sources.any(id=source))
-        return (x[0] for x in query.all())
-
-    def get_projects(self, source=None):
-        """Return an iterable of project id strings.
-
-        :param source: Optional source filter.
-        """
-        query = self._get_db_session().query(models.Project.id)
-        if source:
-            query = query.filter(models.Project.sources.any(id=source))
-        return (x[0] for x in query.all())
-
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None, pagination=None):
+                      metaquery=None, resource=None, pagination=None):
         """Return an iterable of api_models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -447,16 +338,16 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError('Pagination not implemented')
 
+        metaquery = metaquery or {}
+
         def _apply_filters(query):
-            #TODO(gordc) this should be merged with make_query_from_filter
+            # TODO(gordc) this should be merged with make_query_from_filter
             for column, value in [(models.Sample.resource_id, resource),
                                   (models.Sample.user_id, user),
-                                  (models.Sample.project_id, project)]:
+                                  (models.Sample.project_id, project),
+                                  (models.Sample.source_id, source)]:
                 if value:
                     query = query.filter(column == value)
-            if source:
-                query = query.filter(
-                    models.Sample.sources.any(id=source))
             if metaquery:
                 query = apply_metaquery_filter(session, query, metaquery)
             if start_timestamp:
@@ -475,7 +366,7 @@ class Connection(base.Connection):
                         models.Sample.timestamp < end_timestamp)
             return query
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         # get list of resource_ids
         res_q = session.query(distinct(models.Sample.resource_id))
         res_q = _apply_filters(res_q)
@@ -501,13 +392,13 @@ class Connection(base.Connection):
                     project_id=sample.project_id,
                     first_sample_timestamp=min_q.first().timestamp,
                     last_sample_timestamp=sample.timestamp,
-                    source=sample.sources[0].id,
+                    source=sample.source_id,
                     user_id=sample.user_id,
                     metadata=sample.resource_metadata
                 )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}, pagination=None):
+                   metaquery=None, pagination=None):
         """Return an iterable of api_models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
@@ -521,21 +412,21 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError('Pagination not implemented')
 
+        metaquery = metaquery or {}
+
         def _apply_filters(query):
-            #TODO(gordc) this should be merged with make_query_from_filter
+            # TODO(gordc) this should be merged with make_query_from_filter
             for column, value in [(models.Sample.resource_id, resource),
                                   (models.Sample.user_id, user),
-                                  (models.Sample.project_id, project)]:
+                                  (models.Sample.project_id, project),
+                                  (models.Sample.source_id, source)]:
                 if value:
                     query = query.filter(column == value)
-            if source is not None:
-                query = query.filter(
-                    models.Sample.sources.any(id=source))
             if metaquery:
                 query = apply_metaquery_filter(session, query, metaquery)
             return query
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
 
         # sample_subq is used to reduce sample records
         # by selecting a record for each (resource_id, meter_id).
@@ -561,7 +452,7 @@ class Connection(base.Connection):
                 unit=sample.counter_unit,
                 resource_id=sample.resource_id,
                 project_id=sample.project_id,
-                source=sample.sources[0].id,
+                source=sample.source_id,
                 user_id=sample.user_id)
 
     def _retrieve_samples(self, query):
@@ -572,10 +463,7 @@ class Connection(base.Connection):
             # the sample was inserted. It is an implementation
             # detail that should not leak outside of the driver.
             yield api_models.Sample(
-                # Replace 'sources' with 'source' to meet the caller's
-                # expectation, Sample.sources contains one and only one
-                # source in the current implementation.
-                source=s.sources[0].id,
+                source=s.source_id,
                 counter_name=s.counter_name,
                 counter_type=s.counter_type,
                 counter_unit=s.counter_unit,
@@ -600,7 +488,7 @@ class Connection(base.Connection):
             return []
 
         table = models.MeterSample
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         query = session.query(table)
         query = make_query_from_filter(session, query, sample_filter,
                                        require_meter=False)
@@ -613,7 +501,7 @@ class Connection(base.Connection):
         if limit == 0:
             return []
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         query = session.query(table)
         transformer = QueryTransformer(table, query)
         if filter_expr is not None:
@@ -668,14 +556,15 @@ class Connection(base.Connection):
 
         select.extend(self._get_aggregate_functions(aggregate))
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
 
         if groupby:
             group_attributes = [getattr(models.Sample, g) for g in groupby]
             select.extend(group_attributes)
 
         query = session.query(*select).filter(
-            models.Meter.id == models.Sample.meter_id)
+            models.Meter.id == models.Sample.meter_id)\
+            .group_by(models.Meter.unit)
 
         if groupby:
             query = query.group_by(*group_attributes)
@@ -744,6 +633,10 @@ class Connection(base.Connection):
             res = self._make_stats_query(sample_filter,
                                          None,
                                          aggregate).first()
+            if not res:
+                # NOTE(liusheng):The 'res' may be NoneType, because no
+                # sample has found with sample filter(s).
+                return
 
         query = self._make_stats_query(sample_filter, groupby, aggregate)
         # HACK(jd) This is an awful method to compute stats by period, but
@@ -805,7 +698,7 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError('Pagination not implemented')
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         query = session.query(models.Alarm)
         if name is not None:
             query = query.filter(models.Alarm.name == name)
@@ -825,7 +718,7 @@ class Connection(base.Connection):
 
         :param alarm: The alarm to create.
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
             alarm_row = models.Alarm(alarm_id=alarm.alarm_id)
             alarm_row.update(alarm.as_dict())
@@ -838,12 +731,8 @@ class Connection(base.Connection):
 
         :param alarm: the new Alarm to update
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
-            Connection._create_or_update(session, models.User,
-                                         alarm.user_id)
-            Connection._create_or_update(session, models.Project,
-                                         alarm.project_id)
             alarm_row = session.merge(models.Alarm(alarm_id=alarm.alarm_id))
             alarm_row.update(alarm.as_dict())
 
@@ -854,7 +743,7 @@ class Connection(base.Connection):
 
         :param alarm_id: ID of the alarm to delete
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
             session.query(models.Alarm).filter(
                 models.Alarm.alarm_id == alarm_id).delete()
@@ -913,7 +802,7 @@ class Connection(base.Connection):
         :param end_timestamp: Optional modified timestamp end range
         :param end_timestamp_op: Optional timestamp end range operation
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         query = session.query(models.AlarmChange)
         query = query.filter(models.AlarmChange.alarm_id == alarm_id)
 
@@ -947,14 +836,8 @@ class Connection(base.Connection):
     def record_alarm_change(self, alarm_change):
         """Record alarm change event.
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
-            Connection._create_or_update(session, models.User,
-                                         alarm_change['user_id'])
-            Connection._create_or_update(session, models.Project,
-                                         alarm_change['project_id'])
-            Connection._create_or_update(session, models.Project,
-                                         alarm_change['on_behalf_of'])
             alarm_change_row = models.AlarmChange(
                 event_id=alarm_change['event_id'])
             alarm_change_row.update(alarm_change)
@@ -965,7 +848,7 @@ class Connection(base.Connection):
         if it does not, create a new entry in the trait type table.
         """
         if session is None:
-            session = self._get_db_session()
+            session = self._engine_facade.get_session()
         with session.begin(subtransactions=True):
             tt = session.query(models.TraitType).filter(
                 models.TraitType.desc == trait_type,
@@ -997,7 +880,7 @@ class Connection(base.Connection):
         This may result in a flush.
         """
         if session is None:
-            session = self._get_db_session()
+            session = self._engine_facade.get_session()
         with session.begin(subtransactions=True):
             et = session.query(models.EventType).filter(
                 models.EventType.desc == event_type).first()
@@ -1040,7 +923,7 @@ class Connection(base.Connection):
         Flush when they're all added, unless new EventTypes or
         TraitTypes are added along the way.
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         events = []
         problem_events = []
         for event_model in event_models:
@@ -1066,7 +949,7 @@ class Connection(base.Connection):
 
         start = event_filter.start_time
         end = event_filter.end_time
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         LOG.debug(_("Getting events that match filter: %s") % event_filter)
         with session.begin():
             event_query = session.query(models.Event)
@@ -1167,7 +1050,7 @@ class Connection(base.Connection):
         """Return all event types as an iterable of strings.
         """
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
             query = session.query(models.EventType.desc)\
                 .order_by(models.EventType.desc)
@@ -1182,7 +1065,7 @@ class Connection(base.Connection):
 
         :param event_type: the type of the Event
         """
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
 
         LOG.debug(_("Get traits for %s") % event_type)
         with session.begin():
@@ -1214,7 +1097,7 @@ class Connection(base.Connection):
         :param trait_type: the name of the Trait to filter by
         """
 
-        session = self._get_db_session()
+        session = self._engine_facade.get_session()
         with session.begin():
             trait_type_filters = [models.TraitType.id ==
                                   models.Trait.trait_type_id]
@@ -1235,11 +1118,6 @@ class Connection(base.Connection):
                 yield api_models.Trait(name=type.desc,
                                        dtype=type.data_type,
                                        value=trait.get_value())
-
-    def get_capabilities(self):
-        """Return an dictionary representing the capabilities of this driver.
-        """
-        return self._CAPABILITIES
 
 
 class QueryTransformer(object):

@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance
+# Copyright 2013 eNovance
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -21,8 +20,10 @@ import mock
 import requests
 
 from ceilometer.alarm import service
+from ceilometer import messaging
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common.fixture import config
+from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer.openstack.common import test
 
 
@@ -41,15 +42,18 @@ class TestAlarmNotifier(test.BaseTestCase):
 
     def setUp(self):
         super(TestAlarmNotifier, self).setUp()
+        messaging.setup('fake://')
+        self.addCleanup(messaging.cleanup)
+
         self.CONF = self.useFixture(config.Config()).conf
-        self.service = service.AlarmNotifierService('somehost', 'sometopic')
+        self.service = service.AlarmNotifierService()
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def test_init_host(self):
         # If we try to create a real RPC connection, init_host() never
         # returns. Mock it out so we can establish the service
         # configuration.
-        with mock.patch('ceilometer.openstack.common.rpc.create_connection'):
+        with mock.patch.object(self.service.rpc_server, 'start'):
             self.service.start()
 
     def test_notify_alarm(self):
@@ -199,3 +203,21 @@ class TestAlarmNotifier(test.BaseTestCase):
                     'condition': {'threshold': 42},
                 })
             self.assertTrue(LOG.error.called)
+
+    def test_notify_alarm_trust_action(self):
+        action = 'trust+http://trust-1234@host/action'
+        url = 'http://host/action'
+
+        client = mock.MagicMock()
+        client.auth_token = 'token_1234'
+
+        self.useFixture(mockpatch.Patch('keystoneclient.v3.client.Client',
+                                        lambda **kwargs: client))
+
+        with mock.patch('eventlet.spawn_n', self._fake_spawn_n):
+            with mock.patch.object(requests, 'post') as poster:
+                self.service.notify_alarm(context.get_admin_context(),
+                                          self._notification(action))
+                poster.assert_called_with(
+                    url, data=DATA_JSON,
+                    headers={'X-Auth-Token': 'token_1234'})

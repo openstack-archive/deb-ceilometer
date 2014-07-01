@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -20,10 +19,10 @@
 
 import mock
 
-from ceilometer.openstack.common import test
+import ceilometer.tests.base as base
 
 
-class TestPollsterBase(test.BaseTestCase):
+class TestPollsterBase(base.BaseTestCase):
 
     def setUp(self):
         super(TestPollsterBase, self).setUp()
@@ -38,6 +37,7 @@ class TestPollsterBase(test.BaseTestCase):
         self.instance.id = 1
         self.instance.flavor = {'name': 'm1.small', 'id': 2, 'vcpus': 1,
                                 'ram': 512, 'disk': 20, 'ephemeral': 0}
+        self.instance.status = 'active'
 
         patch_virt = mock.patch('ceilometer.compute.virt.inspector'
                                 '.get_hypervisor_inspector',

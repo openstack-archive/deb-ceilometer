@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance
+# Copyright 2013 eNovance
 #
 # Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
 #
@@ -24,7 +23,7 @@ import six.moves.urllib.parse as urlparse
 from oslo.config import cfg
 
 from ceilometer.alarm import notifier
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import jsonutils
 from ceilometer.openstack.common import log
 
@@ -54,7 +53,8 @@ class RestAlarmNotifier(notifier.AlarmNotifier):
     """Rest alarm notifier."""
 
     @staticmethod
-    def notify(action, alarm_id, previous, current, reason, reason_data):
+    def notify(action, alarm_id, previous, current, reason, reason_data,
+               headers=None):
         LOG.info(_(
             "Notifying alarm %(alarm_id)s from %(previous)s "
             "to %(current)s with action %(action)s because "
@@ -65,6 +65,8 @@ class RestAlarmNotifier(notifier.AlarmNotifier):
                 'current': current, 'reason': reason,
                 'reason_data': reason_data}
         kwargs = {'data': jsonutils.dumps(body)}
+        if headers:
+            kwargs['headers'] = headers
 
         if action.scheme == 'https':
             default_verify = int(cfg.CONF.alarm.rest_notifier_ssl_verify)

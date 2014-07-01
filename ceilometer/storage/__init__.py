@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -24,7 +23,7 @@ from oslo.config import cfg
 import six
 from stevedore import driver
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import utils
 
@@ -54,7 +53,7 @@ STORAGE_OPTS = [
 cfg.CONF.register_opts(STORAGE_OPTS, group='database')
 
 cfg.CONF.import_opt('connection',
-                    'ceilometer.openstack.common.db.sqlalchemy.session',
+                    'ceilometer.openstack.common.db.options',
                     group='database')
 
 
@@ -67,24 +66,21 @@ class StorageBadAggregate(Exception):
     code = 400
 
 
-def get_engine(conf):
-    """Load the configured engine and return an instance."""
+def get_connection_from_config(conf):
     if conf.database_connection:
         conf.set_override('connection', conf.database_connection,
                           group='database')
-    engine_name = urlparse.urlparse(conf.database.connection).scheme
+    return get_connection(conf.database.connection)
+
+
+def get_connection(url):
+    """Return an open connection to the database."""
+    engine_name = urlparse.urlparse(url).scheme
     LOG.debug(_('looking for %(name)r driver in %(namespace)r') % (
               {'name': engine_name,
                'namespace': STORAGE_ENGINE_NAMESPACE}))
-    mgr = driver.DriverManager(STORAGE_ENGINE_NAMESPACE,
-                               engine_name,
-                               invoke_on_load=True)
-    return mgr.driver
-
-
-def get_connection(conf):
-    """Return an open connection to the database."""
-    return get_engine(conf).get_connection(conf)
+    mgr = driver.DriverManager(STORAGE_ENGINE_NAMESPACE, engine_name)
+    return mgr.driver(url)
 
 
 class SampleFilter(object):
@@ -107,7 +103,7 @@ class SampleFilter(object):
                  end=None, end_timestamp_op=None,
                  resource=None, meter=None,
                  source=None, message_id=None,
-                 metaquery={}):
+                 metaquery=None):
         self.user = user
         self.project = project
         self.start = utils.sanitize_timestamp(start)
@@ -117,7 +113,7 @@ class SampleFilter(object):
         self.resource = resource
         self.meter = meter
         self.source = source
-        self.metaquery = metaquery
+        self.metaquery = metaquery or {}
         self.message_id = message_id
 
 
@@ -140,12 +136,12 @@ class EventFilter(object):
     """
 
     def __init__(self, start_time=None, end_time=None, event_type=None,
-                 message_id=None, traits_filter=[]):
+                 message_id=None, traits_filter=None):
         self.start_time = utils.sanitize_timestamp(start_time)
         self.end_time = utils.sanitize_timestamp(end_time)
         self.message_id = message_id
         self.event_type = event_type
-        self.traits_filter = traits_filter
+        self.traits_filter = traits_filter or []
 
     def __repr__(self):
         return ("<EventFilter(start_time: %s,"

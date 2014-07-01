@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright Ericsson AB 2013. All rights reserved
 #
@@ -19,16 +18,25 @@
 """Common functions for MongoDB and DB2 backends
 """
 
+import time
+
+from oslo.config import cfg
 import pymongo
 import weakref
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import network_utils
 from ceilometer.storage import base
 from ceilometer.storage import models
+from ceilometer import utils
 
 LOG = log.getLogger(__name__)
+
+cfg.CONF.import_opt('max_retries', 'ceilometer.openstack.common.db.options',
+                    group="database")
+cfg.CONF.import_opt('retry_interval', 'ceilometer.openstack.common.db.options',
+                    group="database")
 
 
 def make_timestamp_range(start, end,
@@ -119,45 +127,65 @@ class ConnectionPool(object):
         log_data = {'db': splitted_url.scheme,
                     'nodelist': connection_options['nodelist']}
         LOG.info(_('Connecting to %(db)s on %(nodelist)s') % log_data)
-        client = pymongo.MongoClient(
-            url,
-            safe=True)
+        client = self._mongo_connect(url)
         self._pool[pool_key] = weakref.ref(client)
         return client
+
+    @staticmethod
+    def _mongo_connect(url):
+        max_retries = cfg.CONF.database.max_retries
+        retry_interval = cfg.CONF.database.retry_interval
+        attempts = 0
+        while True:
+            try:
+                client = pymongo.MongoClient(url, safe=True)
+            except pymongo.errors.ConnectionFailure as e:
+                if max_retries >= 0 and attempts >= max_retries:
+                    LOG.error(_('Unable to connect to the database after '
+                                '%(retries)d retries. Giving up.') %
+                              {'retries': max_retries})
+                    raise
+                LOG.warn(_('Unable to connect to the database server: '
+                           '%(errmsg)s. Trying again in %(retry_interval)d '
+                           'seconds.') %
+                         {'errmsg': e, 'retry_interval': retry_interval})
+                attempts += 1
+                time.sleep(retry_interval)
+            else:
+                return client
+
+
+COMMON_AVAILABLE_CAPABILITIES = {
+    'meters': {'query': {'simple': True,
+                         'metadata': True}},
+    'samples': {'query': {'simple': True,
+                          'metadata': True,
+                          'complex': True}},
+    'alarms': {'query': {'simple': True,
+                         'complex': True},
+               'history': {'query': {'simple': True,
+                                     'complex': True}}},
+}
+
+
+AVAILABLE_STORAGE_CAPABILITIES = {
+    'storage': {'production_ready': True},
+}
 
 
 class Connection(base.Connection):
     """Base Connection class for MongoDB and DB2 drivers.
     """
+    CAPABILITIES = utils.update_nested(base.Connection.CAPABILITIES,
+                                       COMMON_AVAILABLE_CAPABILITIES)
 
-    def get_users(self, source=None):
-        """Return an iterable of user id strings.
-
-        :param source: Optional source filter.
-        """
-        q = {}
-        if source is not None:
-            q['source'] = source
-
-        return (doc['_id'] for doc in
-                self.db.user.find(q, fields=['_id'],
-                                  sort=[('_id', pymongo.ASCENDING)]))
-
-    def get_projects(self, source=None):
-        """Return an iterable of project id strings.
-
-        :param source: Optional source filter.
-        """
-        q = {}
-        if source is not None:
-            q['source'] = source
-
-        return (doc['_id'] for doc in
-                self.db.project.find(q, fields=['_id'],
-                                     sort=[('_id', pymongo.ASCENDING)]))
+    STORAGE_CAPABILITIES = utils.update_nested(
+        base.Connection.STORAGE_CAPABILITIES,
+        AVAILABLE_STORAGE_CAPABILITIES,
+    )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}, pagination=None):
+                   metaquery=None, pagination=None):
         """Return an iterable of models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
@@ -170,6 +198,8 @@ class Connection(base.Connection):
 
         if pagination:
             raise NotImplementedError('Pagination not implemented')
+
+        metaquery = metaquery or {}
 
         q = {}
         if user is not None:
@@ -222,7 +252,7 @@ class Connection(base.Connection):
     def record_alarm_change(self, alarm_change):
         """Record alarm change event.
         """
-        self.db.alarm_history.insert(alarm_change)
+        self.db.alarm_history.insert(alarm_change.copy())
 
     def get_samples(self, sample_filter, limit=None):
         """Return an iterable of model.Sample instances.

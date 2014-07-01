@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
-# Copyright © 2013 eNovance
+# Copyright 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2013 eNovance
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #         Julien Danjou <julien@danjou.info>
@@ -36,7 +35,7 @@ class UserMetadataAwareInstanceNotificationBase(
 
     def process_notification(self, message):
         instance_properties = self.get_instance_properties(message)
-        if 'metadata' in instance_properties:
+        if isinstance(instance_properties.get('metadata'), dict):
             src_metadata = instance_properties['metadata']
             del instance_properties['metadata']
             util.add_reserved_user_metadata(src_metadata, instance_properties)

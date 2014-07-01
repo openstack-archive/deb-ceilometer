@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Author: John Tran <jhtran@att.com>
 #
@@ -19,10 +18,8 @@ SQLAlchemy models for Ceilometer data.
 """
 
 import json
-import six.moves.urllib.parse as urlparse
 
-from oslo.config import cfg
-from sqlalchemy import Column, Integer, String, Table, ForeignKey, \
+from sqlalchemy import Column, Integer, String, ForeignKey, \
     Index, UniqueConstraint, BigInteger, join
 from sqlalchemy import Float, Boolean, Text, DateTime
 from sqlalchemy.dialects.mysql import DECIMAL
@@ -35,22 +32,6 @@ from sqlalchemy.types import TypeDecorator
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models as api_models
 from ceilometer import utils
-
-sql_opts = [
-    cfg.StrOpt('mysql_engine',
-               default='InnoDB',
-               help='MySQL engine to use.')
-]
-
-cfg.CONF.register_opts(sql_opts)
-
-
-def table_args():
-    engine_name = urlparse.urlparse(cfg.CONF.database.connection).scheme
-    if engine_name == 'mysql':
-        return {'mysql_engine': cfg.CONF.mysql_engine,
-                'mysql_charset': "utf8"}
-    return None
 
 
 class JSONEncodedDict(TypeDecorator):
@@ -98,7 +79,8 @@ class PreciseTimestamp(TypeDecorator):
 
 class CeilometerBase(object):
     """Base class for Ceilometer Models."""
-    __table_args__ = table_args()
+    __table_args__ = {'mysql_charset': "utf8",
+                      'mysql_engine': "InnoDB"}
     __table_initialized__ = False
 
     def __setitem__(self, key, value):
@@ -114,32 +96,6 @@ class CeilometerBase(object):
 
 
 Base = declarative_base(cls=CeilometerBase)
-
-
-sourceassoc = Table('sourceassoc', Base.metadata,
-                    Column('sample_id', Integer,
-                           ForeignKey("sample.id")),
-                    Column('project_id', String(255),
-                           ForeignKey("project.id")),
-                    Column('resource_id', String(255),
-                           ForeignKey("resource.id")),
-                    Column('user_id', String(255),
-                           ForeignKey("user.id")),
-                    Column('source_id', String(255),
-                           ForeignKey("source.id")))
-
-Index('idx_su', sourceassoc.c['source_id'], sourceassoc.c['user_id']),
-Index('idx_sp', sourceassoc.c['source_id'], sourceassoc.c['project_id']),
-Index('idx_sr', sourceassoc.c['source_id'], sourceassoc.c['resource_id']),
-Index('idx_ss', sourceassoc.c['source_id'], sourceassoc.c['sample_id']),
-Index('ix_sourceassoc_source_id', sourceassoc.c['source_id'])
-UniqueConstraint(sourceassoc.c['sample_id'], sourceassoc.c['user_id'],
-                 name='uniq_sourceassoc0sample_id0user_id')
-
-
-class Source(Base):
-    __tablename__ = 'source'
-    id = Column(String(255), primary_key=True)
 
 
 class MetaText(Base):
@@ -215,16 +171,17 @@ class Sample(Base):
     )
     id = Column(Integer, primary_key=True)
     meter_id = Column(Integer, ForeignKey('meter.id'))
-    user_id = Column(String(255), ForeignKey('user.id'))
-    project_id = Column(String(255), ForeignKey('project.id'))
-    resource_id = Column(String(255), ForeignKey('resource.id'))
+    user_id = Column(String(255))
+    project_id = Column(String(255))
+    resource_id = Column(String(255))
     resource_metadata = Column(JSONEncodedDict())
     volume = Column(Float(53))
-    timestamp = Column(PreciseTimestamp(), default=timeutils.utcnow)
-    recorded_at = Column(PreciseTimestamp(), default=timeutils.utcnow)
+    timestamp = Column(PreciseTimestamp(), default=lambda: timeutils.utcnow())
+    recorded_at = Column(PreciseTimestamp(),
+                         default=lambda: timeutils.utcnow())
     message_signature = Column(String(1000))
     message_id = Column(String(1000))
-    sources = relationship("Source", secondary=lambda: sourceassoc)
+    source_id = Column(String(255))
     meta_text = relationship("MetaText", backref="sample",
                              cascade="all, delete-orphan")
     meta_float = relationship("MetaFloat", backref="sample",
@@ -249,38 +206,6 @@ class MeterSample(Base):
     counter_type = column_property(meter.c.type)
     counter_unit = column_property(meter.c.unit)
     counter_volume = column_property(sample.c.volume)
-    sources = relationship("Source", secondary=lambda: sourceassoc)
-
-
-class User(Base):
-    __tablename__ = 'user'
-    id = Column(String(255), primary_key=True)
-    sources = relationship("Source", secondary=lambda: sourceassoc)
-    resources = relationship("Resource", backref='user')
-    samples = relationship("Sample", backref='user')
-
-
-class Project(Base):
-    __tablename__ = 'project'
-    id = Column(String(255), primary_key=True)
-    sources = relationship("Source", secondary=lambda: sourceassoc)
-    resources = relationship("Resource", backref='project')
-    samples = relationship("Sample", backref='project')
-
-
-class Resource(Base):
-    __tablename__ = 'resource'
-    __table_args__ = (
-        Index('ix_resource_project_id', 'project_id'),
-        Index('ix_resource_user_id', 'user_id'),
-        Index('resource_user_id_project_id_key', 'user_id', 'project_id')
-    )
-    id = Column(String(255), primary_key=True)
-    sources = relationship("Source", secondary=lambda: sourceassoc)
-    resource_metadata = Column(JSONEncodedDict())
-    user_id = Column(String(255), ForeignKey('user.id'))
-    project_id = Column(String(255), ForeignKey('project.id'))
-    samples = relationship("Sample", backref='resource')
 
 
 class Alarm(Base):
@@ -295,13 +220,14 @@ class Alarm(Base):
     name = Column(Text)
     type = Column(String(50))
     description = Column(Text)
-    timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
+    timestamp = Column(PreciseTimestamp, default=lambda: timeutils.utcnow())
 
     user_id = Column(String(255))
     project_id = Column(String(255))
 
     state = Column(String(255))
-    state_timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
+    state_timestamp = Column(PreciseTimestamp,
+                             default=lambda: timeutils.utcnow())
 
     ok_actions = Column(JSONEncodedDict)
     alarm_actions = Column(JSONEncodedDict)
@@ -320,12 +246,12 @@ class AlarmChange(Base):
     )
     event_id = Column(String(255), primary_key=True)
     alarm_id = Column(String(255))
-    on_behalf_of = Column(String(255), ForeignKey('project.id'))
-    project_id = Column(String(255), ForeignKey('project.id'))
-    user_id = Column(String(255), ForeignKey('user.id'))
+    on_behalf_of = Column(String(255))
+    project_id = Column(String(255))
+    user_id = Column(String(255))
     type = Column(String(20))
     detail = Column(Text)
-    timestamp = Column(PreciseTimestamp, default=timeutils.utcnow)
+    timestamp = Column(PreciseTimestamp, default=lambda: timeutils.utcnow())
 
 
 class EventType(Base):

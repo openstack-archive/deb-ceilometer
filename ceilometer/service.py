@@ -1,7 +1,6 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012-2014 eNovance <licensing@enovance.com>
+# Copyright 2012-2014 eNovance <licensing@enovance.com>
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -22,12 +21,11 @@ import socket
 import sys
 
 from oslo.config import cfg
-from stevedore import named
 
+from ceilometer import messaging
 from ceilometer.openstack.common import gettextutils
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import rpc
 from ceilometer import utils
 
 
@@ -37,10 +35,6 @@ OPTS = [
                help='Name of this node, which must be valid in an AMQP '
                'key. Can be an opaque identifier. For ZeroMQ only, must '
                'be a valid host name, FQDN, or IP address.'),
-    cfg.MultiStrOpt('dispatcher',
-                    deprecated_group="collector",
-                    default=['database'],
-                    help='Dispatcher to process data.'),
     cfg.IntOpt('collector_workers',
                default=1,
                help='Number of workers for collector service. A single '
@@ -102,24 +96,6 @@ class WorkerException(Exception):
     """
 
 
-class DispatchedService(object):
-
-    DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
-
-    def start(self):
-        super(DispatchedService, self).start()
-        LOG.debug(_('loading dispatchers from %s'),
-                  self.DISPATCHER_NAMESPACE)
-        self.dispatcher_manager = named.NamedExtensionManager(
-            namespace=self.DISPATCHER_NAMESPACE,
-            names=cfg.CONF.dispatcher,
-            invoke_on_load=True,
-            invoke_args=[cfg.CONF])
-        if not list(self.dispatcher_manager):
-            LOG.warning(_('Failed to load any dispatchers for %s'),
-                        self.DISPATCHER_NAMESPACE)
-
-
 def get_workers(name):
     workers = (cfg.CONF.get('%s_workers' % name) or
                utils.cpu_count())
@@ -134,7 +110,6 @@ def get_workers(name):
 def prepare_service(argv=None):
     gettextutils.install('ceilometer', lazy=True)
     gettextutils.enable_lazy()
-    rpc.set_defaults(control_exchange='ceilometer')
     cfg.set_defaults(log.log_opts,
                      default_log_levels=['amqplib=WARN',
                                          'qpid.messaging=INFO',
@@ -148,3 +123,4 @@ def prepare_service(argv=None):
         argv = sys.argv
     cfg.CONF(argv[1:], project='ceilometer')
     log.setup('ceilometer')
+    messaging.setup()

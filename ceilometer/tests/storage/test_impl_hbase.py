@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012, 2013 Dell Inc.
+# Copyright 2012, 2013 Dell Inc.
 #
 # Author: Stas Maksimov <Stanislav_M@dell.com>
 # Author: Shengjie Min <Shengjie_Min@dell.com>
@@ -27,18 +26,16 @@
 from mock import patch
 
 from ceilometer.storage import impl_hbase as hbase
+from ceilometer.tests import base as test_base
 from ceilometer.tests import db as tests_db
 
 
-class HBaseEngineTestBase(tests_db.TestBase):
-    database_connection = tests_db.HBaseFakeConnectionUrl()
+class ConnectionTest(tests_db.TestBase,
+                     tests_db.MixinTestsWithBackendScenarios):
 
-
-class ConnectionTest(HBaseEngineTestBase):
-
+    @tests_db.run_with('hbase')
     def test_hbase_connection(self):
-        self.CONF.database.connection = str(self.database_connection)
-        conn = hbase.Connection(self.CONF)
+        conn = hbase.Connection(self.db_manager.url)
         self.assertIsInstance(conn.conn_pool.connection(), hbase.MConnection)
 
         class TestConn(object):
@@ -51,14 +48,13 @@ class ConnectionTest(HBaseEngineTestBase):
         def get_connection_pool(conf):
             return TestConn(conf['host'], conf['port'])
 
-        self.CONF.database.connection = 'hbase://test_hbase:9090'
         with patch.object(hbase.Connection, '_get_connection_pool',
                           side_effect=get_connection_pool):
-            conn = hbase.Connection(self.CONF)
+            conn = hbase.Connection('hbase://test_hbase:9090')
         self.assertIsInstance(conn.conn_pool, TestConn)
 
 
-class CapabilitiesTest(HBaseEngineTestBase):
+class CapabilitiesTest(test_base.BaseTestCase):
     # Check the returned capabilities list, which is specific to each DB
     # driver
 
@@ -96,8 +92,15 @@ class CapabilitiesTest(HBaseEngineTestBase):
                                  'complex': False},
                        'history': {'query': {'simple': False,
                                              'complex': False}}},
-            'events': {'query': {'simple': False}}
+            'events': {'query': {'simple': True}},
         }
 
-        actual_capabilities = self.conn.get_capabilities()
+        actual_capabilities = hbase.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_storage_capabilities(self):
+        expected_capabilities = {
+            'storage': {'production_ready': True},
+        }
+        actual_capabilities = hbase.Connection.get_storage_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)

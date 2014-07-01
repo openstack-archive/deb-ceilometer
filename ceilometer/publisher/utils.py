@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #         Tyaptin Ilya <ityaptin@mirantis.com>
@@ -23,6 +22,7 @@ import hashlib
 import hmac
 
 from oslo.config import cfg
+import six
 
 from ceilometer import utils
 
@@ -58,7 +58,7 @@ def compute_signature(message, secret):
             # been part of the original message.
             continue
         digest_maker.update(name)
-        digest_maker.update(unicode(value).encode('utf-8'))
+        digest_maker.update(six.text_type(value).encode('utf-8'))
     return digest_maker.hexdigest()
 
 

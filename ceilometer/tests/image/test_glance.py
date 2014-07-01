@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -113,7 +112,7 @@ class TestManager(manager.AgentManager):
 
     def __init__(self):
         super(TestManager, self).__init__()
-        self.keystone = None
+        self.keystone = mock.Mock()
 
 
 class TestImagePollster(test.BaseTestCase):

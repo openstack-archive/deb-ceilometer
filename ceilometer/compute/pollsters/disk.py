@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -26,7 +25,7 @@ import six
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -98,13 +97,12 @@ class _Base(plugin.ComputePollster):
             except NotImplementedError:
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '
-                            ' %(pollster)s'), ({
-                          'inspector': manager.inspector.__class__.__name__,
-                          'pollster': self.__class__.__name__}))
+                            ' %(pollster)s'),
+                          {'inspector': manager.inspector.__class__.__name__,
+                           'pollster': self.__class__.__name__})
             except Exception as err:
-                LOG.warning(_('Ignoring instance %(name)s: %(error)s') % (
-                            {'name': instance_name, 'error': err}))
-                LOG.exception(err)
+                LOG.exception(_('Ignoring instance %(name)s: %(error)s'),
+                              {'name': instance_name, 'error': err})
 
 
 class ReadRequestsPollster(_Base):
@@ -206,13 +204,13 @@ class _DiskRatesPollsterBase(plugin.ComputePollster):
             except NotImplementedError:
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '
-                            ' %(pollster)s'), ({
-                          'inspector': manager.inspector.__class__.__name__,
-                          'pollster': self.__class__.__name__}))
+                            ' %(pollster)s'),
+                          {'inspector': manager.inspector.__class__.__name__,
+                           'pollster': self.__class__.__name__})
             except Exception as err:
                 instance_name = util.instance_name(instance)
-                LOG.error(_('Ignoring instance %(name)s: %(error)s') % (
-                    {'name': instance_name, 'error': err}))
+                LOG.exception(_('Ignoring instance %(name)s: %(error)s'),
+                              {'name': instance_name, 'error': err})
 
 
 class ReadBytesRatePollster(_DiskRatesPollsterBase):

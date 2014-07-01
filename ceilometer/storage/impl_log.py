@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -18,29 +17,16 @@
 """Simple logging storage backend.
 """
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.storage import base
 
 LOG = log.getLogger(__name__)
 
 
-class LogStorage(base.StorageEngine):
-    """Log the data
-    """
-
-    def get_connection(self, conf):
-        """Return a Connection instance based on the configuration settings.
-        """
-        return Connection(conf)
-
-
 class Connection(base.Connection):
-    """Base class for storage system connections.
+    """Log the data.
     """
-
-    def __init__(self, conf):
-        pass
 
     def upgrade(self):
         pass
@@ -69,24 +55,10 @@ class Connection(base.Connection):
         """
         LOG.info(_("Dropping data with TTL %d"), ttl)
 
-    def get_users(self, source=None):
-        """Return an iterable of user id strings.
-
-        :param source: Optional source filter.
-        """
-        return []
-
-    def get_projects(self, source=None):
-        """Return an iterable of project id strings.
-
-        :param source: Optional source filter.
-        """
-        return []
-
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None, pagination=None):
+                      metaquery=None, resource=None, pagination=None):
         """Return an iterable of dictionaries containing resource information.
 
         { 'resource_id': UUID of the resource,
@@ -111,7 +83,7 @@ class Connection(base.Connection):
         return []
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   limit=None, metaquery={}, pagination=None):
+                   limit=None, metaquery=None, pagination=None):
         """Return an iterable of dictionaries containing meter information.
 
         { 'name': name of the meter,

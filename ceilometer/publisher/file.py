@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright 2013 IBM Corp
 #
@@ -20,7 +19,7 @@ import logging
 import logging.handlers
 import six.moves.urllib.parse as urlparse
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import publisher
 

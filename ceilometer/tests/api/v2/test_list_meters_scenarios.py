@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright 2012 Red Hat, Inc.
 # Copyright 2013 IBM Corp.
@@ -23,15 +22,12 @@ import base64
 import datetime
 import json as jsonutils
 import logging
-import testscenarios
 import webtest.app
 
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 LOG = logging.getLogger(__name__)
 
@@ -136,6 +132,22 @@ class TestListMeters(FunctionalTest,
                                        'is_public': False},
                     source='test_source'),
                 sample.Sample(
+                    'meter.test.new',
+                    'cumulative',
+                    '',
+                    1,
+                    'user-id',
+                    'project-id',
+                    'resource-id',
+                    timestamp=datetime.datetime(2012, 7, 2, 10, 40),
+                    resource_metadata={'display_name': 'test-server',
+                                       'tag': 'self.sample3',
+                                       'size': 0,
+                                       'util': 0.75,
+                                       'is_public': False},
+                    source='test_source'),
+
+                sample.Sample(
                     'meter.mine',
                     'gauge',
                     '',
@@ -163,13 +175,13 @@ class TestListMeters(FunctionalTest,
 
     def test_list_meters(self):
         data = self.get_json('/meters')
-        self.assertEqual(4, len(data))
+        self.assertEqual(5, len(data))
         self.assertEqual(set(['resource-id',
                               'resource-id2',
                               'resource-id3',
                               'resource-id4']),
                          set(r['resource_id'] for r in data))
-        self.assertEqual(set(['meter.test', 'meter.mine']),
+        self.assertEqual(set(['meter.test', 'meter.mine', 'meter.test.new']),
                          set(r['name'] for r in data))
         self.assertEqual(set(['test_source', 'test_source1']),
                          set(r['source'] for r in data))
@@ -190,7 +202,7 @@ class TestListMeters(FunctionalTest,
 
     def test_list_samples(self):
         data = self.get_json('/samples')
-        self.assertEqual(5, len(data))
+        self.assertEqual(6, len(data))
 
     def test_query_samples_with_invalid_field_name_and_non_eq_operator(self):
         resp = self.get_json('/samples',
@@ -462,7 +474,7 @@ class TestListMeters(FunctionalTest,
                                             'value': 'resource-id',
                                             }])
         nids = set(r['name'] for r in data)
-        self.assertEqual(set(['meter.test']), nids)
+        self.assertEqual(set(['meter.test', 'meter.test.new']), nids)
 
         sids = set(r['source'] for r in data)
         self.assertEqual(set(['test_source']), sids)
@@ -530,7 +542,7 @@ class TestListMeters(FunctionalTest,
                                  'value': 'test_source_doesnt_exist',
                                  }],
                              )
-        assert not data
+        self.assertIsEmpty(data)
 
     def test_with_user(self):
         data = self.get_json('/meters',
@@ -543,7 +555,8 @@ class TestListMeters(FunctionalTest,
         self.assertEqual(set(['user-id']), uids)
 
         nids = set(r['name'] for r in data)
-        self.assertEqual(set(['meter.mine', 'meter.test']), nids)
+        self.assertEqual(set(['meter.mine', 'meter.test', 'meter.test.new']),
+                         nids)
 
         rids = set(r['resource_id'] for r in data)
         self.assertEqual(set(['resource-id', 'resource-id2']), rids)

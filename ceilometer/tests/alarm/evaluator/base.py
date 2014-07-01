@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance <licensing@enovance.com>
+# Copyright 2013 eNovance <licensing@enovance.com>
 #
 # Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
 #         Eoghan Glynn <eglynn@redhat.com>
@@ -21,7 +20,6 @@
 import mock
 
 from ceilometer.openstack.common import test
-from ceilometer.openstack.common import timeutils
 
 
 class TestEvaluatorBase(test.BaseTestCase):
@@ -31,10 +29,6 @@ class TestEvaluatorBase(test.BaseTestCase):
         self.notifier = mock.MagicMock()
         self.evaluator = self.EVALUATOR(self.notifier)
         self.prepare_alarms()
-
-    def tearDown(self):
-        super(TestEvaluatorBase, self).tearDown()
-        timeutils.utcnow.override_time = None
 
     @staticmethod
     def prepare_alarms(self):

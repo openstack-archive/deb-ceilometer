@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 ZHAW SoE
-# Copyright © 2014 Intel Corp.
+# Copyright 2013 ZHAW SoE
+# Copyright 2014 Intel Corp.
 #
 # Authors: Lucas Graf <graflu0@students.zhaw.ch>
 #          Toni Zehnder <zehndton@students.zhaw.ch>
@@ -26,7 +25,7 @@ import six
 
 from ceilometer.central import plugin
 from ceilometer.hardware import inspector as insloader
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import network_utils
 
@@ -44,13 +43,14 @@ class HardwarePollster(plugin.CentralPollster):
         super(HardwarePollster, self).__init__()
         self.inspectors = {}
 
-    def get_samples(self, manager, cache, resources=[]):
+    def get_samples(self, manager, cache, resources=None):
         """Return an iterable of Sample instances from polling the resources.
 
         :param manager: The service manager invoking the plugin
         :param cache: A dictionary for passing data between plugins
         :param resources: end point to poll data from
         """
+        resources = resources or []
         h_cache = cache.setdefault(self.CACHE_KEY, {})
         sample_iters = []
         for res in resources:

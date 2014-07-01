@@ -114,11 +114,9 @@ or complete the existing ones.
 
 The meters below are related to the host machine.
 
-.. note::
-
-By default, Nova will not collect the following meters related to the host
-compute node machine. Nova option 'compute_monitors = ComputeDriverCPUMonitor'
-should be set in nova.conf to enable meters.
+.. note:: By default, Nova will not collect the following meters related to the host
+   compute node machine. Nova option 'compute_monitors = ComputeDriverCPUMonitor'
+   should be set in nova.conf to enable meters.
 
 ===============================  ==========  =========  ========  ============  ========================
 Name                             Type        Unit       Resource  Origin        Note
@@ -176,12 +174,14 @@ image.serve               Delta       B        image ID  notification  Image is 
 Volume (Cinder)
 ===============
 
-========================  ==========  =======  ========  ============  =======================================================
-Name                      Type        Unit     Resource  Origin        Note
-========================  ==========  =======  ========  ============  =======================================================
-volume                    Gauge       volume   vol ID    notification  Existence of volume
-volume.size               Gauge       GB       vol ID    notification  Size of volume
-========================  ==========  =======  ========  ============  =======================================================
+========================  ==========  ========  ========  ============  =======================================================
+Name                      Type        Unit      Resource  Origin        Note
+========================  ==========  ========  ========  ============  =======================================================
+volume                    Gauge       volume    vol ID    notification  Existence of volume
+volume.size               Gauge       GB        vol ID    notification  Size of volume
+snapshot                  Gauge       snapshot  snap ID   notification  Existence of snapshot
+snapshot.size             Gauge       GB        snap ID   notification  Size of snapshot's volume
+========================  ==========  ========  ========  ============  =======================================================
 
 Make sure Cinder is properly configured first: see :ref:`installing_manually`.
 
@@ -265,6 +265,23 @@ switch.flow.packets                Cumulative  packet  switch ID  pollster  Rece
 switch.flow.bytes                  Cumulative  B       switch ID  pollster  Received Bytes
 =================================  ==========  ======  =========  ========  ==============================
 
+LoadBalancer as a Service (LBaaS)
+=================================
+
+=======================================  ==========  ==========    ==========  =========  ==============================
+Meter                                    Type        Unit          Resource    Origin     Note
+=======================================  ==========  ==========    ==========  =========  ==============================
+network.services.lb.pool                 Gauge       pool          pool ID     pollster   Existence of a LB Pool
+network.services.lb.vip                  Gauge       vip           vip ID      pollster   Existence of a LB Vip
+network.services.lb.member               Gauge       member        member ID   pollster   Existence of a LB Member
+network.services.lb.health_monitor       Gauge       monitor       monitor ID  pollster   Existence of a LB Health Probe
+network.services.lb.total_connections    Delta       connection    pool ID     pollster   Total connections on a LB
+network.services.lb.active_connections   Delta       connection    pool ID     pollster   Active connections on a LB
+network.services.lb.incoming.bytes       Cumulative  B             pool ID     pollster   Number of incoming Bytes
+network.services.lb.outgoing.bytes       Cumulative  B             pool ID     pollster   Number of outgoing Bytes
+=======================================  ==========  ==========    ==========  =========  ==============================
+
+
 Dynamically retrieving the Meters via ceilometer client
 =======================================================
 
@@ -297,11 +314,12 @@ User-defined sample metadata for Nova
 =========================================
 
 Users are allowed to add additional metadata to samples of nova meter.
-These additional metadata are stored in 'resource_metadata.user_metadata.*' of the sample
+These additional metadata are stored in 'resource_metadata.user_metadata.*' of the sample.
 To do so, users should add nova user metadata prefixed with 'metering.':
 
 ::
-    $ nova boot --meta metering.custom_metadata=a_value my_vm
+
+   $ nova boot --meta metering.custom_metadata=a_value my_vm
 
 Note: The name of the metadata shouldn't exceed 256 characters otherwise it will be cut off.
 Also, if it has '.', this will be replaced by a '_' in ceilometer.

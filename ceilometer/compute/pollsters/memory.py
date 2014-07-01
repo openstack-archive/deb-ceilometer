@@ -16,7 +16,7 @@
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -50,5 +50,6 @@ class MemoryUsagePollster(plugin.ComputePollster):
                 LOG.debug(_('Obtaining Memory Usage is not implemented for %s'
                             ), manager.inspector.__class__.__name__)
             except Exception as err:
-                LOG.error(_('Could not get Memory Usage for %(id)s: %(e)s'), (
-                          {'id': instance.id, 'e': err}))
+                LOG.exception(_('Could not get Memory Usage for '
+                                '%(id)s: %(e)s'), {'id': instance.id,
+                                                   'e': err})

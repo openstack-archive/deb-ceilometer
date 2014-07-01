@@ -21,7 +21,7 @@ from oslo.config import cfg
 import requests
 
 from ceilometer.central import plugin
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -81,8 +81,8 @@ class _Base(plugin.CentralPollster):
 
 class EnergyPollster(_Base):
     """Measures energy consumption."""
-
-    def get_samples(self, manager, cache, resources=[]):
+    @plugin.check_keystone
+    def get_samples(self, manager, cache, resources=None):
         """Returns all samples."""
         for probe in self._iter_probes(manager.keystone, cache):
             yield sample.Sample(
@@ -101,8 +101,8 @@ class EnergyPollster(_Base):
 
 class PowerPollster(_Base):
     """Measures power consumption."""
-
-    def get_samples(self, manager, cache, resources=[]):
+    @plugin.check_keystone
+    def get_samples(self, manager, cache, resources=None):
         """Returns all samples."""
         for probe in self._iter_probes(manager.keystone, cache):
             yield sample.Sample(

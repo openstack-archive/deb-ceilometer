@@ -1,7 +1,6 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network (DreamHost)
+# Copyright 2012 New Dream Network (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -40,6 +39,20 @@ class BaseTestCase(test.BaseTestCase):
             timeutils.delta_seconds(first, second),
             0.0,
             places=5)
+
+    def assertIsEmpty(self, obj):
+        try:
+            if len(obj) != 0:
+                self.fail("%s is not empty" % type(obj))
+        except (TypeError, AttributeError):
+            self.fail("%s doesn't have length" % type(obj))
+
+    def assertIsNotEmpty(self, obj):
+        try:
+            if len(obj) == 0:
+                self.fail("%s is empty" % type(obj))
+        except (TypeError, AttributeError):
+            self.fail("%s doesn't have length" % type(obj))
 
     @staticmethod
     def path_get(project_file=None):

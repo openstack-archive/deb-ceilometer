@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012, 2013 Dell Inc.
+# Copyright 2012, 2013 Dell Inc.
 #
 # Author: Stas Maksimov <Stanislav_M@dell.com>
 # Author: Shengjie Min <Shengjie_Min@dell.com>
@@ -23,6 +22,7 @@ import datetime
 import hashlib
 import itertools
 import json
+import operator
 import os
 import re
 import six.moves.urllib.parse as urlparse
@@ -30,7 +30,7 @@ import six.moves.urllib.parse as urlparse
 import bson.json_util
 import happybase
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import network_utils
 from ceilometer.openstack.common import timeutils
@@ -40,58 +40,6 @@ from ceilometer.storage import models
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
-
-
-class HBaseStorage(base.StorageEngine):
-    """Put the data into a HBase database
-
-    Collections:
-
-    - user
-      - { _id: user id
-          s_source_name: each source reported for user is stored with prefix s_
-                         the value of each entry is '1'
-          sources: this field contains the first source reported for user.
-                   This data is not used but stored for simplification of impl
-          }
-    - project
-      - { _id: project id
-          s_source_name: the same as for users
-          sources: the same as for users
-          }
-    - meter
-      - {_id_reverted_ts: row key is constructed in this way for efficient
-                          filtering
-         parsed_info_from_incoming_data: e.g. counter_name, counter_type
-         resource_metadata: raw metadata for corresponding resource
-         r_metadata_name: flattened metadata for corresponding resource
-         message: raw incoming data
-         recorded_at: when the sample has been recorded
-         source: source for the sample
-        }
-    - resource
-      - the metadata for resources
-      - { _id: uuid of resource,
-          metadata: raw metadata dictionaries
-          r_metadata: flattened metadata fir quick filtering
-          timestamp: datetime of last update
-          user_id: uuid
-          project_id: uuid
-          meter: [ array of {counter_name: string, counter_type: string} ]
-          source: source of resource
-        }
-    - alarm
-      - the raw incoming alarm data
-    - alarm_h
-      - raw incoming alarm_history data. Timestamp becomes now()
-        if not determined
-    """
-
-    @staticmethod
-    def get_connection(conf):
-        """Return a Connection instance based on the configuration settings.
-        """
-        return Connection(conf)
 
 
 AVAILABLE_CAPABILITIES = {
@@ -104,25 +52,103 @@ AVAILABLE_CAPABILITIES = {
     'statistics': {'query': {'simple': True,
                              'metadata': True},
                    'aggregation': {'standard': True}},
+    'events': {'query': {'simple': True}},
 }
 
 
+AVAILABLE_STORAGE_CAPABILITIES = {
+    'storage': {'production_ready': True},
+}
+
+DTYPE_NAMES = {'none': 0, 'string': 1, 'integer': 2, 'float': 3,
+               'datetime': 4}
+OP_SIGN = {'eq': '=', 'lt': '<', 'le': '<=', 'ne': '!=', 'gt': '>',
+           'ge': '>='}
+
+
 class Connection(base.Connection):
-    """HBase connection.
+    """Put the data into a HBase database
+
+    Collections:
+
+    - meter (describes sample actually)
+      - row-key: consists of reversed timestamp, meter and an md5 of
+                 user+resource+project for purposes of uniqueness
+      - Column Families:
+          f: contains the following qualifiers:
+               -counter_name : <name of counter>
+               -counter_type : <type of counter>
+               -counter_unit : <unit of counter>
+               -counter_volume : <volume of counter>
+               -message: <raw incoming data>
+               -message_id: <id of message>
+               -message_signature: <signature of message>
+               -resource_metadata: raw metadata for corresponding resource
+                of the meter
+               -project_id: <id of project>
+               -resource_id: <id of resource>
+               -user_id: <id of user>
+               -recorded_at: <datetime when sample has been recorded (utc.now)>
+               -flattened metadata with prefix r_metadata. e.g.
+                f:r_metadata.display_name or f:r_metadata.tag
+               -rts: <reversed timestamp of entry>
+               -timestamp: <meter's timestamp (came from message)>
+               -source for meter with prefix 's'
+
+    - resource
+      - row_key: uuid of resource
+      - Column Families:
+          f: contains the following qualifiers:
+               -resource_metadata: raw metadata for corresponding resource
+               -project_id: <id of project>
+               -resource_id: <id of resource>
+               -user_id: <id of user>
+               -flattened metadata with prefix r_metadata. e.g.
+                f:r_metadata.display_name or f:r_metadata.tag
+               -sources for all corresponding meters with prefix 's'
+               -all meters for this resource in format
+                "%s!%s!%s+%s" % (counter_name, counter_type, counter_unit,
+                source)
+
+    - alarm
+      - row_key: uuid of alarm
+      - Column Families:
+          f: contains the raw incoming alarm data
+
+    - alarm_h
+      - row_key: uuid of alarm + "_" + reversed timestamp
+      - Column Families:
+          f: raw incoming alarm_history data. Timestamp becomes now()
+             if not determined
+
+    - events
+      - row_key: timestamp of event's generation + uuid of event
+                 in format: "%s+%s" % (ts, Event.message_id)
+      -Column Families:
+          f: contains the following qualifiers:
+              -event_type: description of event's type
+              -timestamp: time stamp of event generation
+              -all traits for this event in format
+               "%s+%s" % (trait_name, trait_type)
     """
 
+    CAPABILITIES = utils.update_nested(base.Connection.CAPABILITIES,
+                                       AVAILABLE_CAPABILITIES)
+    STORAGE_CAPABILITIES = utils.update_nested(
+        base.Connection.STORAGE_CAPABILITIES,
+        AVAILABLE_STORAGE_CAPABILITIES,
+    )
     _memory_instance = None
 
-    PROJECT_TABLE = "project"
-    USER_TABLE = "user"
     RESOURCE_TABLE = "resource"
     METER_TABLE = "meter"
     ALARM_TABLE = "alarm"
     ALARM_HISTORY_TABLE = "alarm_h"
+    EVENT_TABLE = "event"
 
-    def __init__(self, conf):
+    def __init__(self, url):
         """Hbase Connection Initialization."""
-        opts = self._parse_connection_url(conf.database.connection)
+        opts = self._parse_connection_url(url)
 
         if opts['host'] == '__test__':
             url = os.environ.get('CEILOMETER_TEST_HBASE_URL')
@@ -140,28 +166,22 @@ class Connection(base.Connection):
         else:
             self.conn_pool = self._get_connection_pool(opts)
 
-        self.CAPABILITIES = utils.update_nested(self.DEFAULT_CAPABILITIES,
-                                                AVAILABLE_CAPABILITIES)
-
     def upgrade(self):
         with self.conn_pool.connection() as conn:
-            conn.create_table(self.PROJECT_TABLE, {'f': dict()})
-            conn.create_table(self.USER_TABLE, {'f': dict()})
-            conn.create_table(self.RESOURCE_TABLE, {'f': dict()})
-            conn.create_table(self.METER_TABLE, {'f': dict()})
+            conn.create_table(self.RESOURCE_TABLE, {'f': dict(max_versions=1)})
+            conn.create_table(self.METER_TABLE, {'f': dict(max_versions=1)})
             conn.create_table(self.ALARM_TABLE, {'f': dict()})
             conn.create_table(self.ALARM_HISTORY_TABLE, {'f': dict()})
+            conn.create_table(self.EVENT_TABLE, {'f': dict(max_versions=1)})
 
     def clear(self):
         LOG.debug(_('Dropping HBase schema...'))
         with self.conn_pool.connection() as conn:
-            for table in [self.PROJECT_TABLE,
-                          self.USER_TABLE,
-                          self.RESOURCE_TABLE,
+            for table in [self.RESOURCE_TABLE,
                           self.METER_TABLE,
                           self.ALARM_TABLE,
-                          self.ALARM_HISTORY_TABLE]:
-
+                          self.ALARM_HISTORY_TABLE,
+                          self.EVENT_TABLE]:
                 try:
                     conn.disable_table(table)
                 except Exception:
@@ -268,7 +288,7 @@ class Connection(base.Connection):
         """
         alarm_change_dict = serialize_entry(alarm_change)
         ts = alarm_change.get('timestamp') or datetime.datetime.now()
-        rts = reverse_timestamp(ts)
+        rts = timestamp(ts)
         with self.conn_pool.connection() as conn:
             alarm_history_table = conn.table(self.ALARM_HISTORY_TABLE)
             alarm_history_table.put(alarm_change.get('alarm_id') + "_" +
@@ -281,40 +301,23 @@ class Connection(base.Connection):
                      ceilometer.meter.meter_message_from_counter
         """
         with self.conn_pool.connection() as conn:
-            project_table = conn.table(self.PROJECT_TABLE)
-            user_table = conn.table(self.USER_TABLE)
             resource_table = conn.table(self.RESOURCE_TABLE)
             meter_table = conn.table(self.METER_TABLE)
 
-            # Make sure we know about the user and project
-            if data['user_id']:
-                self._update_sources(user_table, data['user_id'],
-                                     data['source'])
-            self._update_sources(project_table, data['project_id'],
-                                 data['source'])
-
-            # Get metadata from user's data
             resource_metadata = data.get('resource_metadata', {})
             # Determine the name of new meter
             new_meter = _format_meter_reference(
                 data['counter_name'], data['counter_type'],
-                data['counter_unit'])
-            flatten_result, sources, meters, metadata = \
-                deserialize_entry(resource_table.row(data['resource_id']))
+                data['counter_unit'], data['source'])
+            #TODO(nprivalova): try not to store resource_id
+            resource = serialize_entry(**{
+                'source': data['source'], 'meter': new_meter,
+                'resource_metadata': resource_metadata,
+                'resource_id': data['resource_id'],
+                'project_id': data['project_id'], 'user_id': data['user_id']})
+            resource_table.put(data['resource_id'], resource)
 
-            # Update if resource has new information
-            if (data['source'] not in sources) or (
-                    new_meter not in meters) or (
-                    metadata != resource_metadata):
-                resource_table.put(data['resource_id'],
-                                   serialize_entry(
-                                       **{'sources': [data['source']],
-                                          'meters': [new_meter],
-                                          'metadata': resource_metadata,
-                                          'resource_id': data['resource_id'],
-                                          'project_id': data['project_id'],
-                                          'user_id': data['user_id']}))
-
+            #TODO(nprivalova): improve uniqueness
             # Rowkey consists of reversed timestamp, meter and an md5 of
             # user+resource+project for purposes of uniqueness
             m = hashlib.md5()
@@ -323,51 +326,19 @@ class Connection(base.Connection):
 
             # We use reverse timestamps in rowkeys as they are sorted
             # alphabetically.
-            rts = reverse_timestamp(data['timestamp'])
+            rts = timestamp(data['timestamp'])
             row = "%s_%d_%s" % (data['counter_name'], rts, m.hexdigest())
-            record = serialize_entry(data, **{'metadata': resource_metadata,
+            record = serialize_entry(data, **{'source': data['source'],
                                               'rts': rts,
                                               'message': data,
                                               'recorded_at': timeutils.utcnow(
                                               )})
             meter_table.put(row, record)
 
-    def _update_sources(self, table, id, source):
-        user, sources, _, _ = deserialize_entry(table.row(id))
-        if source not in sources:
-            sources.append(source)
-            table.put(id, serialize_entry(user, **{'sources': sources}))
-
-    def get_users(self, source=None):
-        """Return an iterable of user id strings.
-
-        :param source: Optional source filter.
-        """
-        with self.conn_pool.connection() as conn:
-            user_table = conn.table(self.USER_TABLE)
-            LOG.debug(_("source: %s") % source)
-            scan_args = {}
-            if source:
-                scan_args['columns'] = ['f:s_%s' % source]
-            return sorted(key for key, ignored in user_table.scan(**scan_args))
-
-    def get_projects(self, source=None):
-        """Return an iterable of project id strings.
-
-        :param source: Optional source filter.
-        """
-        with self.conn_pool.connection() as conn:
-            project_table = conn.table(self.PROJECT_TABLE)
-            LOG.debug(_("source: %s") % source)
-            scan_args = {}
-            if source:
-                scan_args['columns'] = ['f:s_%s' % source]
-            return (key for key, ignored in project_table.scan(**scan_args))
-
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None, pagination=None):
+                      metaquery=None, resource=None, pagination=None):
         """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -384,14 +355,15 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError('Pagination not implemented')
 
+        metaquery = metaquery or {}
+
         sample_filter = storage.SampleFilter(
             user=user, project=project,
             start=start_timestamp, start_timestamp_op=start_timestamp_op,
             end=end_timestamp, end_timestamp_op=end_timestamp_op,
             resource=resource, source=source, metaquery=metaquery)
-        q, start_row, stop_row = make_sample_query_from_filter(
+        q, start_row, stop_row, __ = make_sample_query_from_filter(
             sample_filter, require_meter=False)
-
         with self.conn_pool.connection() as conn:
             meter_table = conn.table(self.METER_TABLE)
             LOG.debug(_("Query Meter table: %s") % q)
@@ -408,8 +380,9 @@ class Connection(base.Connection):
             meters = sorted(d_meters, key=_resource_id_from_record_tuple)
             for resource_id, r_meters in itertools.groupby(
                     meters, key=_resource_id_from_record_tuple):
-                # We need deserialized entry(data[0]) and metadata(data[3])
-                meter_rows = [(data[0], data[3]) for data in sorted(
+                # We need deserialized entry(data[0]), sources (data[1]) and
+                # metadata(data[3])
+                meter_rows = [(data[0], data[1], data[3]) for data in sorted(
                     r_meters, key=_timestamp_from_record_tuple)]
                 latest_data = meter_rows[-1]
                 min_ts = meter_rows[0][0]['timestamp']
@@ -419,13 +392,13 @@ class Connection(base.Connection):
                     first_sample_timestamp=min_ts,
                     last_sample_timestamp=max_ts,
                     project_id=latest_data[0]['project_id'],
-                    source=latest_data[0]['source'],
+                    source=latest_data[1][0],
                     user_id=latest_data[0]['user_id'],
-                    metadata=latest_data[1],
+                    metadata=latest_data[2],
                 )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery={}, pagination=None):
+                   metaquery=None, pagination=None):
         """Return an iterable of models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
@@ -435,6 +408,8 @@ class Connection(base.Connection):
         :param metaquery: Optional dict with metadata to match on.
         :param pagination: Optional pagination query.
         """
+
+        metaquery = metaquery or {}
 
         if pagination:
             raise NotImplementedError(_('Pagination not implemented'))
@@ -446,23 +421,29 @@ class Connection(base.Connection):
             LOG.debug(_("Query Resource table: %s") % q)
 
             gen = resource_table.scan(filter=q)
-
+            # We need result set to be sure that user doesn't receive several
+            # same meters. Please see bug
+            # https://bugs.launchpad.net/ceilometer/+bug/1301371
+            result = set()
             for ignored, data in gen:
-                flatten_result, s, m, md = deserialize_entry(data)
-                if not m:
-                    continue
-                # Meter table may have only one "meter" and "source". That's
-                # why only first lists element is get in this method
-                name, type, unit = m[0].split("!")
-                yield models.Meter(
-                    name=name,
-                    type=type,
-                    unit=unit,
-                    resource_id=flatten_result['resource_id'],
-                    project_id=flatten_result['project_id'],
-                    source=s[0] if s else None,
-                    user_id=flatten_result['user_id'],
-                )
+                flatten_result, s, meters, md = deserialize_entry(data)
+                for m in meters:
+                    meter_raw, m_source = m.split("+")
+                    name, type, unit = meter_raw.split('!')
+                    meter_dict = {'name': name,
+                                  'type': type,
+                                  'unit': unit,
+                                  'resource_id': flatten_result['resource_id'],
+                                  'project_id': flatten_result['project_id'],
+                                  'user_id': flatten_result['user_id']}
+                    frozen_meter = frozenset(meter_dict.items())
+                    if frozen_meter in result:
+                        continue
+                    result.add(frozen_meter)
+                    meter_dict.update({'source':
+                                       m_source if m_source else None})
+
+                    yield models.Meter(**meter_dict)
 
     def get_samples(self, sample_filter, limit=None):
         """Return an iterable of models.Sample instances.
@@ -472,17 +453,12 @@ class Connection(base.Connection):
         """
         with self.conn_pool.connection() as conn:
             meter_table = conn.table(self.METER_TABLE)
-
-            q, start, stop = make_sample_query_from_filter(
+            q, start, stop, columns = make_sample_query_from_filter(
                 sample_filter, require_meter=False)
             LOG.debug(_("Query Meter Table: %s") % q)
-            gen = meter_table.scan(filter=q, row_start=start, row_stop=stop)
+            gen = meter_table.scan(filter=q, row_start=start, row_stop=stop,
+                                   columns=columns, limit=limit)
             for ignored, meter in gen:
-                if limit is not None:
-                    if limit == 0:
-                        break
-                    else:
-                        limit -= 1
                 d_meter = deserialize_entry(meter)[0]
                 d_meter['message']['recorded_at'] = d_meter['recorded_at']
                 yield models.Sample(**d_meter['message'])
@@ -533,10 +509,14 @@ class Connection(base.Connection):
 
         with self.conn_pool.connection() as conn:
             meter_table = conn.table(self.METER_TABLE)
-            q, start, stop = make_sample_query_from_filter(sample_filter)
+            q, start, stop, columns = make_sample_query_from_filter(
+                sample_filter)
+            # These fields are used in statistics' calculating
+            columns.extend(['f:timestamp', 'f:counter_volume',
+                            'f:counter_unit'])
             meters = map(deserialize_entry, list(meter for (ignored, meter) in
                          meter_table.scan(filter=q, row_start=start,
-                                          row_stop=stop)))
+                                          row_stop=stop, columns=columns)))
 
         if sample_filter.start:
             start_time = sample_filter.start
@@ -591,10 +571,138 @@ class Connection(base.Connection):
             self._update_meter_stats(results[-1], meter[0])
         return results
 
-    def get_capabilities(self):
-        """Return an dictionary representing the capabilities of this driver.
+    def record_events(self, event_models):
+        """Write the events to Hbase.
+
+        :param event_models: a list of models.Event objects.
         """
-        return self.CAPABILITIES
+        problem_events = []
+
+        with self.conn_pool.connection() as conn:
+            events_table = conn.table(self.EVENT_TABLE)
+            for event_model in event_models:
+                # Row key consists of timestamp and message_id from
+                # models.Event or purposes of storage event sorted by
+                # timestamp in the database.
+                ts = event_model.generated
+                row = "%d_%s" % (timestamp(ts, reverse=False),
+                                 event_model.message_id)
+                event_type = event_model.event_type
+                traits = {}
+                if event_model.traits:
+                    for trait in event_model.traits:
+                        key = "%s+%d" % (trait.name, trait.dtype)
+                        traits[key] = trait.value
+                record = serialize_entry(traits, event_type=event_type,
+                                         timestamp=ts)
+                try:
+                    events_table.put(row, record)
+                except Exception as ex:
+                    LOG.debug(_("Failed to record event: %s") % ex)
+                    problem_events.append((models.Event.UNKNOWN_PROBLEM,
+                                           event_model))
+        return problem_events
+
+    def get_events(self, event_filter):
+        """Return an iterable of models.Event objects.
+
+        :param event_filter: storage.EventFilter object, consists of filters
+                             for events that are stored in database.
+        """
+        q, start, stop = make_events_query_from_filter(event_filter)
+        with self.conn_pool.connection() as conn:
+            events_table = conn.table(self.EVENT_TABLE)
+
+            gen = events_table.scan(filter=q, row_start=start, row_stop=stop)
+
+        events = []
+        for event_id, data in gen:
+            traits = []
+            events_dict = deserialize_entry(data)[0]
+            for key, value in events_dict.items():
+                if (not key.startswith('event_type')
+                        and not key.startswith('timestamp')):
+                    trait_name, trait_dtype = key.rsplit('+', 1)
+                    traits.append(models.Trait(name=trait_name,
+                                               dtype=int(trait_dtype),
+                                               value=value))
+            ts, mess = event_id.split('_', 1)
+
+            events.append(models.Event(
+                message_id=mess,
+                event_type=events_dict['event_type'],
+                generated=events_dict['timestamp'],
+                traits=sorted(traits, key=(lambda item:
+                                           getattr(item, 'dtype')))
+            ))
+        return events
+
+    def get_event_types(self):
+        """Return all event types as an iterable of strings."""
+        with self.conn_pool.connection() as conn:
+            events_table = conn.table(self.EVENT_TABLE)
+            gen = events_table.scan()
+
+        event_types = set()
+        for event_id, data in gen:
+            events_dict = deserialize_entry(data)[0]
+            for key, value in events_dict.items():
+                if key.startswith('event_type'):
+                    if value not in event_types:
+                        event_types.add(value)
+                        yield value
+
+    def get_trait_types(self, event_type):
+        """Return a dictionary containing the name and data type of the trait.
+
+        Only trait types for the provided event_type are returned.
+        :param event_type: the type of the Event
+        """
+
+        q = make_query(event_type=event_type)
+        trait_types = set()
+        with self.conn_pool.connection() as conn:
+            events_table = conn.table(self.EVENT_TABLE)
+            gen = events_table.scan(filter=q)
+        for event_id, data in gen:
+            events_dict = deserialize_entry(data)[0]
+            for key, value in events_dict.items():
+                if (not key.startswith('event_type') and
+                        not key.startswith('timestamp')):
+                    name, tt_number = key.rsplit('+', 1)
+                    if name not in trait_types:
+                        # Here we check that our method return only unique
+                        # trait types, for ex. if it is found the same trait
+                        # types in different events with equal event_type,
+                        # method will return only one trait type. It is
+                        # proposed that certain trait name could have only one
+                        # trait type.
+                        trait_types.add(name)
+                        data_type = models.Trait.type_names[int(tt_number)]
+                        yield {'name': name, 'data_type': data_type}
+
+    def get_traits(self, event_type, trait_type=None):
+        """Return all trait instances associated with an event_type. If
+        trait_type is specified, only return instances of that trait type.
+
+        :param event_type: the type of the Event to filter by
+        :param trait_type: the name of the Trait to filter by
+        """
+        q = make_query(event_type=event_type, trait_type=trait_type)
+        traits = []
+        with self.conn_pool.connection() as conn:
+            events_table = conn.table(self.EVENT_TABLE)
+            gen = events_table.scan(filter=q)
+        for event_id, data in gen:
+            events_dict = deserialize_entry(data)[0]
+            for key, value in events_dict.items():
+                if (not key.startswith('event_type') and
+                        not key.startswith('timestamp')):
+                    name, tt_number = key.rsplit('+', 1)
+                    traits.append(models.Trait(name=name,
+                                  dtype=int(tt_number), value=value))
+        for trait in sorted(traits, key=operator.attrgetter('dtype')):
+            yield trait
 
 
 ###############
@@ -616,12 +724,17 @@ class MTable(object):
         return ((k, self.row(k)) for k in keys)
 
     def put(self, key, data):
-        self._rows[key] = data
+        if key not in self._rows:
+            self._rows[key] = data
+        else:
+            self._rows[key].update(data)
 
     def delete(self, key):
         del self._rows[key]
 
-    def scan(self, filter=None, columns=[], row_start=None, row_stop=None):
+    def scan(self, filter=None, columns=None, row_start=None, row_stop=None,
+             limit=None):
+        columns = columns or []
         sorted_keys = sorted(self._rows)
         # copy data between row_start and row_stop into a dict
         rows = {}
@@ -639,7 +752,7 @@ class MTable(object):
                     if key in columns:
                         ret[row] = data
             rows = ret
-        elif filter:
+        if filter:
             # TODO(jdanjou): we should really parse this properly,
             # but at the moment we are only going to support AND here
             filters = filter.split('AND')
@@ -657,7 +770,7 @@ class MTable(object):
                 else:
                     raise NotImplementedError("%s filter is not implemented, "
                                               "you may want to add it!")
-        for k in sorted(rows):
+        for k in sorted(rows)[:limit]:
             yield k, rows[k]
 
     @staticmethod
@@ -690,6 +803,55 @@ class MTable(object):
                                           "yet" % op)
         return r
 
+    @staticmethod
+    def ColumnPrefixFilter(args, rows):
+        """This is filter for testing "in-memory HBase".
+
+        This method is called from scan() when 'ColumnPrefixFilter' is found
+        in the 'filter' argument
+        :param args is list of filter arguments, contain prefix of column
+        :param rows is dict of row prefixes for filtering
+        """
+        value = args[0]
+        column = 'f:' + value
+        r = {}
+        for row, data in rows.items():
+            column_dict = {}
+            for key in data:
+                if key.startswith(column):
+                    column_dict[key] = data[key]
+            r[row] = column_dict
+        return r
+
+    @staticmethod
+    def RowFilter(args, rows):
+        """This is filter for testing "in-memory HBase".
+
+        This method is called from scan() when 'RowFilter'
+        is found in the 'filter' argument
+        :param args is list of filter arguments, it contains operator and
+        sought string
+        :param rows is dict of rows which are filtered
+        """
+        op = args[0]
+        value = args[1]
+        if value.startswith('regexstring:'):
+            value = value[len('regexstring:'):]
+        r = {}
+        for row, data in rows.items():
+            try:
+                g = re.search(value, row).group()
+                if op == '=':
+                    if g == row:
+                        r[row] = data
+                else:
+                    raise NotImplementedError("In-memory "
+                                              "RowFilter doesn't support "
+                                              "the %s operation yet" % op)
+            except AttributeError:
+                pass
+        return r
+
 
 class MConnectionPool(object):
     def __init__(self):
@@ -714,7 +876,8 @@ class MConnection(object):
     def open(self):
         LOG.debug(_("Opening in-memory HBase connection"))
 
-    def create_table(self, n, families={}):
+    def create_table(self, n, families=None):
+        families = families or {}
         if n in self.tables:
             return self.tables[n]
         t = MTable(n, families)
@@ -730,19 +893,56 @@ class MConnection(object):
 
 #################################################
 # Here be various HBase helpers
-def reverse_timestamp(dt):
-    """Reverse timestamp so that newer timestamps are represented by smaller
-    numbers than older ones.
+def timestamp(dt, reverse=True):
+    """Timestamp is count of milliseconds since start of epoch.
 
-    Reverse timestamps is a technique used in HBase rowkey design. When period
+    Timestamps is a technique used in HBase rowkey design. When period
     queries are required the HBase rowkeys must include timestamps, but as
-    rowkeys in HBase are ordered lexicographically, the timestamps must be
-    reversed.
+    rowkeys in HBase are ordered lexicographically.
+
+    Same for the reversed timestamps, but the order will be opposite.
+
+    :param: dt: datetime which is translated to the (reversed or not) timestamp
+    :param: reverse: is a boolean parameter for reverse or straight count of
+    timestamp in milliseconds
+    :return count or reversed count of milliseconds since start of epoch
     """
     epoch = datetime.datetime(1970, 1, 1)
     td = dt - epoch
     ts = td.microseconds + td.seconds * 1000000 + td.days * 86400000000
-    return 0x7fffffffffffffff - ts
+    return 0x7fffffffffffffff - ts if reverse else ts
+
+
+def make_events_query_from_filter(event_filter):
+    """Return start and stop row for filtering and a query which based on the
+    selected parameter.
+
+    :param event_filter: storage.EventFilter object.
+    """
+    q = []
+    res_q = None
+    start = "%s" % (timestamp(event_filter.start_time, reverse=False)
+                    if event_filter.start_time else "")
+    stop = "%s" % (timestamp(event_filter.end_time, reverse=False)
+                   if event_filter.end_time else "")
+    if event_filter.event_type:
+        q.append("SingleColumnValueFilter ('f', 'event_type', = , "
+                 "'binary:%s')" % dump(event_filter.event_type))
+    if event_filter.message_id:
+        q.append("RowFilter ( = , 'regexstring:\d*_%s')" %
+                 event_filter.message_id)
+    if len(q):
+        res_q = " AND ".join(q)
+
+    if event_filter.traits_filter:
+        for trait_filter in event_filter.traits_filter:
+            q_trait = make_query(trait_query=True, **trait_filter)
+            if q_trait:
+                if res_q:
+                    res_q += " AND " + q_trait
+                else:
+                    res_q = q_trait
+    return res_q, start, stop
 
 
 def make_timestamp_query(func, start=None, start_op=None, end=None,
@@ -781,8 +981,8 @@ def make_timestamp_query(func, start=None, start_op=None, end=None,
 
 def get_start_end_rts(start, start_op, end, end_op):
 
-    rts_start = str(reverse_timestamp(start) + 1) if start else ""
-    rts_end = str(reverse_timestamp(end) + 1) if end else ""
+    rts_start = str(timestamp(start) + 1) if start else ""
+    rts_end = str(timestamp(end) + 1) if end else ""
 
     #By default, we are using ge for lower bound and lt for upper bound
     if start_op == 'gt':
@@ -793,22 +993,46 @@ def get_start_end_rts(start, start_op, end, end_op):
     return rts_start, rts_end
 
 
-def make_query(metaquery=None, **kwargs):
+def make_query(metaquery=None, trait_query=None, **kwargs):
     """Return a filter query string based on the selected parameters.
 
     :param metaquery: optional metaquery dict
+    :param trait_query: optional boolean, for trait_query from kwargs
     :param kwargs: key-value pairs to filter on. Key should be a real
      column name in db
     """
     q = []
+    res_q = None
+
+    # Query for traits if a little differ from others it is constructed with
+    # SingleColumnValueFilter with the possibility to choose an operator for
+    # value
+    if trait_query:
+        trait_name = kwargs.pop('key')
+        op = kwargs.pop('op', 'eq')
+        for k, v in kwargs.items():
+            if v is not None:
+                res_q = ("SingleColumnValueFilter "
+                         "('f', '%s+%d', %s, 'binary:%s', true, true)" %
+                         (trait_name, DTYPE_NAMES[k], OP_SIGN[op],
+                          dump(v)))
+        return res_q
+
     # Note: we use extended constructor for SingleColumnValueFilter here.
     # It is explicitly specified that entry should not be returned if CF is not
     # found in table.
-    for key, value in kwargs.items():
+    for key, value in sorted(kwargs.items()):
         if value is not None:
-            q.append("SingleColumnValueFilter "
-                     "('f', '%s', =, 'binary:%s', true, true)" %
-                     (key, dump(value)))
+            if key == 'source':
+                q.append("SingleColumnValueFilter "
+                         "('f', 's_%s', =, 'binary:%s', true, true)" %
+                         (value, dump('1')))
+            elif key == 'trait_type':
+                q.append("ColumnPrefixFilter('%s')" % value)
+            else:
+                q.append("SingleColumnValueFilter "
+                         "('f', '%s', =, 'binary:%s', true, true)" %
+                         (key, dump(value)))
     res_q = None
     if len(q):
         res_q = " AND ".join(q)
@@ -830,6 +1054,20 @@ def make_query(metaquery=None, **kwargs):
     return res_q
 
 
+def _get_meter_columns(metaquery, **kwargs):
+    """Return a list of required columns in meter table to be scanned .
+
+    :param metaquery: optional metaquery dict
+    :param kwargs: key-value pairs to filter on. Key should be a real
+     column name in db
+    """
+    columns = ['f:message', 'f:recorded_at']
+    columns.extend(["f:%s" % k for k, v in kwargs.items() if v])
+    if metaquery:
+        columns.extend(["f:r_%s" % k for k, v in metaquery.items() if v])
+    return columns
+
+
 def make_sample_query_from_filter(sample_filter, require_meter=True):
     """Return a query dictionary based on the settings in the filter.
 
@@ -837,6 +1075,7 @@ def make_sample_query_from_filter(sample_filter, require_meter=True):
     :param require_meter: If true and the filter does not have a meter,
                           raise an error.
     """
+
     meter = sample_filter.meter
     if not meter and require_meter:
         raise RuntimeError('Missing required meter specifier')
@@ -846,20 +1085,22 @@ def make_sample_query_from_filter(sample_filter, require_meter=True):
         end=sample_filter.end, end_op=sample_filter.end_timestamp_op,
         some_id=meter)
 
-    q = make_query(metaquery=sample_filter.metaquery,
-                   user_id=sample_filter.user,
-                   project_id=sample_filter.project,
-                   counter_name=meter,
-                   resource_id=sample_filter.resource,
-                   source=sample_filter.source,
-                   message_id=sample_filter.message_id)
+    kwargs = dict(user_id=sample_filter.user,
+                  project_id=sample_filter.project,
+                  counter_name=meter,
+                  resource_id=sample_filter.resource,
+                  source=sample_filter.source,
+                  message_id=sample_filter.message_id)
+
+    q = make_query(metaquery=sample_filter.metaquery, **kwargs)
 
     if q:
         ts_query = (" AND " + ts_query) if ts_query else ""
         res_q = q + ts_query if ts_query else q
     else:
         res_q = ts_query if ts_query else None
-    return res_q, start_row, end_row
+    columns = _get_meter_columns(metaquery=sample_filter.metaquery, **kwargs)
+    return res_q, start_row, end_row, columns
 
 
 def _make_general_rowkey_scan(rts_start=None, rts_end=None, some_id=None):
@@ -876,10 +1117,10 @@ def _make_general_rowkey_scan(rts_start=None, rts_end=None, some_id=None):
     return start_row, end_row
 
 
-def _format_meter_reference(counter_name, counter_type, counter_unit):
+def _format_meter_reference(counter_name, counter_type, counter_unit, source):
     """Format reference to meter data.
     """
-    return "%s!%s!%s" % (counter_name, counter_type, counter_unit)
+    return "%s!%s!%s+%s" % (counter_name, counter_type, counter_unit, source)
 
 
 def _timestamp_from_record_tuple(record):
@@ -913,53 +1154,50 @@ def deserialize_entry(entry, get_raw_meta=True):
     for k, v in entry.items():
         if k.startswith('f:s_'):
             sources.append(k[4:])
-        elif k.startswith('f:m_'):
-            meters.append(k[4:])
         elif k.startswith('f:r_metadata.'):
             metadata_flattened[k[len('f:r_metadata.'):]] = load(v)
+        elif k.startswith('f:m_'):
+            meters.append(k[4:])
         else:
             flatten_result[k[2:]] = load(v)
     if get_raw_meta:
-        metadata = flatten_result.get('metadata', {})
+        metadata = flatten_result.get('resource_metadata', {})
     else:
         metadata = metadata_flattened
 
     return flatten_result, sources, meters, metadata
 
 
-def serialize_entry(data={}, **kwargs):
+def serialize_entry(data=None, **kwargs):
     """Return a dict that is ready to be stored to HBase
 
     :param data: dict to be serialized
     :param kwargs: additional args
     """
+    data = data or {}
     entry_dict = copy.copy(data)
     entry_dict.update(**kwargs)
 
     result = {}
     for k, v in entry_dict.items():
-        if k == 'sources':
-            # user and project tables may contain several sources and meters
-            # that's why we store it separately as pairs "source/meter name:1".
-            # Resource and meter table contain only one and it's possible
-            # to store pairs like "source/meter:source name/meter name". But to
-            # keep things simple it's possible to store all variants in all
-            # tables because it doesn't break logic and overhead is not too big
-            for source in v:
-                result['f:s_%s' % source] = dump('1')
-            if v:
-                result['f:source'] = dump(v[0])
-        elif k == 'meters':
-            for meter in v:
-                result['f:m_%s' % meter] = dump('1')
-        elif k == 'metadata':
+        if k == 'source':
+            # user, project and resource tables may contain several sources.
+            # Besides, resource table may contain several meters.
+            # To make insertion safe we need to store all meters and sources in
+            # a separate cell. For this purpose s_ and m_ prefixes are
+            # introduced.
+                result['f:s_%s' % v] = dump('1')
+
+        elif k == 'meter':
+            result['f:m_%s' % v] = dump('1')
+        elif k == 'resource_metadata':
             # keep raw metadata as well as flattened to provide
             # capability with API v2. It will be flattened in another
             # way on API level. But we need flattened too for quick filtering.
             flattened_meta = dump_metadata(v)
             for k, m in flattened_meta.items():
                 result['f:r_metadata.' + k] = dump(m)
-            result['f:metadata'] = dump(v)
+            result['f:resource_metadata'] = dump(v)
         else:
             result['f:' + k] = dump(v)
     return result

@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance <licensing@enovance.com>
+# Copyright 2013 eNovance <licensing@enovance.com>
 #
 # Authors: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
 #
@@ -26,7 +25,7 @@ from ceilometerclient import client as ceiloclient
 from oslo.config import cfg
 import six
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 

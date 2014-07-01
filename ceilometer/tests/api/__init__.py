@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -18,60 +17,16 @@
 """Base classes for API tests.
 """
 
-import flask
+from oslo.config import cfg
+import oslo.messaging.conffixture
 import pecan
 import pecan.testing
-from six.moves import urllib
 
-from ceilometer.api import acl
-from ceilometer.api.v1 import app as v1_app
-from ceilometer.api.v1 import blueprint as v1_blueprint
-from ceilometer.openstack.common import jsonutils
-from ceilometer import service
+from ceilometer import messaging
 from ceilometer.tests import db as db_test_base
 
-
-class TestBase(db_test_base.TestBase):
-    """Use only for v1 API tests.
-    """
-
-    def setUp(self):
-        super(TestBase, self).setUp()
-        service.prepare_service([])
-        self.CONF.set_override("auth_version",
-                               "v2.0", group=acl.OPT_GROUP_NAME)
-        self.CONF.set_override("policy_file",
-                               self.path_get('etc/ceilometer/policy.json'))
-        sources_file = self.path_get('ceilometer/tests/sources.json')
-        self.app = v1_app.make_app(self.CONF,
-                                   enable_acl=False,
-                                   attach_storage=False,
-                                   sources_file=sources_file)
-
-        # this is needed to pass over unhandled exceptions
-        self.app.debug = True
-
-        self.app.register_blueprint(v1_blueprint.blueprint)
-        self.test_app = self.app.test_client()
-
-        @self.app.before_request
-        def attach_storage_connection():
-            flask.request.storage_conn = self.conn
-
-    def get(self, path, headers=None, **kwds):
-        if kwds:
-            query = path + '?' + urllib.parse.urlencode(kwds)
-        else:
-            query = path
-        rv = self.test_app.get(query, headers=headers)
-        if rv.status_code == 200 and rv.content_type == 'application/json':
-            try:
-                data = jsonutils.loads(rv.data)
-            except ValueError:
-                print('RAW DATA:%s' % rv)
-                raise
-            return data
-        return rv
+OPT_GROUP_NAME = 'keystone_authtoken'
+cfg.CONF.import_group(OPT_GROUP_NAME, "keystoneclient.middleware.auth_token")
 
 
 class FunctionalTest(db_test_base.TestBase):
@@ -84,8 +39,12 @@ class FunctionalTest(db_test_base.TestBase):
 
     def setUp(self):
         super(FunctionalTest, self).setUp()
+        self.useFixture(oslo.messaging.conffixture.ConfFixture(self.CONF))
+        self.CONF.set_override("notification_driver", "messaging")
+        messaging.setup("fake://")
+        self.addCleanup(messaging.cleanup)
         self.CONF.set_override("auth_version", "v2.0",
-                               group=acl.OPT_GROUP_NAME)
+                               group=OPT_GROUP_NAME)
         self.CONF.set_override("policy_file",
                                self.path_get('etc/ceilometer/policy.json'))
         self.app = self._make_app()
@@ -178,7 +137,7 @@ class FunctionalTest(db_test_base.TestBase):
         return response
 
     def get_json(self, path, expect_errors=False, headers=None,
-                 extra_environ=None, q=[], groupby=[], status=None,
+                 extra_environ=None, q=None, groupby=None, status=None,
                  override_params=None, **params):
         """Sends simulated HTTP GET request to Pecan test app.
 
@@ -195,6 +154,8 @@ class FunctionalTest(db_test_base.TestBase):
         :param override_params: literally encoded query param string
         :param params: content for wsgi.input of request
         """
+        q = q or []
+        groupby = groupby or []
         full_path = self.PATH_PREFIX + path
         if override_params:
             all_params = override_params

@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
-# Copyright © 2013 eNovance
-# Copyright © 2013 IBM Corp
+# Copyright 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2013 eNovance
+# Copyright 2013 IBM Corp
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #         Julien Danjou <julien@danjou.info>
@@ -31,7 +30,6 @@ import bson.code
 import bson.objectid
 import pymongo
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import storage
@@ -43,19 +41,21 @@ from ceilometer import utils
 LOG = log.getLogger(__name__)
 
 
-class DB2Storage(base.StorageEngine):
+AVAILABLE_CAPABILITIES = {
+    'resources': {'query': {'simple': True,
+                            'metadata': True}},
+    'statistics': {'groupby': True,
+                   'query': {'simple': True,
+                             'metadata': True},
+                   'aggregation': {'standard': True}}
+}
+
+
+class Connection(pymongo_base.Connection):
     """The db2 storage for Ceilometer
 
     Collections::
 
-        - user
-          - { _id: user id
-              source: [ array of source ids reporting for the user ]
-              }
-        - project
-          - { _id: project id
-              source: [ array of source ids reporting for the project ]
-              }
         - meter
           - the raw incoming data
         - resource
@@ -69,34 +69,8 @@ class DB2Storage(base.StorageEngine):
             }
     """
 
-    def get_connection(self, conf):
-        """Return a Connection instance based on the configuration settings.
-        """
-        return Connection(conf)
-
-
-AVAILABLE_CAPABILITIES = {
-    'meters': {'query': {'simple': True,
-                         'metadata': True}},
-    'resources': {'query': {'simple': True,
-                            'metadata': True}},
-    'samples': {'query': {'simple': True,
-                          'metadata': True,
-                          'complex': True}},
-    'statistics': {'groupby': True,
-                   'query': {'simple': True,
-                             'metadata': True},
-                   'aggregation': {'standard': True}},
-    'alarms': {'query': {'simple': True,
-                         'complex': True},
-               'history': {'query': {'simple': True}}},
-}
-
-
-class Connection(pymongo_base.Connection):
-    """DB2 connection.
-    """
-
+    CAPABILITIES = utils.update_nested(pymongo_base.Connection.CAPABILITIES,
+                                       AVAILABLE_CAPABILITIES)
     CONNECTION_POOL = pymongo_base.ConnectionPool()
 
     GROUP = {'_id': '$counter_name',
@@ -120,8 +94,7 @@ class Connection(pymongo_base.Connection):
 
     SECONDS_IN_A_DAY = 86400
 
-    def __init__(self, conf):
-        url = conf.database.connection
+    def __init__(self, url):
 
         # Since we are using pymongo, even though we are connecting to DB2
         # we still have to make sure that the scheme which used to distinguish
@@ -150,13 +123,10 @@ class Connection(pymongo_base.Connection):
             self.db.authenticate(connection_options['username'],
                                  connection_options['password'])
 
-        self.CAPABILITIES = utils.update_nested(self.DEFAULT_CAPABILITIES,
-                                                AVAILABLE_CAPABILITIES)
-
         self.upgrade()
 
     @classmethod
-    def _build_sort_instructions(cls, sort_keys=[], sort_dir='desc'):
+    def _build_sort_instructions(cls, sort_keys=None, sort_dir='desc'):
         """Returns a sort_instruction.
 
         Sort instructions are used in the query to determine what attributes
@@ -166,6 +136,7 @@ class Connection(pymongo_base.Connection):
         :param sort_dir: direction in which results be sorted (asc, desc).
         :return: sort parameters
         """
+        sort_keys = sort_keys or []
         sort_instructions = []
         _sort_dir = cls.SORT_OPERATION_MAP.get(
             sort_dir, cls.SORT_OPERATION_MAP['desc'])
@@ -212,20 +183,13 @@ class Connection(pymongo_base.Connection):
             self.db.resource.remove({'_id': resource_id})
             self.db.meter.remove({'_id': meter_id})
 
-            # The following code is to ensure that the keys for collections
-            # are set as objectId so that db2 index on key can be created
-            # correctly
-            user_id = str(bson.objectid.ObjectId())
-            self.db.user.insert({'_id': user_id})
-            self.db.user.remove({'_id': user_id})
-
-            project_id = str(bson.objectid.ObjectId())
-            self.db.project.insert({'_id': project_id})
-            self.db.project.remove({'_id': project_id})
+        # remove API v1 related table
+        self.db.user.drop()
+        self.db.project.drop()
 
     def clear(self):
         # db2 does not support drop_database, remove all collections
-        for col in ['user', 'project', 'resource', 'meter']:
+        for col in ['resource', 'meter']:
             self.db[col].drop()
         # drop_database command does nothing on db2 database since this has
         # not been implemented. However calling this method is important for
@@ -240,22 +204,6 @@ class Connection(pymongo_base.Connection):
         :param data: a dictionary such as returned by
                      ceilometer.meter.meter_message_from_counter
         """
-        # Make sure we know about the user and project
-        self.db.user.update(
-            {'_id': data['user_id'] or 'null'},
-            {'$addToSet': {'source': data['source'],
-                           },
-             },
-            upsert=True,
-        )
-        self.db.project.update(
-            {'_id': data['project_id']},
-            {'$addToSet': {'source': data['source'],
-                           },
-             },
-            upsert=True,
-        )
-
         # Record the updated resource metadata
         self.db.resource.update(
             {'_id': data['resource_id']},
@@ -287,7 +235,7 @@ class Connection(pymongo_base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None, pagination=None):
+                      metaquery=None, resource=None, pagination=None):
         """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -303,6 +251,8 @@ class Connection(pymongo_base.Connection):
         """
         if pagination:
             raise NotImplementedError('Pagination not implemented')
+
+        metaquery = metaquery or {}
 
         q = {}
         if user is not None:
@@ -439,8 +389,3 @@ class Connection(pymongo_base.Connection):
                 stat.period_start = stat.duration_start
                 stat.period_end = stat.duration_end
             yield stat
-
-    def get_capabilities(self):
-        """Return an dictionary representing the capabilities of this driver.
-        """
-        return self.CAPABILITIES

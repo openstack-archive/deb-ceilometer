@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -44,16 +43,22 @@ def _get_metadata_from_object(instance):
         'instance_type': (instance.flavor['id'] if instance.flavor else None),
         'host': instance.hostId,
         'flavor': instance.flavor,
-        # Image properties
-        'image': instance.image,
-        'image_ref': (instance.image['id'] if instance.image else None),
+        'status': instance.status.lower(),
     }
 
-    # Images that come through the conductor API in the nova notifier
-    # plugin will not have links.
-    if instance.image and instance.image.get('links'):
-        metadata['image_ref_url'] = instance.image['links'][0]['href']
+    # Image properties
+    if instance.image:
+        metadata['image'] = instance.image
+        metadata['image_ref'] = instance.image['id']
+        # Images that come through the conductor API in the nova notifier
+        # plugin will not have links.
+        if instance.image.get('links'):
+            metadata['image_ref_url'] = instance.image['links'][0]['href']
+        else:
+            metadata['image_ref_url'] = None
     else:
+        metadata['image'] = None
+        metadata['image_ref'] = None
         metadata['image_ref_url'] = None
 
     for name in INSTANCE_PROPERTIES:
@@ -71,7 +76,8 @@ def _get_metadata_from_object(instance):
 
 
 def make_sample_from_instance(instance, name, type, unit, volume,
-                              additional_metadata={}):
+                              additional_metadata=None):
+    additional_metadata = additional_metadata or {}
     resource_metadata = _get_metadata_from_object(instance)
     resource_metadata.update(additional_metadata)
     return sample.Sample(

@@ -1,9 +1,8 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
-# Copyright © 2013 Intel corp.
-# Copyright © 2013 eNovance
-# Copyright © 2014 Red Hat, Inc
+# Copyright 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2013 Intel corp.
+# Copyright 2013 eNovance
+# Copyright 2014 Red Hat, Inc
 #
 # Authors: Yunhong Jiang <yunhong.jiang@intel.com>
 #          Julien Danjou <julien@danjou.info>
@@ -72,7 +71,8 @@ default_test_data = TestSample(
 class TestPollster(plugin.PollsterBase):
     test_data = default_test_data
 
-    def get_samples(self, manager, cache, resources=[]):
+    def get_samples(self, manager, cache, resources=None):
+        resources = resources or []
         self.samples.append((manager, resources))
         self.resources.extend(resources)
         c = copy.copy(self.test_data)
@@ -81,7 +81,8 @@ class TestPollster(plugin.PollsterBase):
 
 
 class TestPollsterException(TestPollster):
-    def get_samples(self, manager, cache, resources=[]):
+    def get_samples(self, manager, cache, resources=None):
+        resources = resources or []
         self.samples.append((manager, resources))
         self.resources.extend(resources)
         raise Exception()
@@ -168,30 +169,27 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             self.pipeline_cfg,
             self.transformer_manager)
 
+    def get_extention_list(self):
+        return [extension.Extension('test',
+                                    None,
+                                    None,
+                                    self.Pollster(), ),
+                extension.Extension('testanother',
+                                    None,
+                                    None,
+                                    self.PollsterAnother(), ),
+                extension.Extension('testexception',
+                                    None,
+                                    None,
+                                    self.PollsterException(), ),
+                extension.Extension('testexceptionanother',
+                                    None,
+                                    None,
+                                    self.PollsterExceptionAnother(), )]
+
     def create_pollster_manager(self):
         return extension.ExtensionManager.make_test_instance(
-            [
-                extension.Extension(
-                    'test',
-                    None,
-                    None,
-                    self.Pollster(), ),
-                extension.Extension(
-                    'testanother',
-                    None,
-                    None,
-                    self.PollsterAnother(), ),
-                extension.Extension(
-                    'testexception',
-                    None,
-                    None,
-                    self.PollsterException(), ),
-                extension.Extension(
-                    'testexceptionanother',
-                    None,
-                    None,
-                    self.PollsterExceptionAnother(), ),
-            ],
+            self.get_extention_list(),
         )
 
     def create_discovery_manager(self):

@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright 2013 IBM Corp.
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -29,7 +28,7 @@ import webob
 
 from ceilometer.api import hooks
 from ceilometer.openstack.common import gettextutils
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
@@ -124,7 +123,7 @@ class ParsableErrorMiddleware(object):
                 except ValueError as err:
                     body = [json.dumps({'error_message': '\n'.join(app_iter)})]
                 state['headers'].append(('Content-Type', 'application/json'))
-            state['headers'].append(('Content-Length', len(body[0])))
+            state['headers'].append(('Content-Length', str(len(body[0]))))
         else:
             body = app_iter
         return body

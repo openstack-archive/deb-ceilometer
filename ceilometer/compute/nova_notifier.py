@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 New Dream Network, LLC (DreamHost)
+# Copyright 2013 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -37,7 +36,7 @@ from nova import utils
 from stevedore import extension
 
 from ceilometer.compute.virt import inspector
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 
 
 # This module runs inside the nova compute

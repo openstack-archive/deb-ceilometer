@@ -1,7 +1,6 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 eNovance <licensing@enovance.com>
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -33,7 +32,9 @@ from ceilometer.tests import base
 class BinTestCase(base.BaseTestCase):
     def setUp(self):
         super(BinTestCase, self).setUp()
-        content = ("[database]\n"
+        content = ("[DEFAULT]\n"
+                   "rpc_backend=fake\n"
+                   "[database]\n"
                    "connection=log://localhost\n")
         self.tempfile = fileutils.write_to_tempfile(content=content,
                                                     prefix='ceilometer',
@@ -58,7 +59,9 @@ class BinTestCase(base.BaseTestCase):
         self.assertIn("Nothing to clean", err)
 
     def test_run_expirer_ttl_enabled(self):
-        content = ("[database]\n"
+        content = ("[DEFAULT]\n"
+                   "rpc_backend=fake\n"
+                   "[database]\n"
                    "time_to_live=1\n"
                    "connection=log://localhost\n")
         self.tempfile = fileutils.write_to_tempfile(content=content,
@@ -78,7 +81,7 @@ class BinSendSampleTestCase(base.BaseTestCase):
         super(BinSendSampleTestCase, self).setUp()
         pipeline_cfg_file = self.path_get('etc/ceilometer/pipeline.yaml')
         content = "[DEFAULT]\n"\
-                  "rpc_backend=ceilometer.openstack.common.rpc.impl_fake\n"\
+                  "rpc_backend=fake\n"\
                   "pipeline_cfg_file={0}\n".format(pipeline_cfg_file)
 
         self.tempfile = fileutils.write_to_tempfile(content=content,
@@ -101,21 +104,34 @@ class BinApiTestCase(base.BaseTestCase):
 
     def setUp(self):
         super(BinApiTestCase, self).setUp()
+        # create api_paste.ini file without authentication
+        content = \
+            "[pipeline:main]\n"\
+            "pipeline = api-server\n"\
+            "[app:api-server]\n"\
+            "paste.app_factory = ceilometer.api.app:app_factory\n"
+        self.paste = fileutils.write_to_tempfile(content=content,
+                                                 prefix='api_paste',
+                                                 suffix='.ini')
+
+        # create ceilometer.conf file
         self.api_port = random.randint(10000, 11000)
         self.http = httplib2.Http()
         pipeline_cfg_file = self.path_get('etc/ceilometer/pipeline.yaml')
         policy_file = self.path_get('etc/ceilometer/policy.json')
         content = "[DEFAULT]\n"\
-                  "rpc_backend=ceilometer.openstack.common.rpc.impl_fake\n"\
+                  "rpc_backend=fake\n"\
                   "auth_strategy=noauth\n"\
                   "debug=true\n"\
                   "pipeline_cfg_file={0}\n"\
                   "policy_file={1}\n"\
+                  "api_paste_config={2}\n"\
                   "[api]\n"\
-                  "port={2}\n"\
+                  "port={3}\n"\
                   "[database]\n"\
                   "connection=log://localhost\n".format(pipeline_cfg_file,
                                                         policy_file,
+                                                        self.paste,
                                                         self.api_port)
 
         self.tempfile = fileutils.write_to_tempfile(content=content,
@@ -142,11 +158,6 @@ class BinApiTestCase(base.BaseTestCase):
             else:
                 return r, c
         return (None, None)
-
-    def test_v1(self):
-        response, content = self.get_response('v1/meters')
-        self.assertEqual(200, response.status)
-        self.assertEqual({'meters': []}, json.loads(content))
 
     def test_v2(self):
         response, content = self.get_response('v2/meters')

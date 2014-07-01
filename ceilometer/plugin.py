@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -22,13 +21,15 @@ import abc
 import collections
 import fnmatch
 
-from oslo.config import cfg
+import oslo.messaging
 import six
 
-# Import this option so every Notification plugin can use it freely.
-cfg.CONF.import_opt('notification_topics',
-                    'ceilometer.openstack.common.notifier.rpc_notifier')
+from ceilometer import messaging
+from ceilometer.openstack.common import context
+from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common import log
 
+LOG = log.getLogger(__name__)
 
 ExchangeTopics = collections.namedtuple('ExchangeTopics',
                                         ['exchange', 'topics'])
@@ -42,6 +43,9 @@ class PluginBase(object):
 @six.add_metaclass(abc.ABCMeta)
 class NotificationBase(PluginBase):
     """Base class for plugins that support the notification API."""
+    def __init__(self, pipeline_manager):
+        super(NotificationBase, self).__init__()
+        self.pipeline_manager = pipeline_manager
 
     @abc.abstractproperty
     def event_types(self):
@@ -49,13 +53,24 @@ class NotificationBase(PluginBase):
         given to this plugin.
         """
 
-    @abc.abstractmethod
-    def get_exchange_topics(self, conf):
-        """Return a sequence of ExchangeTopics defining the exchange and
+    def get_targets(self, conf):
+        """Return a sequence of oslo.messaging.Target defining the exchange and
         topics to be connected for this plugin.
 
         :param conf: Configuration.
         """
+
+        #TODO(sileht): Backwards compatibility, remove in J+1
+        if hasattr(self, 'get_exchange_topics'):
+            LOG.warn(_('get_exchange_topics API of NotificationPlugin is'
+                       'deprecated, implements get_targets instead.'))
+
+            targets = []
+            for exchange, topics in self.get_exchange_topics(conf):
+                targets.extend([oslo.messaging.Target(topic=topic,
+                                                      exchange=exchange)
+                                for topic in topics])
+            return targets
 
     @abc.abstractmethod
     def process_notification(self, message):
@@ -73,17 +88,40 @@ class NotificationBase(PluginBase):
         return any(map(lambda e: fnmatch.fnmatch(event_type, e),
                        event_type_to_handle))
 
-    def to_samples(self, notification):
-        """Return samples produced by *process_notification* for the given
-        notification, if it's handled by this notification handler.
+    def info(self, ctxt, publisher_id, event_type, payload, metadata):
+        """RPC endpoint for notification messages
 
+        When another service sends a notification over the message
+        bus, this method receives it.
+
+        :param ctxt: oslo.messaging context
+        :param publisher_id: publisher of the notification
+        :param event_type: type of notification
+        :param payload: notification payload
+        :param metadata: metadata about the notification
+
+        """
+        notification = messaging.convert_to_old_notification_format(
+            'info', ctxt, publisher_id, event_type, payload, metadata)
+        self.to_samples_and_publish(context.get_admin_context(), notification)
+
+    def to_samples_and_publish(self, context, notification):
+        """Return samples produced by *process_notification* for the given
+        notification.
+
+        :param context: Execution context from the service or RPC call
         :param notification: The notification to process.
 
         """
-        if self._handle_event_type(notification['event_type'],
-                                   self.event_types):
-            return self.process_notification(notification)
-        return []
+
+        #TODO(sileht): this will be moved into oslo.messaging
+        #see oslo.messaging bp notification-dispatcher-filter
+        if not self._handle_event_type(notification['event_type'],
+                                       self.event_types):
+            return
+
+        with self.pipeline_manager.publisher(context) as p:
+            p(list(self.process_notification(notification)))
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -91,7 +129,7 @@ class PollsterBase(PluginBase):
     """Base class for plugins that support the polling API."""
 
     @abc.abstractmethod
-    def get_samples(self, manager, cache, resources=[]):
+    def get_samples(self, manager, cache, resources=None):
         """Return a sequence of Counter instances from polling the resources.
 
         :param manager: The service manager class invoking the plugin.

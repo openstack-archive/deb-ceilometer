@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Intel
+# Copyright 2013 Intel
 #
 # Author: Shuangtai Tian <shuangtai.tian@intel.com>
 #
@@ -20,7 +19,7 @@ events.
 """
 
 from ceilometer.compute import notifications
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import sample

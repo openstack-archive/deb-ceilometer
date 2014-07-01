@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -22,15 +21,11 @@ import datetime
 import logging
 
 import mock
-import testscenarios
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
-
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 LOG = logging.getLogger(__name__)
 
@@ -58,8 +53,8 @@ class TestComputeDurationByResource(FunctionalTest,
 
     def _patch_get_interval(self, start, end):
         def get_interval(event_filter, period, groupby, aggregate):
-            assert event_filter.start
-            assert event_filter.end
+            self.assertIsNotNone(event_filter.start)
+            self.assertIsNotNone(event_filter.end)
             if (event_filter.start > end or event_filter.end < start):
                 return []
             duration_start = max(event_filter.start, start)

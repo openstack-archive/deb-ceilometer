@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -18,14 +17,11 @@
 """Base classes for storage engines
 """
 
-import abc
 import datetime
 import math
-import six
 
 from six import moves
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import timeutils
 
 
@@ -86,8 +82,8 @@ class NoResultFound(Exception):
 class Pagination(object):
     """Class for pagination query."""
 
-    def __init__(self, limit=None, primary_sort_dir='desc', sort_keys=[],
-                 sort_dirs=[], marker_value=None):
+    def __init__(self, limit=None, primary_sort_dir='desc', sort_keys=None,
+                 sort_dirs=None, marker_value=None):
         """This puts all parameters used for paginate query together.
 
         :param limit: Maximum number of items to return;
@@ -102,17 +98,8 @@ class Pagination(object):
         self.limit = limit
         self.primary_sort_dir = primary_sort_dir
         self.marker_value = marker_value
-        self.sort_keys = sort_keys
-        self.sort_dirs = sort_dirs
-
-
-@six.add_metaclass(abc.ABCMeta)
-class StorageEngine(object):
-    """Base class for storage engines."""
-
-    @abc.abstractmethod
-    def get_connection(self, conf):
-        """Return a Connection instance based on the configuration settings."""
+        self.sort_keys = sort_keys or []
+        self.sort_dirs = sort_dirs or []
 
 
 class Connection(object):
@@ -120,7 +107,7 @@ class Connection(object):
 
     """A dictionary representing the capabilities of this driver.
     """
-    DEFAULT_CAPABILITIES = {
+    CAPABILITIES = {
         'meters': {'pagination': False,
                    'query': {'simple': False,
                              'metadata': False,
@@ -156,9 +143,13 @@ class Connection(object):
         'events': {'query': {'simple': False}},
     }
 
-    @staticmethod
-    def __init__(conf):
+    STORAGE_CAPABILITIES = {
+        'storage': {'production_ready': False},
+    }
+
+    def __init__(self, url):
         """Constructor."""
+        pass
 
     @staticmethod
     def upgrade():
@@ -186,26 +177,10 @@ class Connection(object):
         raise NotImplementedError('Clearing samples not implemented')
 
     @staticmethod
-    def get_users(source=None):
-        """Return an iterable of user id strings.
-
-        :param source: Optional source filter.
-        """
-        raise NotImplementedError('Users not implemented')
-
-    @staticmethod
-    def get_projects(source=None):
-        """Return an iterable of project id strings.
-
-        :param source: Optional source filter.
-        """
-        raise NotImplementedError('Projects not implemented')
-
-    @staticmethod
     def get_resources(user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None, pagination=None):
+                      metaquery=None, resource=None, pagination=None):
         """Return an iterable of models.Resource instances containing
         resource information.
 
@@ -224,7 +199,7 @@ class Connection(object):
 
     @staticmethod
     def get_meters(user=None, project=None, resource=None, source=None,
-                   metaquery={}, pagination=None):
+                   metaquery=None, pagination=None):
         """Return an iterable of model.Meter instances containing meter
         information.
 
@@ -395,8 +370,16 @@ class Connection(object):
         raise NotImplementedError('Complex query for alarms '
                                   'history is not implemented.')
 
-    @staticmethod
-    def get_capabilities():
-        """Return an dictionary representing the capabilities of this driver.
+    @classmethod
+    def get_capabilities(cls):
+        """Return an dictionary representing the capabilities of each driver.
         """
-        raise NotImplementedError('Capabilities not implemented.')
+        return cls.CAPABILITIES
+
+    @classmethod
+    def get_storage_capabilities(cls):
+        """Return a dictionary representing the performance capabilities.
+
+        This is needed to evaluate the performance of each driver.
+        """
+        return cls.STORAGE_CAPABILITIES

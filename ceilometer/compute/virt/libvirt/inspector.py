@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
 #
@@ -19,9 +18,10 @@
 
 from lxml import etree
 from oslo.config import cfg
+import six
 
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log as logging
 
 libvirt = None
@@ -83,7 +83,7 @@ class LibvirtInspector(virt_inspector.Inspector):
             return self._get_connection().lookupByName(instance_name)
         except Exception as ex:
             if not libvirt or not isinstance(ex, libvirt.libvirtError):
-                raise virt_inspector.InspectorException(unicode(ex))
+                raise virt_inspector.InspectorException(six.text_type(ex))
             error_code = ex.get_error_code()
             msg = ("Error from libvirt while looking up %(instance_name)s: "
                    "[Error Code %(error_code)s] "
@@ -107,12 +107,12 @@ class LibvirtInspector(virt_inspector.Inspector):
 
     def inspect_cpus(self, instance_name):
         domain = self._lookup_by_name(instance_name)
-        (__, __, __, num_cpu, cpu_time) = domain.info()
-        return virt_inspector.CPUStats(number=num_cpu, time=cpu_time)
+        dom_info = domain.info()
+        return virt_inspector.CPUStats(number=dom_info[3], time=dom_info[4])
 
     def inspect_vnics(self, instance_name):
         domain = self._lookup_by_name(instance_name)
-        (state, __, __, __, __) = domain.info()
+        state = domain.info()[0]
         if state == libvirt.VIR_DOMAIN_SHUTOFF:
             LOG.warn(_('Failed to inspect vnics of %(instance_name)s, '
                        'domain is in state of SHUTOFF'),
@@ -138,17 +138,16 @@ class LibvirtInspector(virt_inspector.Inspector):
                           for p in iface.findall('filterref/parameter'))
             interface = virt_inspector.Interface(name=name, mac=mac_address,
                                                  fref=fref, parameters=params)
-            rx_bytes, rx_packets, __, __, \
-                tx_bytes, tx_packets, __, __ = domain.interfaceStats(name)
-            stats = virt_inspector.InterfaceStats(rx_bytes=rx_bytes,
-                                                  rx_packets=rx_packets,
-                                                  tx_bytes=tx_bytes,
-                                                  tx_packets=tx_packets)
+            dom_stats = domain.interfaceStats(name)
+            stats = virt_inspector.InterfaceStats(rx_bytes=dom_stats[0],
+                                                  rx_packets=dom_stats[1],
+                                                  tx_bytes=dom_stats[4],
+                                                  tx_packets=dom_stats[5])
             yield (interface, stats)
 
     def inspect_disks(self, instance_name):
         domain = self._lookup_by_name(instance_name)
-        (state, __, __, __, __) = domain.info()
+        state = domain.info()[0]
         if state == libvirt.VIR_DOMAIN_SHUTOFF:
             LOG.warn(_('Failed to inspect disks of %(instance_name)s, '
                        'domain is in state of SHUTOFF'),

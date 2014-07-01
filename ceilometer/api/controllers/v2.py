@@ -1,8 +1,7 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 # Copyright 2013 IBM Corp.
-# Copyright © 2013 eNovance <licensing@enovance.com>
+# Copyright 2013 eNovance <licensing@enovance.com>
 # Copyright Ericsson AB 2013. All rights reserved
 #
 # Authors: Doug Hellmann <doug.hellmann@dreamhost.com>
@@ -46,10 +45,10 @@ from wsme import types as wtypes
 import wsmeext.pecan as wsme_pecan
 
 from ceilometer.api import acl
+from ceilometer import messaging
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common.notifier import api as notify
 from ceilometer.openstack.common import strutils
 from ceilometer.openstack.common import timeutils
 from ceilometer import sample
@@ -242,9 +241,9 @@ class Query(_Base):
                 try:
                     converted_value = ast.literal_eval(self.value)
                 except (ValueError, SyntaxError):
-                    msg = _('Failed to convert the metadata value %s'
-                            ' automatically') % (self.value)
-                    LOG.debug(msg)
+                    # Unable to convert the metadata value automatically
+                    # let it default to self.value
+                    pass
             else:
                 if type not in self._supported_types:
                     # Types must be explicitly declared so the
@@ -254,7 +253,7 @@ class Query(_Base):
                     raise TypeError()
                 converted_value = self._type_converters[type](self.value)
         except ValueError:
-            msg = _('Failed to convert the value %(value)s'
+            msg = _('Unable to convert the value %(value)s'
                     ' to the expected data type %(type)s.') % \
                 {'value': self.value, 'type': type}
             raise ClientSideError(msg)
@@ -325,14 +324,16 @@ def _verify_query_segregation(query, auth_project=None):
     '''Ensure non-admin queries are not constrained to another project.'''
     auth_project = (auth_project or
                     acl.get_limited_to_project(pecan.request.headers))
-    if auth_project:
-        for q in query:
-            if q.field == 'project_id' and (auth_project != q.value or
-                                            q.op != 'eq'):
-                raise ProjectNotAuthorized(q.value)
+
+    if not auth_project:
+        return
+
+    for q in query:
+        if q.field in ('project', 'project_id') and auth_project != q.value:
+            raise ProjectNotAuthorized(q.value)
 
 
-def _validate_query(query, db_func, internal_keys=[],
+def _validate_query(query, db_func, internal_keys=None,
                     allow_timestamps=True):
     """Validates the syntax of the query and verifies that the query
     request is authorized for the included project.
@@ -356,6 +357,7 @@ def _validate_query(query, db_func, internal_keys=[],
 
     """
 
+    internal_keys = internal_keys or []
     _verify_query_segregation(query)
 
     valid_keys = inspect.getargspec(db_func)[0]
@@ -446,8 +448,9 @@ def _validate_timestamp_fields(query, field_name, operator_list,
     return False
 
 
-def _query_to_kwargs(query, db_func, internal_keys=[],
+def _query_to_kwargs(query, db_func, internal_keys=None,
                      allow_timestamps=True):
+    internal_keys = internal_keys or []
     _validate_query(query, db_func, internal_keys=internal_keys,
                     allow_timestamps=allow_timestamps)
     query = _sanitize_query(query, db_func)
@@ -519,7 +522,7 @@ def _validate_groupby_fields(groupby_fields):
     return list(set(groupby_fields))
 
 
-def _get_query_timestamps(args={}):
+def _get_query_timestamps(args=None):
     """Return any optional timestamp information in the request.
 
     Determine the desired range, if any, from the GET arguments. Set
@@ -536,6 +539,12 @@ def _get_query_timestamps(args={}):
     search_offset: search_offset parameter from request
 
     """
+    if args is None:
+        return {'query_start': None,
+                'query_end': None,
+                'start_timestamp': None,
+                'end_timestamp': None,
+                'search_offset': 0}
     search_offset = int(args.get('search_offset', 0))
 
     start_timestamp = args.get('start_timestamp')
@@ -575,7 +584,8 @@ def _flatten_metadata(metadata):
         # output before: a.b:c=d
         # output now: a.b.c=d
         # So to keep the first variant just replace all dots except the first
-        return dict((k.replace('.', ':').replace(':', '.', 1), unicode(v))
+        return dict((k.replace('.', ':').replace(':', '.', 1),
+                     six.text_type(v))
                     for k, v in utils.recursive_keypairs(metadata,
                                                          separator='.')
                     if type(v) is not set)
@@ -594,8 +604,10 @@ def _make_link(rel_name, url, type, type_arg, query=None):
 def _send_notification(event, payload):
     notification = event.replace(" ", "_")
     notification = "alarm.%s" % notification
-    notify.notify(None, notify.publisher_id("ceilometer.api"),
-                  notification, notify.INFO, payload)
+    notifier = messaging.get_notifier(publisher_id="ceilometer.api")
+    # FIXME(sileht): perhaps we need to copy some infos from the
+    # pecan request headers like nova does
+    notifier.info(context.RequestContext(), notification, payload)
 
 
 class OldSample(_Base):
@@ -643,8 +655,9 @@ class OldSample(_Base):
     message_id = wtypes.text
     "A unique identifier for the sample"
 
-    def __init__(self, counter_volume=None, resource_metadata={},
+    def __init__(self, counter_volume=None, resource_metadata=None,
                  timestamp=None, **kwds):
+        resource_metadata = resource_metadata or {}
         if counter_volume is not None:
             counter_volume = float(counter_volume)
         resource_metadata = _flatten_metadata(resource_metadata)
@@ -808,12 +821,13 @@ class MeterController(rest.RestController):
         self.meter_name = meter_name
 
     @wsme_pecan.wsexpose([OldSample], [Query], int)
-    def get_all(self, q=[], limit=None):
+    def get_all(self, q=None, limit=None):
         """Return samples for the meter.
 
         :param q: Filter rules for the data to be returned.
         :param limit: Maximum number of samples to return.
         """
+        q = q or []
         if limit and limit < 0:
             raise ClientSideError(_("Limit must be positive"))
         kwargs = _query_to_kwargs(q, storage.SampleFilter.__init__)
@@ -884,7 +898,7 @@ class MeterController(rest.RestController):
         return samples
 
     @wsme_pecan.wsexpose([Statistics], [Query], [unicode], int, [Aggregate])
-    def statistics(self, q=[], groupby=[], period=None, aggregate=[]):
+    def statistics(self, q=None, groupby=None, period=None, aggregate=None):
         """Computes the statistics of the samples in the time range given.
 
         :param q: Filter rules for the data to be returned.
@@ -893,6 +907,10 @@ class MeterController(rest.RestController):
                        period long of that number of seconds.
         :param aggregate: The selectable aggregation functions to be applied.
         """
+        q = q or []
+        groupby = groupby or []
+        aggregate = aggregate or []
+
         if period and period < 0:
             raise ClientSideError(_("Period must be positive."))
 
@@ -977,11 +995,13 @@ class MetersController(rest.RestController):
         return MeterController(meter_name), remainder
 
     @wsme_pecan.wsexpose([Meter], [Query])
-    def get_all(self, q=[]):
+    def get_all(self, q=None):
         """Return all known meters, based on the data recorded so far.
 
         :param q: Filter rules for the meters to be returned.
         """
+        q = q or []
+
         #Timestamp field is not supported for Meter queries
         kwargs = _query_to_kwargs(q, pecan.request.storage_conn.get_meters,
                                   allow_timestamps=False)
@@ -1065,12 +1085,14 @@ class SamplesController(rest.RestController):
     """Controller managing the samples."""
 
     @wsme_pecan.wsexpose([Sample], [Query], int)
-    def get_all(self, q=[], limit=None):
+    def get_all(self, q=None, limit=None):
         """Return all known samples, based on the data recorded so far.
 
         :param q: Filter rules for the samples to be returned.
         :param limit: Maximum number of samples to be returned.
         """
+        q = q or []
+
         if limit and limit < 0:
             raise ClientSideError(_("Limit must be positive"))
         kwargs = _query_to_kwargs(q, storage.SampleFilter.__init__)
@@ -1107,20 +1129,20 @@ class ComplexQuery(_Base):
 
     @classmethod
     def sample(cls):
-        return cls(filter='{\"and\": [{\"and\": [{\"=\": ' +
-                          '{\"counter_name\": \"cpu_util\"}}, ' +
-                          '{\">\": {\"counter_volume\": 0.23}}, ' +
-                          '{\"<\": {\"counter_volume\": 0.26}}]}, ' +
-                          '{\"or\": [{\"and\": [{\">\": ' +
-                          '{\"timestamp\": \"2013-12-01T18:00:00\"}}, ' +
-                          '{\"<\": ' +
-                          '{\"timestamp\": \"2013-12-01T18:15:00\"}}]}, ' +
-                          '{\"and\": [{\">\": ' +
-                          '{\"timestamp\": \"2013-12-01T18:30:00\"}}, ' +
-                          '{\"<\": ' +
-                          '{\"timestamp\": \"2013-12-01T18:45:00\"}}]}]}]}',
-                   orderby='[{\"counter_volume\": \"ASC\"}, ' +
-                           '{\"timestamp\": \"DESC\"}]',
+        return cls(filter='{"and": [{"and": [{"=": ' +
+                          '{"counter_name": "cpu_util"}}, ' +
+                          '{">": {"counter_volume": 0.23}}, ' +
+                          '{"<": {"counter_volume": 0.26}}]}, ' +
+                          '{"or": [{"and": [{">": ' +
+                          '{"timestamp": "2013-12-01T18:00:00"}}, ' +
+                          '{"<": ' +
+                          '{"timestamp": "2013-12-01T18:15:00"}}]}, ' +
+                          '{"and": [{">": ' +
+                          '{"timestamp": "2013-12-01T18:30:00"}}, ' +
+                          '{"<": ' +
+                          '{"timestamp": "2013-12-01T18:45:00"}}]}]}]}',
+                   orderby='[{"counter_volume": "ASC"}, ' +
+                           '{"timestamp": "DESC"}]',
                    limit=42
                    )
 
@@ -1143,8 +1165,9 @@ class ValidatedComplexQuery(object):
 
     timestamp_fields = ["timestamp", "state_timestamp"]
 
-    def __init__(self, query, db_model, additional_name_mapping={},
+    def __init__(self, query, db_model, additional_name_mapping=None,
                  metadata_allowed=False):
+        additional_name_mapping = additional_name_mapping or {}
         self.name_mapping = {"user": "user_id",
                              "project": "project_id"}
         self.name_mapping.update(additional_name_mapping)
@@ -1167,7 +1190,8 @@ class ValidatedComplexQuery(object):
         schema_value_in = {
             "type": "array",
             "items": {"oneOf": [{"type": "string"},
-                                {"type": "number"}]}}
+                                {"type": "number"}]},
+            "minItems": 1}
 
         schema_field = {
             "type": "object",
@@ -1401,7 +1425,8 @@ class Resource(_Base):
     source = wtypes.text
     "The source where the resource come from"
 
-    def __init__(self, metadata={}, **kwds):
+    def __init__(self, metadata=None, **kwds):
+        metadata = metadata or {}
         metadata = _flatten_metadata(metadata)
         super(Resource, self).__init__(metadata=metadata, **kwds)
 
@@ -1454,12 +1479,13 @@ class ResourcesController(rest.RestController):
                                           self._resource_links(resource_id))
 
     @wsme_pecan.wsexpose([Resource], [Query], int)
-    def get_all(self, q=[], meter_links=1):
+    def get_all(self, q=None, meter_links=1):
         """Retrieve definitions of all of the resources.
 
         :param q: Filter rules for the resources to be returned.
         :param meter_links: option to include related meter links
         """
+        q = q or []
         kwargs = _query_to_kwargs(q, pecan.request.storage_conn.get_resources)
         resources = [
             Resource.from_db_and_links(r,
@@ -1568,6 +1594,14 @@ class AlarmCombinationRule(_Base):
 
     def as_dict(self):
         return self.as_dict_from_keys(['operator', 'alarm_ids'])
+
+    @staticmethod
+    def validate(rule):
+        rule.alarm_ids = sorted(set(rule.alarm_ids), key=rule.alarm_ids.index)
+        if len(rule.alarm_ids) <= 1:
+            raise ClientSideError(_('Alarm combination rule should contain at'
+                                    ' least two different alarm ids.'))
+        return rule
 
     @classmethod
     def sample(cls):
@@ -1963,17 +1997,19 @@ class AlarmController(rest.RestController):
     # TODO(eglynn): add pagination marker to signature once overall
     #               API support for pagination is finalized
     @wsme_pecan.wsexpose([AlarmChange], [Query])
-    def history(self, q=[]):
+    def history(self, q=None):
         """Assembles the alarm history requested.
 
         :param q: Filter rules for the changes to be described.
         """
+        q = q or []
         # allow history to be returned for deleted alarms, but scope changes
         # returned to those carried out on behalf of the auth'd tenant, to
         # avoid inappropriate cross-tenant visibility of alarm history
         auth_project = acl.get_limited_to_project(pecan.request.headers)
         conn = pecan.request.storage_conn
-        kwargs = _query_to_kwargs(q, conn.get_alarm_changes, ['on_behalf_of'])
+        kwargs = _query_to_kwargs(q, conn.get_alarm_changes, ['on_behalf_of',
+                                                              'alarm_id'])
         return [AlarmChange.from_db_model(ac)
                 for ac in conn.get_alarm_changes(self._id, auth_project,
                                                  **kwargs)]
@@ -2093,11 +2129,12 @@ class AlarmsController(rest.RestController):
         return Alarm.from_db_model(alarm)
 
     @wsme_pecan.wsexpose([Alarm], [Query])
-    def get_all(self, q=[]):
+    def get_all(self, q=None):
         """Return all alarms, based on the query provided.
 
         :param q: Filter rules for the alarms to be returned.
         """
+        q = q or []
         #Timestamp is not supported field for Simple Alarm queries
         kwargs = _query_to_kwargs(q,
                                   pecan.request.storage_conn.get_alarms,
@@ -2298,11 +2335,12 @@ class EventsController(rest.RestController):
 
     @requires_admin
     @wsme_pecan.wsexpose([Event], [EventQuery])
-    def get_all(self, q=[]):
+    def get_all(self, q=None):
         """Return all events matching the query filters.
 
         :param q: Filter arguments for which Events to return
         """
+        q = q or []
         event_filter = _event_query_to_event_filter(q)
         return [Event(message_id=event.message_id,
                       event_type=event.event_type,
@@ -2414,12 +2452,14 @@ def _flatten_capabilities(capabilities):
 
 
 class Capabilities(_Base):
-    """A representation of the API capabilities, usually constrained
-       by restrictions imposed by the storage driver.
+    """A representation of the API and storage capabilities, usually
+       constrained by restrictions imposed by the storage driver.
     """
 
     api = {wtypes.text: bool}
     "A flattened dictionary of API capabilities"
+    storage = {wtypes.text: bool}
+    "A flattened dictionary of storage capabilities"
 
     @classmethod
     def sample(cls):
@@ -2458,7 +2498,8 @@ class Capabilities(_Base):
                            'history': {'query': {'simple': True,
                                                  'complex': True}}},
                 'events': {'query': {'simple': True}},
-            })
+            }),
+            storage=_flatten_capabilities({'production_ready': True}),
         )
 
 
@@ -2474,7 +2515,9 @@ class CapabilitiesController(rest.RestController):
         # variation in API capabilities is effectively determined by
         # the lack of strict feature parity across storage drivers
         driver_capabilities = pecan.request.storage_conn.get_capabilities()
-        return Capabilities(api=_flatten_capabilities(driver_capabilities))
+        driver_perf = pecan.request.storage_conn.get_storage_capabilities()
+        return Capabilities(api=_flatten_capabilities(driver_capabilities),
+                            storage=_flatten_capabilities(driver_perf))
 
 
 class V2Controller(object):

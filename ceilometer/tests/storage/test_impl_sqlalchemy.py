@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Author: John Tran <jhtran@att.com>
 #         Julien Danjou <julien@danjou.info>
@@ -28,29 +27,27 @@ import repr
 
 from mock import patch
 
-from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import timeutils
+from ceilometer.storage import impl_sqlalchemy
 from ceilometer.storage import models
 from ceilometer.storage.sqlalchemy import models as sql_models
-from ceilometer.tests import base as tests_base
+
+from ceilometer.tests import base as test_base
 from ceilometer.tests import db as tests_db
 from ceilometer.tests.storage import test_storage_scenarios as scenarios
 
 
-class EventTestBase(tests_db.TestBase):
-    # Note: Do not derive from SQLAlchemyEngineTestBase, since we
-    # don't want to automatically inherit all the Meter setup.
-    database_connection = 'sqlite://'
+@tests_db.run_with('sqlite')
+class CeilometerBaseTest(tests_db.TestBase):
 
-
-class CeilometerBaseTest(EventTestBase):
     def test_ceilometer_base(self):
         base = sql_models.CeilometerBase()
         base['key'] = 'value'
         self.assertEqual('value', base['key'])
 
 
-class TraitTypeTest(EventTestBase):
+@tests_db.run_with('sqlite')
+class TraitTypeTest(tests_db.TestBase):
     # TraitType is a construct specific to sqlalchemy.
     # Not applicable to other drivers.
 
@@ -82,7 +79,8 @@ class TraitTypeTest(EventTestBase):
         self.assertTrue(repr.repr(tt2))
 
 
-class EventTypeTest(EventTestBase):
+@tests_db.run_with('sqlite')
+class EventTypeTest(tests_db.TestBase):
     # EventType is a construct specific to sqlalchemy
     # Not applicable to other drivers.
 
@@ -107,7 +105,8 @@ class MyException(Exception):
     pass
 
 
-class EventTest(EventTestBase):
+@tests_db.run_with('sqlite')
+class EventTest(tests_db.TestBase):
     def test_string_traits(self):
         model = models.Trait("Foo", models.Trait.TEXT_TYPE, "my_text")
         trait = self.conn._make_trait(model, None)
@@ -173,26 +172,17 @@ class EventTest(EventTestBase):
         self.assertTrue(repr.repr(ev))
 
 
-class ModelTest(tests_base.BaseTestCase):
-    database_connection = 'mysql://localhost'
-
-    def test_model_table_args(self):
-        self.CONF = self.useFixture(config.Config()).conf
-        self.CONF.set_override('connection', self.database_connection,
-                               group='database')
-        self.assertIsNotNone(sql_models.table_args())
-
-
+@tests_db.run_with('sqlite')
 class RelationshipTest(scenarios.DBTestBase):
     # Note: Do not derive from SQLAlchemyEngineTestBase, since we
     # don't want to automatically inherit all the Meter setup.
-    database_connection = 'sqlite://'
 
-    def test_clear_metering_data_meta_tables(self):
-        timeutils.utcnow.override_time = datetime.datetime(2012, 7, 2, 10, 45)
+    @patch.object(timeutils, 'utcnow')
+    def test_clear_metering_data_meta_tables(self, mock_utcnow):
+        mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(3 * 60)
 
-        session = self.conn._get_db_session()
+        session = self.conn._engine_facade.get_session()
         meta_tables = [sql_models.MetaText, sql_models.MetaFloat,
                        sql_models.MetaBigInt, sql_models.MetaBool]
         for table in meta_tables:
@@ -202,29 +192,8 @@ class RelationshipTest(scenarios.DBTestBase):
                         .group_by(sql_models.Sample.id)
                         )).count())
 
-    def test_clear_metering_data_associations(self):
-        timeutils.utcnow.override_time = datetime.datetime(2012, 7, 2, 10, 45)
-        self.conn.clear_expired_metering_data(3 * 60)
 
-        session = self.conn._get_db_session()
-        self.assertEqual(0, session.query(sql_models.sourceassoc)
-            .filter(~sql_models.sourceassoc.c.sample_id.in_(
-                session.query(sql_models.Sample.id)
-                    .group_by(sql_models.Sample.id)
-                    )).count())
-        self.assertEqual(0, session.query(sql_models.sourceassoc)
-            .filter(~sql_models.sourceassoc.c.project_id.in_(
-                session.query(sql_models.Project.id)
-                    .group_by(sql_models.Project.id)
-                    )).count())
-        self.assertEqual(0, session.query(sql_models.sourceassoc)
-            .filter(~sql_models.sourceassoc.c.user_id.in_(
-                session.query(sql_models.User.id)
-                    .group_by(sql_models.User.id)
-                    )).count())
-
-
-class CapabilitiesTest(EventTestBase):
+class CapabilitiesTest(test_base.BaseTestCase):
     # Check the returned capabilities list, which is specific to each DB
     # driver
 
@@ -265,5 +234,13 @@ class CapabilitiesTest(EventTestBase):
             'events': {'query': {'simple': True}}
         }
 
-        actual_capabilities = self.conn.get_capabilities()
+        actual_capabilities = impl_sqlalchemy.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_storage_capabilities(self):
+        expected_capabilities = {
+            'storage': {'production_ready': True},
+        }
+        actual_capabilities = impl_sqlalchemy.Connection.\
+            get_storage_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)

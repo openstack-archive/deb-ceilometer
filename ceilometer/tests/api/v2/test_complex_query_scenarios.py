@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright Ericsson AB 2013. All rights reserved
 #
@@ -21,7 +20,6 @@
 
 import datetime
 import logging
-import testscenarios
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils
@@ -29,8 +27,6 @@ from ceilometer import sample
 from ceilometer.storage import models
 from ceilometer.tests.api import v2 as tests_api
 from ceilometer.tests import db as tests_db
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 LOG = logging.getLogger(__name__)
 

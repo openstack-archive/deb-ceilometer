@@ -1,8 +1,7 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
-# Copyright © 2013 eNovance
-# Copyright © 2014 Red Hat, Inc
+# Copyright 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2013 eNovance
+# Copyright 2014 Red Hat, Inc
 #
 # Authors: Doug Hellmann <doug.hellmann@dreamhost.com>
 #          Julien Danjou <julien@danjou.info>
@@ -35,7 +34,6 @@ import pymongo
 
 from oslo.config import cfg
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import storage
@@ -50,19 +48,28 @@ cfg.CONF.import_opt('time_to_live', 'ceilometer.storage',
 LOG = log.getLogger(__name__)
 
 
-class MongoDBStorage(base.StorageEngine):
+AVAILABLE_CAPABILITIES = {
+    'resources': {'query': {'simple': True,
+                            'metadata': True}},
+    'statistics': {'groupby': True,
+                   'query': {'simple': True,
+                             'metadata': True},
+                   'aggregation': {'standard': True,
+                                   'selectable': {'max': True,
+                                                  'min': True,
+                                                  'sum': True,
+                                                  'avg': True,
+                                                  'count': True,
+                                                  'stddev': True,
+                                                  'cardinality': True}}}
+}
+
+
+class Connection(pymongo_base.Connection):
     """Put the data into a MongoDB database
 
     Collections::
 
-        - user
-          - { _id: user id
-              source: [ array of source ids reporting for the user ]
-              }
-        - project
-          - { _id: project id
-              source: [ array of source ids reporting for the project ]
-              }
         - meter
           - the raw incoming data
         - resource
@@ -76,54 +83,14 @@ class MongoDBStorage(base.StorageEngine):
             }
     """
 
-    def get_connection(self, conf):
-        """Return a Connection instance based on the configuration settings.
-        """
-        return Connection(conf)
-
-
-AVAILABLE_CAPABILITIES = {
-    'meters': {'query': {'simple': True,
-                         'metadata': True}},
-    'resources': {'query': {'simple': True,
-                            'metadata': True}},
-    'samples': {'query': {'simple': True,
-                          'metadata': True,
-                          'complex': True}},
-    'statistics': {'groupby': True,
-                   'query': {'simple': True,
-                             'metadata': True},
-                   'aggregation': {'standard': True,
-                                   'selectable': {
-                                       'max': True,
-                                       'min': True,
-                                       'sum': True,
-                                       'avg': True,
-                                       'count': True,
-                                       'stddev': True,
-                                       'cardinality': True}}
-                   },
-    'alarms': {'query': {'simple': True,
-                         'complex': True},
-               'history': {'query': {'simple': True,
-                                     'complex': True}}},
-}
-
-
-class Connection(pymongo_base.Connection):
-    """MongoDB connection.
-    """
-
+    CAPABILITIES = utils.update_nested(pymongo_base.Connection.CAPABILITIES,
+                                       AVAILABLE_CAPABILITIES)
     CONNECTION_POOL = pymongo_base.ConnectionPool()
 
     REDUCE_GROUP_CLEAN = bson.code.Code("""
     function ( curr, result ) {
         if (result.resources.indexOf(curr.resource_id) < 0)
             result.resources.push(curr.resource_id);
-        if (result.users.indexOf(curr.user_id) < 0)
-            result.users.push(curr.user_id);
-        if (result.projects.indexOf(curr.project_id) < 0)
-            result.projects.push(curr.project_id);
     }
     """)
 
@@ -418,8 +385,7 @@ class Connection(pymongo_base.Connection):
     _APOCALYPSE = datetime.datetime(year=datetime.MAXYEAR, month=12, day=31,
                                     hour=23, minute=59, second=59)
 
-    def __init__(self, conf):
-        url = conf.database.connection
+    def __init__(self, url):
 
         # NOTE(jd) Use our own connection pooling on top of the Pymongo one.
         # We need that otherwise we overflow the MongoDB instance with new
@@ -436,9 +402,6 @@ class Connection(pymongo_base.Connection):
         if connection_options.get('username'):
             self.db.authenticate(connection_options['username'],
                                  connection_options['password'])
-
-        self.CAPABILITIES = utils.update_nested(self.DEFAULT_CAPABILITIES,
-                                                AVAILABLE_CAPABILITIES)
 
         # NOTE(jd) Upgrading is just about creating index, so let's do this
         # on connection to be sure at least the TTL is correcly updated if
@@ -477,6 +440,9 @@ class Connection(pymongo_base.Connection):
                                       sparse=True)
         self.db.meter.ensure_index([('timestamp', pymongo.DESCENDING)],
                                    name='timestamp_idx')
+        # remove API v1 related table
+        self.db.user.drop()
+        self.db.project.drop()
 
         indexes = self.db.meter.index_information()
 
@@ -513,22 +479,6 @@ class Connection(pymongo_base.Connection):
         :param data: a dictionary such as returned by
                      ceilometer.meter.meter_message_from_counter
         """
-        # Make sure we know about the user and project
-        self.db.user.update(
-            {'_id': data['user_id']},
-            {'$addToSet': {'source': data['source'],
-                           },
-             },
-            upsert=True,
-        )
-        self.db.project.update(
-            {'_id': data['project_id']},
-            {'$addToSet': {'source': data['source'],
-                           },
-             },
-            upsert=True,
-        )
-
         # Record the updated resource metadata - we use $setOnInsert to
         # unconditionally insert sample timestamps and resource metadata
         # (in the update case, this must be conditional on the sample not
@@ -597,13 +547,9 @@ class Connection(pymongo_base.Connection):
             reduce=self.REDUCE_GROUP_CLEAN,
             initial={
                 'resources': [],
-                'users': [],
-                'projects': [],
             }
         )[0]
 
-        self.db.user.remove({'_id': {'$nin': results['users']}})
-        self.db.project.remove({'_id': {'$nin': results['projects']}})
         self.db.resource.remove({'_id': {'$nin': results['resources']}})
 
     @staticmethod
@@ -639,7 +585,7 @@ class Connection(pymongo_base.Connection):
         return dict(criteria_equ, ** criteria_cmp)
 
     @classmethod
-    def _build_paginate_query(cls, marker, sort_keys=[], sort_dir='desc'):
+    def _build_paginate_query(cls, marker, sort_keys=None, sort_dir='desc'):
         """Returns a query with sorting / pagination.
 
         Pagination works by requiring sort_key and sort_dir.
@@ -653,6 +599,7 @@ class Connection(pymongo_base.Connection):
         :return: sort parameters, query to use
         """
         all_sort = []
+        sort_keys = sort_keys or []
         all_sort, _op = cls._build_sort_instructions(sort_keys, sort_dir)
 
         if marker is not None:
@@ -678,7 +625,7 @@ class Connection(pymongo_base.Connection):
         return all_sort, metaquery
 
     @classmethod
-    def _build_sort_instructions(cls, sort_keys=[], sort_dir='desc'):
+    def _build_sort_instructions(cls, sort_keys=None, sort_dir='desc'):
         """Returns a sort_instruction and paging operator.
 
         Sort instructions are used in the query to determine what attributes
@@ -688,6 +635,7 @@ class Connection(pymongo_base.Connection):
         :param sort_dir: direction in which results be sorted (asc, desc).
         :return: sort instructions and paging operator
         """
+        sort_keys = sort_keys or []
         sort_instructions = []
         _sort_dir, operation = cls.SORT_OPERATION_MAPPING.get(
             sort_dir, cls.SORT_OPERATION_MAPPING['desc'])
@@ -700,7 +648,7 @@ class Connection(pymongo_base.Connection):
 
     @classmethod
     def paginate_query(cls, q, db_collection, limit=None, marker=None,
-                       sort_keys=[], sort_dir='desc'):
+                       sort_keys=None, sort_dir='desc'):
         """Returns a query result with sorting / pagination.
 
         Pagination works by requiring sort_key and sort_dir.
@@ -716,6 +664,7 @@ class Connection(pymongo_base.Connection):
         return: The query with sorting/pagination added.
         """
 
+        sort_keys = sort_keys or []
         all_sort, query = cls._build_paginate_query(marker,
                                                     sort_keys,
                                                     sort_dir)
@@ -825,7 +774,7 @@ class Connection(pymongo_base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery={}, resource=None, pagination=None):
+                      metaquery=None, resource=None, pagination=None):
         """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -841,6 +790,8 @@ class Connection(pymongo_base.Connection):
         """
         if pagination:
             raise NotImplementedError('Pagination not implemented')
+
+        metaquery = metaquery or {}
 
         query = {}
         if user is not None:
@@ -989,8 +940,3 @@ class Connection(pymongo_base.Connection):
         stats_args['groupby'] = (dict(
             (g, result['groupby'][g]) for g in groupby) if groupby else None)
         return models.Statistics(**stats_args)
-
-    def get_capabilities(self):
-        """Return an dictionary representing the capabilities of this driver.
-        """
-        return self.CAPABILITIES

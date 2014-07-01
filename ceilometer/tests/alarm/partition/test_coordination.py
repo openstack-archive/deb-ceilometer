@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Red Hat, Inc
+# Copyright 2013 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
 #
@@ -26,6 +25,7 @@ import mock
 from six import moves
 
 from ceilometer.alarm.partition import coordination
+from ceilometer import messaging
 from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import test
 from ceilometer.openstack.common import timeutils
@@ -36,13 +36,19 @@ class TestCoordinate(test.BaseTestCase):
     def setUp(self):
         super(TestCoordinate, self).setUp()
         self.CONF = self.useFixture(config.Config()).conf
+        messaging.setup('fake://')
+        self.addCleanup(messaging.cleanup)
+
         self.test_interval = 120
         self.CONF.set_override('evaluation_interval',
                                self.test_interval,
                                group='alarm')
         self.api_client = mock.Mock()
         self.override_start = datetime.datetime(2012, 7, 2, 10, 45)
-        timeutils.utcnow.override_time = self.override_start
+        patcher = mock.patch.object(timeutils, 'utcnow')
+        self.addCleanup(patcher.stop)
+        self.mock_utcnow = patcher.start()
+        self.mock_utcnow.return_value = self.override_start
         self.partition_coordinator = coordination.PartitionCoordinator()
         self.partition_coordinator.coordination_rpc = mock.Mock()
         #add extra logger to check exception conditions and logged content
@@ -52,7 +58,6 @@ class TestCoordinate(test.BaseTestCase):
 
     def tearDown(self):
         super(TestCoordinate, self).tearDown()
-        timeutils.utcnow.override_time = None
         # clean up the logger
         coordination.LOG.logger.removeHandler(self.str_handler)
         self.output.close()
@@ -112,7 +117,7 @@ class TestCoordinate(test.BaseTestCase):
 
     def _advance_time(self, factor):
         delta = datetime.timedelta(seconds=self.test_interval * factor)
-        timeutils.utcnow.override_time += delta
+        self.mock_utcnow.return_value = timeutils.utcnow() + delta
 
     def _younger_by(self, offset):
         return self.partition_coordinator.this.priority + offset

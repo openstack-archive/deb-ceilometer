@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance <licensing@enovance.com>
+# Copyright 2013 eNovance <licensing@enovance.com>
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -16,6 +15,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import mock
+
+from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import test
 from ceilometer import plugin
 
@@ -71,6 +73,10 @@ TEST_NOTIFICATION = {
 
 
 class NotificationBaseTestCase(test.BaseTestCase):
+    def setUp(self):
+        super(NotificationBaseTestCase, self).setUp()
+        self.CONF = self.useFixture(config.Config()).conf
+
     def test_handle_event_type(self):
         self.assertFalse(plugin.NotificationBase._handle_event_type(
             'compute.instance.start', ['compute']))
@@ -91,7 +97,10 @@ class NotificationBaseTestCase(test.BaseTestCase):
 
     class FakePlugin(plugin.NotificationBase):
         def get_exchange_topics(self, conf):
-            return
+            return [plugin.ExchangeTopics(exchange="exchange1",
+                                          topics=["t1", "t2"]),
+                    plugin.ExchangeTopics(exchange="exchange2",
+                                          topics=['t3'])]
 
         def process_notification(self, message):
             return message
@@ -102,8 +111,30 @@ class NotificationBaseTestCase(test.BaseTestCase):
     class FakeNetworkPlugin(FakePlugin):
         event_types = ['network.*']
 
-    def test_to_samples(self):
-        c = self.FakeComputePlugin()
-        n = self.FakeNetworkPlugin()
-        self.assertTrue(len(list(c.to_samples(TEST_NOTIFICATION))) > 0)
-        self.assertEqual(0, len(list(n.to_samples(TEST_NOTIFICATION))))
+    def _do_test_to_samples(self, plugin_class, match):
+        pm = mock.MagicMock()
+        plug = plugin_class(pm)
+        publish = pm.publisher.return_value.__enter__.return_value
+
+        plug.to_samples_and_publish(mock.Mock(), TEST_NOTIFICATION)
+
+        if match:
+            publish.assert_called_once_with(list(TEST_NOTIFICATION))
+        else:
+            self.assertEqual(0, publish.call_count)
+
+    def test_to_samples_match(self):
+        self._do_test_to_samples(self.FakeComputePlugin, True)
+
+    def test_to_samples_no_match(self):
+        self._do_test_to_samples(self.FakeNetworkPlugin, False)
+
+    def test_get_targets_compat(self):
+        targets = self.FakeComputePlugin(mock.Mock()).get_targets(self.CONF)
+        self.assertEqual(3, len(targets))
+        self.assertEqual('t1', targets[0].topic)
+        self.assertEqual('exchange1', targets[0].exchange)
+        self.assertEqual('t2', targets[1].topic)
+        self.assertEqual('exchange1', targets[1].exchange)
+        self.assertEqual('t3', targets[2].topic)
+        self.assertEqual('exchange2', targets[2].exchange)

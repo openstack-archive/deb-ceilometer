@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -21,16 +20,14 @@
 import datetime
 import json
 import logging
-import testscenarios
 
+import six
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 LOG = logging.getLogger(__name__)
 
@@ -45,7 +42,7 @@ class TestListResources(FunctionalTest,
     @staticmethod
     def _isotime(timestamp):
         # drop TZ specifier
-        return unicode(timeutils.isotime(timestamp))[:-1]
+        return six.text_type(timeutils.isotime(timestamp))[:-1]
 
     def _verify_sample_timestamps(self, res, first, last):
         self.assertTrue('first_sample_timestamp' in res)

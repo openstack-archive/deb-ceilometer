@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Red Hat, Inc
+# Copyright 2013 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
 #
@@ -18,11 +17,11 @@
 """Tests for ceilometer.alarm.service.PartitionedAlarmService.
 """
 import contextlib
-
 import mock
 from stevedore import extension
 
 from ceilometer.alarm import service
+from ceilometer import messaging
 from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import test
 
@@ -30,6 +29,9 @@ from ceilometer.openstack.common import test
 class TestPartitionedAlarmService(test.BaseTestCase):
     def setUp(self):
         super(TestPartitionedAlarmService, self).setUp()
+        messaging.setup('fake://')
+        self.addCleanup(messaging.cleanup)
+
         self.threshold_eval = mock.Mock()
         self.api_client = mock.MagicMock()
         self.CONF = self.useFixture(config.Config()).conf
@@ -54,16 +56,15 @@ class TestPartitionedAlarmService(test.BaseTestCase):
         self.partitioned.extension_manager = self.extension_mgr
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-    def test_start(self):
+    def test_lifecycle(self):
         test_interval = 120
         self.CONF.set_override('evaluation_interval',
                                test_interval,
                                group='alarm')
         get_client = 'ceilometerclient.client.get_client'
-        create_conn = 'ceilometer.openstack.common.rpc.create_connection'
-        with contextlib.nested(mock.patch(get_client,
-                                          return_value=self.api_client),
-                               mock.patch(create_conn)):
+        with contextlib.nested(
+                mock.patch(get_client, return_value=self.api_client),
+                mock.patch.object(self.partitioned.rpc_server, 'start')):
             self.partitioned.start()
             pc = self.partitioned.partition_coordinator
             expected = [
@@ -82,6 +83,7 @@ class TestPartitionedAlarmService(test.BaseTestCase):
             ]
             actual = self.partitioned.tg.add_timer.call_args_list
             self.assertEqual(expected, actual)
+            self.partitioned.stop()
 
     def test_presence_reporting(self):
         priority = 42

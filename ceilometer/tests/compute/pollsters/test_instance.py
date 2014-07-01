@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -42,6 +41,7 @@ class TestInstancePollster(base.TestPollsterBase):
         self.assertEqual(20, samples[0].resource_metadata['disk_gb'])
         self.assertEqual(20, samples[0].resource_metadata['root_gb'])
         self.assertEqual(0, samples[0].resource_metadata['ephemeral_gb'])
+        self.assertEqual('active', samples[0].resource_metadata['status'])
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def test_get_samples_instance_flavor(self):

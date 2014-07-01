@@ -63,7 +63,8 @@ class _Base(plugin.CentralPollster):
                                                           scheme).driver()
         return _Base.drivers[scheme]
 
-    def get_samples(self, manager, cache, resources=[]):
+    def get_samples(self, manager, cache, resources=None):
+        resources = resources or []
         for resource in resources:
             parse_url, params = self._parse_my_resource(resource)
             ext = self.get_driver(parse_url.scheme)
@@ -71,7 +72,8 @@ class _Base(plugin.CentralPollster):
                                               parse_url,
                                               params,
                                               cache)
-            for data in sample_data:
+
+            for data in sample_data or []:
                 if data is None:
                     continue
                 if not isinstance(data, list):

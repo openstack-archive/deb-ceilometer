@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance
+# Copyright 2013 eNovance
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -18,7 +17,7 @@
 """Log alarm notifier."""
 
 from ceilometer.alarm import notifier
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)

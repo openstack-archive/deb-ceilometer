@@ -1,7 +1,6 @@
 # -*- mode: python -*-
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 New Dream Network, LLC (DreamHost)
+# Copyright 2013 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -20,11 +19,9 @@
 
 See http://pecan.readthedocs.org/en/latest/deployment.html for details.
 """
-
 from ceilometer import service
 from ceilometer.api import app
 
 # Initialize the oslo configuration library and logging
 service.prepare_service([])
-
-application = app.VersionSelectorApplication()
+application = app.load_app()

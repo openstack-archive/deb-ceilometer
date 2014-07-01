@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 IBM Corp
+# Copyright 2013 IBM Corp
 #
 # Author: Tong Li <litong01@us.ibm.com>
 #
@@ -30,6 +29,7 @@ class TestDispatcherDB(test.BaseTestCase):
     def setUp(self):
         super(TestDispatcherDB, self).setUp()
         self.CONF = self.useFixture(config.Config()).conf
+        self.CONF.set_override('connection', 'sqlite://', group='database')
         self.dispatcher = database.DatabaseDispatcher(self.CONF)
         self.ctx = None
 
@@ -67,8 +67,8 @@ class TestDispatcherDB(test.BaseTestCase):
 
         self.dispatcher.record_metering_data(msg)
 
-        assert not self.dispatcher.storage_conn.called, \
-            'Should not have called the storage connection'
+        if self.dispatcher.storage_conn.called:
+            self.fail('Should not have called the storage connection')
 
     def test_timestamp_conversion(self):
         msg = {'counter_name': 'test',

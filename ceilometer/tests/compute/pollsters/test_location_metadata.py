@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 eNovance <licensing@enovance.com>
-# Copyright © 2012 Red Hat, Inc
+# Copyright 2012 eNovance <licensing@enovance.com>
+# Copyright 2012 Red Hat, Inc
 #
 # Author: Julien Danjou <julien@danjou.info>
 # Author: Eoghan Glynn <eglynn@redhat.com>
@@ -61,6 +60,7 @@ class TestLocationMetadata(test.BaseTestCase):
                                     'kernel_id': 'kernel id',
                                     'os_type': 'linux',
                                     'ramdisk_id': 'ramdisk id',
+                                    'status': 'active',
                                     'ephemeral_gb': 0,
                                     'root_gb': 20,
                                     'disk_gb': 20,
@@ -98,8 +98,17 @@ class TestLocationMetadata(test.BaseTestCase):
         self.assertEqual(1, len(user_metadata))
 
     def test_metadata_empty_image(self):
-        self.INSTANCE_PROPERTIES['image'] = ''
+        self.INSTANCE_PROPERTIES['image'] = None
         self.instance = FauxInstance(**self.INSTANCE_PROPERTIES)
         md = util._get_metadata_from_object(self.instance)
+        self.assertIsNone(md['image'])
         self.assertIsNone(md['image_ref'])
+        self.assertIsNone(md['image_ref_url'])
+
+    def test_metadata_image_through_conductor(self):
+        # There should be no links here, should default to None
+        self.INSTANCE_PROPERTIES['image'] = {'id': 1}
+        self.instance = FauxInstance(**self.INSTANCE_PROPERTIES)
+        md = util._get_metadata_from_object(self.instance)
+        self.assertEqual(1, md['image_ref'])
         self.assertIsNone(md['image_ref_url'])

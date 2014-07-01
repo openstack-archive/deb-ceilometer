@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Intel Corp.
+# Copyright 2013 Intel Corp.
 #
 # Author: Lianhao Lu <lianhao.lu@intel.com>
 #         Shane Wang <shane.wang@intel.com>
@@ -22,17 +21,16 @@
 
 import datetime
 
-import testscenarios
+import mock
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer import storage
 from ceilometer.storage import base
+from ceilometer.storage import impl_mongodb as mongodb
 from ceilometer.storage import models
 from ceilometer.tests import db as tests_db
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 
 class DBTestBase(tests_db.TestBase):
@@ -60,8 +58,10 @@ class DBTestBase(tests_db.TestBase):
 
     def setUp(self):
         super(DBTestBase, self).setUp()
-        timeutils.set_time_override(
-            datetime.datetime(2015, 7, 2, 10, 39))
+        patcher = mock.patch.object(timeutils, 'utcnow')
+        self.addCleanup(patcher.stop)
+        self.mock_utcnow = patcher.start()
+        self.mock_utcnow.return_value = datetime.datetime(2015, 7, 2, 10, 39)
         self.prepare_data()
 
     def prepare_data(self):
@@ -120,37 +120,6 @@ class DBTestBase(tests_db.TestBase):
             )
 
 
-class UserTest(DBTestBase,
-               tests_db.MixinTestsWithBackendScenarios):
-
-    def test_get_users(self):
-        users = self.conn.get_users()
-        expected = set(['user-id', 'user-id-alternate', 'user-id-2',
-                        'user-id-3', 'user-id-4', 'user-id-5', 'user-id-6',
-                        'user-id-7', 'user-id-8'])
-        self.assertEqual(set(users), expected)
-
-    def test_get_users_by_source(self):
-        users = self.conn.get_users(source='test-1')
-        self.assertEqual(list(users), ['user-id'])
-
-
-class ProjectTest(DBTestBase,
-                  tests_db.MixinTestsWithBackendScenarios):
-
-    def test_get_projects(self):
-        projects = self.conn.get_projects()
-        expected = set(['project-id', 'project-id-2', 'project-id-3',
-                        'project-id-4', 'project-id-5', 'project-id-6',
-                        'project-id-7', 'project-id-8'])
-        self.assertEqual(set(projects), expected)
-
-    def test_get_projects_by_source(self):
-        projects = self.conn.get_projects(source='test-1')
-        expected = ['project-id']
-        self.assertEqual(list(projects), expected)
-
-
 class ResourceTest(DBTestBase,
                    tests_db.MixinTestsWithBackendScenarios):
 
@@ -174,7 +143,7 @@ class ResourceTest(DBTestBase,
             self.assertEqual(resource.metadata['display_name'], 'test-server')
             break
         else:
-            assert False, 'Never found resource-id'
+            self.fail('Never found resource-id')
 
     def test_get_resources_start_timestamp(self):
         timestamp = datetime.datetime(2012, 7, 2, 10, 42)
@@ -425,7 +394,7 @@ class MeterTest(DBTestBase,
     def test_get_meters_by_metaquery(self):
         q = {'metadata.display_name': 'test-server'}
         results = list(self.conn.get_meters(metaquery=q))
-        assert results
+        self.assertIsNotEmpty(results)
         self.assertEqual(len(results), 9)
 
     def test_get_meters_by_empty_metaquery(self):
@@ -542,7 +511,7 @@ class RawSampleTest(DBTestBase,
     def test_get_samples_by_resource(self):
         f = storage.SampleFilter(user='user-id', resource='resource-id')
         results = list(self.conn.get_samples(f))
-        assert results
+        self.assertIsNotEmpty(results)
         meter = results[1]
         d = meter.as_dict()
         self.assertEqual(d['recorded_at'], timeutils.utcnow())
@@ -640,12 +609,12 @@ class RawSampleTest(DBTestBase,
     def test_get_samples_by_name(self):
         f = storage.SampleFilter(user='user-id', meter='no-such-meter')
         results = list(self.conn.get_samples(f))
-        assert not results
+        self.assertIsEmpty(results)
 
     def test_get_samples_by_name2(self):
         f = storage.SampleFilter(user='user-id', meter='instance')
         results = list(self.conn.get_samples(f))
-        assert results
+        self.assertIsNotEmpty(results)
 
     def test_get_samples_by_source(self):
         f = storage.SampleFilter(source='test-1')
@@ -655,17 +624,13 @@ class RawSampleTest(DBTestBase,
     def test_clear_metering_data(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
-        if self.CONF.database.connection.startswith('mongodb://'):
+        if isinstance(self.conn, mongodb.Connection):
             return
 
-        timeutils.utcnow.override_time = datetime.datetime(2012, 7, 2, 10, 45)
+        self.mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(3 * 60)
         f = storage.SampleFilter(meter='instance')
         results = list(self.conn.get_samples(f))
-        self.assertEqual(len(results), 5)
-        results = list(self.conn.get_users())
-        self.assertEqual(len(results), 5)
-        results = list(self.conn.get_projects())
         self.assertEqual(len(results), 5)
         results = list(self.conn.get_resources())
         self.assertEqual(len(results), 5)
@@ -673,25 +638,21 @@ class RawSampleTest(DBTestBase,
     def test_clear_metering_data_no_data_to_remove(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
-        if self.CONF.database.connection.startswith('mongodb://'):
+        if isinstance(self.conn, mongodb.Connection):
             return
 
-        timeutils.utcnow.override_time = datetime.datetime(2010, 7, 2, 10, 45)
+        self.mock_utcnow.return_value = datetime.datetime(2010, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(3 * 60)
         f = storage.SampleFilter(meter='instance')
         results = list(self.conn.get_samples(f))
         self.assertEqual(len(results), 11)
-        results = list(self.conn.get_users())
-        self.assertEqual(len(results), 9)
-        results = list(self.conn.get_projects())
-        self.assertEqual(len(results), 8)
         results = list(self.conn.get_resources())
         self.assertEqual(len(results), 9)
 
     def test_clear_metering_data_with_alarms(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
-        if self.CONF.database.connection.startswith('mongodb://'):
+        if isinstance(self.conn, mongodb.Connection):
             return
 
         alarm = models.Alarm(alarm_id='r3d',
@@ -722,17 +683,11 @@ class RawSampleTest(DBTestBase,
                              )
 
         self.conn.create_alarm(alarm)
-        timeutils.utcnow.override_time = datetime.datetime(2012, 7, 2, 10, 45)
+        self.mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(5)
         f = storage.SampleFilter(meter='instance')
         results = list(self.conn.get_samples(f))
         self.assertEqual(len(results), 2)
-        results = list(self.conn.get_users())
-        self.assertEqual(len(results), 2)
-        self.assertNotIn('user-id', results)
-        results = list(self.conn.get_projects())
-        self.assertEqual(len(results), 2)
-        self.assertNotIn('project-id', results)
         results = list(self.conn.get_resources())
         self.assertEqual(len(results), 2)
 
@@ -942,11 +897,6 @@ class ComplexSampleQueryTest(DBTestBase,
                              "cpu_util")
             self.assertTrue(sample.counter_volume > 0.4)
             self.assertTrue(sample.counter_volume <= 0.8)
-
-    def test_query_filter_with_empty_in(self):
-        results = list(
-            self.conn.query_samples(filter_expr={"in": {"resource_id": []}}))
-        self.assertEqual(len(results), 0)
 
     def test_query_simple_metadata_filter(self):
         self._create_samples()
@@ -1363,6 +1313,14 @@ class StatisticsTest(DBTestBase,
         self.assertEqual(results.max, 7)
         self.assertEqual(results.sum, 18)
         self.assertEqual(results.avg, 6)
+
+    def test_with_no_sample(self):
+        f = storage.SampleFilter(
+            user='user-not-exists',
+            meter='volume.size',
+        )
+        results = list(self.conn.get_meter_statistics(f, period=1800))
+        self.assertEqual([], results)
 
 
 class StatisticsGroupByTest(DBTestBase,
@@ -2759,6 +2717,7 @@ class EventTestBase(tests_db.TestBase,
 
 
 class EventTest(EventTestBase):
+    @tests_db.run_with('sqlite', 'mongodb', 'db2')
     def test_duplicate_message_id(self):
         now = datetime.datetime.utcnow()
         m = [models.Event("1", "Foo", now, None),

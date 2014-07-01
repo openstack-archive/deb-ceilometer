@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 IBM
+# Copyright 2013 IBM
 #
 # Author: Tong Li <litong01@us.ibm.com>
 #
@@ -18,6 +17,40 @@
 
 import abc
 import six
+
+from oslo.config import cfg
+from stevedore import named
+
+from ceilometer.openstack.common.gettextutils import _
+from ceilometer.openstack.common import log
+
+
+LOG = log.getLogger(__name__)
+
+OPTS = [
+    cfg.MultiStrOpt('dispatcher',
+                    deprecated_group="collector",
+                    default=['database'],
+                    help='Dispatcher to process data.'),
+]
+cfg.CONF.register_opts(OPTS)
+
+
+DISPATCHER_NAMESPACE = 'ceilometer.dispatcher'
+
+
+def load_dispatcher_manager():
+    LOG.debug(_('loading dispatchers from %s'),
+              DISPATCHER_NAMESPACE)
+    dispatcher_manager = named.NamedExtensionManager(
+        namespace=DISPATCHER_NAMESPACE,
+        names=cfg.CONF.dispatcher,
+        invoke_on_load=True,
+        invoke_args=[cfg.CONF])
+    if not list(dispatcher_manager):
+        LOG.warning(_('Failed to load any dispatchers for %s'),
+                    DISPATCHER_NAMESPACE)
+    return dispatcher_manager
 
 
 @six.add_metaclass(abc.ABCMeta)

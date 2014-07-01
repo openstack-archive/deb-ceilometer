@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -20,18 +19,16 @@
 import datetime
 import json
 
-import testscenarios
+import webtest
 
-from ceilometer.api import acl
+from ceilometer.api import app
 from ceilometer.api.controllers import v2 as v2_api
 from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils
 from ceilometer import sample
+from ceilometer.tests import api as acl
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
-
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 VALID_TOKEN = '4562138218392831'
 VALID_TOKEN2 = '4562138218392832'
@@ -112,17 +109,19 @@ class TestAPIACL(FunctionalTest,
             self.conn.record_metering_data(msg)
 
     def get_json(self, path, expect_errors=False, headers=None,
-                 q=[], **params):
+                 q=None, **params):
         return super(TestAPIACL, self).get_json(path,
                                                 expect_errors=expect_errors,
                                                 headers=headers,
-                                                q=q,
+                                                q=q or [],
                                                 extra_environ=self.environ,
                                                 **params)
 
     def _make_app(self):
         self.CONF.set_override("cache", "fake.cache", group=acl.OPT_GROUP_NAME)
-        return super(TestAPIACL, self)._make_app(enable_acl=True)
+        file_name = self.path_get('etc/ceilometer/api_paste.ini')
+        self.CONF.set_override("api_paste_config", file_name)
+        return webtest.TestApp(app.load_app())
 
     def test_non_authenticated(self):
         response = self.get_json('/meters', expect_errors=True)

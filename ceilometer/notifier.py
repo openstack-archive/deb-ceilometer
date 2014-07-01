@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance
+# Copyright 2013 eNovance
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -21,7 +20,7 @@ from ceilometer.openstack.common import log as logging
 from ceilometer import pipeline
 from ceilometer import transformer
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from stevedore import extension
 
 
@@ -33,7 +32,7 @@ _pipeline_manager = None
 
 
 def _load_notification_manager():
-    global _notification_manager
+    global _notification_manager, _pipeline_manager
 
     namespace = 'ceilometer.notification'
 
@@ -41,7 +40,9 @@ def _load_notification_manager():
 
     _notification_manager = extension.ExtensionManager(
         namespace=namespace,
-        invoke_on_load=True)
+        invoke_on_load=True,
+        invoke_args=(_pipeline_manager, )
+    )
 
     if not list(_notification_manager):
         LOG.warning(_('Failed to load any notification handlers for %s'),
@@ -58,19 +59,13 @@ def _load_pipeline_manager():
     )
 
 
-def _process_notification_for_ext(ext, context, notification):
-    with _pipeline_manager.publisher(context) as p:
-        # FIXME(dhellmann): Spawn green thread?
-        p(list(ext.obj.to_samples(notification)))
-
-
 def notify(context, message):
     """Sends a notification as a meter using Ceilometer pipelines."""
-    if not _notification_manager:
-        _load_notification_manager()
     if not _pipeline_manager:
         _load_pipeline_manager()
-    _notification_manager.map(
-        _process_notification_for_ext,
+    if not _notification_manager:
+        _load_notification_manager()
+    _notification_manager.map_method(
+        'to_samples_and_publish',
         context=context or req_context.get_admin_context(),
         notification=message)

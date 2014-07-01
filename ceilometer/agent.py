@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Julien Danjou
-# Copyright © 2014 Red Hat, Inc
+# Copyright 2013 Julien Danjou
+# Copyright 2014 Red Hat, Inc
 #
 # Authors: Julien Danjou <julien@danjou.info>
 #          Eoghan Glynn <eglynn@redhat.com>
@@ -25,7 +24,7 @@ import urlparse
 from stevedore import extension
 
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 from ceilometer import pipeline
@@ -85,8 +84,8 @@ class PollingTask(object):
                 source_resources = list(self.resources[key].resources)
                 try:
                     samples = list(pollster.obj.get_samples(
-                        self.manager,
-                        cache,
+                        manager=self.manager,
+                        cache=cache,
                         resources=source_resources or agent_resources,
                     ))
                     publisher(samples)
@@ -99,8 +98,9 @@ class PollingTask(object):
 
 class AgentManager(os_service.Service):
 
-    def __init__(self, namespace, default_discovery=[]):
+    def __init__(self, namespace, default_discovery=None):
         super(AgentManager, self).__init__()
+        default_discovery = default_discovery or []
         self.default_discovery = default_discovery
         self.pollster_manager = self._extensions('poll', namespace)
         self.discovery_manager = self._extensions('discover')
@@ -156,7 +156,7 @@ class AgentManager(os_service.Service):
                 return d.obj
         return None
 
-    def discover(self, discovery=[]):
+    def discover(self, discovery=None):
         resources = []
         for url in (discovery or self.default_discovery):
             name, param = self._parse_discoverer(url)

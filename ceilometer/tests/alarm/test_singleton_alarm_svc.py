@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Red Hat, Inc
+# Copyright 2013 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
 #
@@ -24,12 +23,16 @@ from oslo.config import cfg
 from stevedore import extension
 
 from ceilometer.alarm import service
+from ceilometer import messaging
 from ceilometer.openstack.common import test
 
 
 class TestSingletonAlarmService(test.BaseTestCase):
     def setUp(self):
         super(TestSingletonAlarmService, self).setUp()
+        messaging.setup('fake://')
+        self.addCleanup(messaging.cleanup)
+
         self.threshold_eval = mock.Mock()
         self.evaluators = extension.ExtensionManager.make_test_instance(
             [

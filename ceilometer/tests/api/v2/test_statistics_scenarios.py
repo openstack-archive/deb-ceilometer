@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -19,14 +18,10 @@
 
 import datetime
 
-import testscenarios
-
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
-
-load_tests = testscenarios.load_tests_apply_scenarios
 
 
 class TestMaxProjectVolume(FunctionalTest,
@@ -1218,6 +1213,7 @@ class TestGroupByInstance(FunctionalTest,
                                      u'2013-08-01T14:00:00'])
 
 
+@tests_db.run_with('mongodb', 'hbase', 'db2')
 class TestGroupBySource(FunctionalTest,
                         tests_db.MixinTestsWithBackendScenarios):
 
@@ -1226,13 +1222,6 @@ class TestGroupBySource(FunctionalTest,
     # When group by source is supported in SQLAlchemy, this test should be
     # moved to TestGroupByInstance with all the other group by statistics
     # tests.
-
-    scenarios = [
-        ('mongodb',
-         dict(database_connection=tests_db.MongoDBFakeConnectionUrl())),
-        ('hbase', dict(database_connection=tests_db.HBaseFakeConnectionUrl())),
-        ('db2', dict(database_connection=tests_db.DB2FakeConnectionUrl())),
-    ]
 
     PATH = '/meters/instance/statistics'
 
@@ -1572,6 +1561,7 @@ class TestSelectableAggregates(FunctionalTest,
                          'Bad aggregate: cardinality.injection_attack')
 
 
+@tests_db.run_with('mongodb', 'hbase', 'db2')
 class TestUnparameterizedAggregates(FunctionalTest,
                                     tests_db.MixinTestsWithBackendScenarios):
 
@@ -1582,13 +1572,6 @@ class TestUnparameterizedAggregates(FunctionalTest,
     # test the corresponding functionality in the mongo driver.
     # For hbase & db2, the skip on NotImplementedError logic works
     # in the usual way.
-
-    scenarios = [
-        ('mongodb',
-         dict(database_connection=tests_db.MongoDBFakeConnectionUrl())),
-        ('hbase', dict(database_connection=tests_db.HBaseFakeConnectionUrl())),
-        ('db2', dict(database_connection=tests_db.DB2FakeConnectionUrl())),
-    ]
 
     PATH = '/meters/instance/statistics'
 

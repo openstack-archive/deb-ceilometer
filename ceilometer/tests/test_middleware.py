@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 eNovance
+# Copyright 2013 eNovance
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -15,6 +14,8 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
+import mock
 
 from ceilometer import middleware
 from ceilometer.openstack.common.fixture import config
@@ -74,7 +75,7 @@ class TestNotifications(test.BaseTestCase):
         self.CONF = self.useFixture(config.Config()).conf
 
     def test_process_request_notification(self):
-        sample = list(middleware.HTTPRequest().process_notification(
+        sample = list(middleware.HTTPRequest(mock.Mock()).process_notification(
             HTTP_REQUEST
         ))[0]
         self.assertEqual(HTTP_REQUEST['payload']['request']['HTTP_X_USER_ID'],
@@ -86,9 +87,8 @@ class TestNotifications(test.BaseTestCase):
         self.assertEqual(1, sample.volume)
 
     def test_process_response_notification(self):
-        sample = list(middleware.HTTPResponse().process_notification(
-            HTTP_RESPONSE
-        ))[0]
+        sample = list(middleware.HTTPResponse(
+            mock.Mock()).process_notification(HTTP_RESPONSE))[0]
         self.assertEqual(HTTP_RESPONSE['payload']['request']['HTTP_X_USER_ID'],
                          sample.user_id)
         self.assertEqual(HTTP_RESPONSE['payload']['request']
@@ -97,6 +97,6 @@ class TestNotifications(test.BaseTestCase):
                          ['HTTP_X_SERVICE_NAME'], sample.resource_id)
         self.assertEqual(1, sample.volume)
 
-    def test_exchanges(self):
-        topics = middleware.HTTPRequest().get_exchange_topics(self.CONF)
-        self.assertEqual(4, len(topics))
+    def test_targets(self):
+        targets = middleware.HTTPRequest(mock.Mock()).get_targets(self.CONF)
+        self.assertEqual(4, len(targets))

@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -20,6 +19,7 @@ events.
 """
 
 from oslo.config import cfg
+import oslo.messaging
 
 from ceilometer import plugin
 from ceilometer import sample
@@ -36,6 +36,19 @@ cfg.CONF.register_opts(OPTS)
 
 
 class _Base(plugin.NotificationBase):
+    """Convert volume/snapshot notification into Counters."""
+
+    @staticmethod
+    def get_targets(conf):
+        """Return a sequence of oslo.messaging.Target defining the exchange and
+        topics to be connected for this plugin.
+        """
+        return [oslo.messaging.Target(topic=topic,
+                                      exchange=conf.cinder_control_exchange)
+                for topic in conf.notification_topics]
+
+
+class _VolumeBase(_Base):
     """Convert volume notifications into Counters."""
 
     event_types = [
@@ -45,20 +58,8 @@ class _Base(plugin.NotificationBase):
         'volume.resize.*',
     ]
 
-    @staticmethod
-    def get_exchange_topics(conf):
-        """Return a sequence of ExchangeTopics defining the exchange and
-        topics to be connected for this plugin.
-        """
-        return [
-            plugin.ExchangeTopics(
-                exchange=conf.cinder_control_exchange,
-                topics=set(topic + ".info"
-                           for topic in conf.notification_topics)),
-        ]
 
-
-class Volume(_Base):
+class Volume(_VolumeBase):
     def process_notification(self, message):
         yield sample.Sample.from_notification(
             name='volume',
@@ -71,7 +72,7 @@ class Volume(_Base):
             message=message)
 
 
-class VolumeSize(_Base):
+class VolumeSize(_VolumeBase):
     def process_notification(self, message):
         yield sample.Sample.from_notification(
             name='volume.size',
@@ -81,4 +82,41 @@ class VolumeSize(_Base):
             user_id=message['payload']['user_id'],
             project_id=message['payload']['tenant_id'],
             resource_id=message['payload']['volume_id'],
+            message=message)
+
+
+class _SnapshotBase(_Base):
+    """Convert snapshot notifications into Counters."""
+
+    event_types = [
+        'snapshot.exists',
+        'snapshot.create.*',
+        'snapshot.delete.*',
+        'snapshot.resize.*',
+    ]
+
+
+class Snapshot(_SnapshotBase):
+    def process_notification(self, message):
+        yield sample.Sample.from_notification(
+            name='snapshot',
+            type=sample.TYPE_GAUGE,
+            unit='snapshot',
+            volume=1,
+            user_id=message['payload']['user_id'],
+            project_id=message['payload']['tenant_id'],
+            resource_id=message['payload']['snapshot_id'],
+            message=message)
+
+
+class SnapshotSize(_SnapshotBase):
+    def process_notification(self, message):
+        yield sample.Sample.from_notification(
+            name='snapshot.size',
+            type=sample.TYPE_GAUGE,
+            unit='GB',
+            volume=message['payload']['volume_size'],
+            user_id=message['payload']['user_id'],
+            project_id=message['payload']['tenant_id'],
+            resource_id=message['payload']['snapshot_id'],
             message=message)

@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Red Hat, Inc
+# Copyright 2013 Red Hat, Inc
 #
 # Author: Angus Salkeld <asalkeld@redhat.com>
 #
@@ -21,30 +20,34 @@
 import copy
 import datetime
 
-import testscenarios
+import mock
 
-from ceilometer.openstack.common.fixture.mockpatch import PatchObject
-from ceilometer.openstack.common import rpc
+from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer.openstack.common import timeutils
 from ceilometer.tests.api.v2 import FunctionalTest
 from ceilometer.tests import db as tests_db
 
 
-load_tests = testscenarios.load_tests_apply_scenarios
-
-
 class TestPostSamples(FunctionalTest,
                       tests_db.MixinTestsWithBackendScenarios):
+    def fake_cast(self, ctxt, target, data):
+        for m in data:
+            del m['message_signature']
+        self.published.append(data)
 
-    def fake_cast(self, context, topic, msg):
-        for s in msg['args']['data']:
-            del s['message_signature']
-        self.published.append((topic, msg))
+    def fake_get_rpc_client(self, **kwargs):
+        cast_ctxt = mock.Mock()
+        cast_ctxt.cast.side_effect = self.fake_cast
+        client = mock.Mock()
+        client.prepare.return_value = cast_ctxt
+        return client
 
     def setUp(self):
-        super(TestPostSamples, self).setUp()
         self.published = []
-        self.useFixture(PatchObject(rpc, 'cast', side_effect=self.fake_cast))
+        self.useFixture(mockpatch.Patch(
+                        'ceilometer.messaging.get_rpc_client',
+                        new=self.fake_get_rpc_client))
+        super(TestPostSamples, self).setUp()
 
     def test_one(self):
         s1 = [{'counter_name': 'apples',
@@ -56,7 +59,6 @@ class TestPostSamples(FunctionalTest,
                'user_id': 'efd87807-12d2-4b38-9c70-5f5c2ac427ff',
                'resource_metadata': {'name1': 'value1',
                                      'name2': 'value2'}}]
-
         data = self.post_json('/meters/apples/', s1)
 
         # timestamp not given so it is generated.
@@ -67,7 +69,37 @@ class TestPostSamples(FunctionalTest,
         s1[0]['source'] = '%s:openstack' % s1[0]['project_id']
 
         self.assertEqual(s1, data.json)
-        self.assertEqual(s1[0], self.published[0][1]['args']['data'][0])
+        self.assertEqual(s1[0], self.published[0][0])
+
+    def test_nested_metadata(self):
+        s1 = [{'counter_name': 'apples',
+               'counter_type': 'gauge',
+               'counter_unit': 'instance',
+               'counter_volume': 1,
+               'resource_id': 'bd9431c1-8d69-4ad3-803a-8d4a6b89fd36',
+               'project_id': '35b17138-b364-4e6a-a131-8f3099c5be68',
+               'user_id': 'efd87807-12d2-4b38-9c70-5f5c2ac427ff',
+               'resource_metadata': {'nest.name1': 'value1',
+                                     'name2': 'value2',
+                                     'nest.name2': 'value3'}}]
+
+        data = self.post_json('/meters/apples/', s1)
+
+        # timestamp not given so it is generated.
+        s1[0]['timestamp'] = data.json[0]['timestamp']
+        # Ignore message id that is randomly generated
+        s1[0]['message_id'] = data.json[0]['message_id']
+        # source is generated if not provided.
+        s1[0]['source'] = '%s:openstack' % s1[0]['project_id']
+
+        unwound = copy.copy(s1[0])
+        unwound['resource_metadata'] = {'nest': {'name1': 'value1',
+                                                 'name2': 'value3'},
+                                        'name2': 'value2'}
+        # only the published sample should be unwound, not the representation
+        # in the API response
+        self.assertEqual(s1[0], data.json[0])
+        self.assertEqual(unwound, self.published[0][0])
 
     def test_nested_metadata(self):
         s1 = [{'counter_name': 'apples',
@@ -199,12 +231,12 @@ class TestPostSamples(FunctionalTest,
             c['timestamp'] = timestamp.replace(tzinfo=None).isoformat()
 
             # do the same on the pipeline
-            msg = self.published[0][1]['args']['data'][x]
+            msg = self.published[0][x]
             timestamp = timeutils.parse_isotime(msg['timestamp'])
             msg['timestamp'] = timestamp.replace(tzinfo=None).isoformat()
 
             self.assertEqual(s, c)
-            self.assertEqual(s, self.published[0][1]['args']['data'][x])
+            self.assertEqual(s, self.published[0][x])
 
     def test_missing_mandatory_fields(self):
         """Do not accept posting samples with missing mandatory fields."""
@@ -264,7 +296,7 @@ class TestPostSamples(FunctionalTest,
             s['timestamp'] = data.json[x]['timestamp']
             s.setdefault('resource_metadata', dict())
             self.assertEqual(s, data.json[x])
-            self.assertEqual(s, self.published[0][1]['args']['data'][x])
+            self.assertEqual(s, self.published[0][x])
 
     def test_multiple_samples_multiple_sources(self):
         """Do accept a single post with some multiples sources
@@ -312,7 +344,7 @@ class TestPostSamples(FunctionalTest,
             s['timestamp'] = data.json[x]['timestamp']
             s.setdefault('resource_metadata', dict())
             self.assertEqual(s, data.json[x])
-            self.assertEqual(s, self.published[0][1]['args']['data'][x])
+            self.assertEqual(s, self.published[0][x])
 
     def test_missing_project_user_id(self):
         """Ensure missing project & user IDs are defaulted appropriately.
@@ -349,4 +381,4 @@ class TestPostSamples(FunctionalTest,
             s['project_id'] = project_id
 
             self.assertEqual(s, data.json[x])
-            self.assertEqual(s, self.published[0][1]['args']['data'][x])
+            self.assertEqual(s, self.published[0][x])

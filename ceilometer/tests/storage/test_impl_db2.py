@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright Ericsson AB 2014. All rights reserved
 #
@@ -24,14 +23,11 @@
 
 """
 
-from ceilometer.tests import db as tests_db
+from ceilometer.storage import impl_db2
+from ceilometer.tests import base as test_base
 
 
-class DB2EngineTestBase(tests_db.TestBase):
-    database_connection = tests_db.DB2FakeConnectionUrl()
-
-
-class CapabilitiesTest(DB2EngineTestBase):
+class CapabilitiesTest(test_base.BaseTestCase):
     # Check the returned capabilities list, which is specific to each DB
     # driver
 
@@ -68,9 +64,16 @@ class CapabilitiesTest(DB2EngineTestBase):
             'alarms': {'query': {'simple': True,
                                  'complex': True},
                        'history': {'query': {'simple': True,
-                                             'complex': False}}},
+                                             'complex': True}}},
             'events': {'query': {'simple': False}}
         }
 
-        actual_capabilities = self.conn.get_capabilities()
+        actual_capabilities = impl_db2.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_storage_capabilities(self):
+        expected_capabilities = {
+            'storage': {'production_ready': True},
+        }
+        actual_capabilities = impl_db2.Connection.get_storage_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)

@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Doug Hellmann <doug.hellmann@dreamhost.com>
 #
@@ -26,25 +25,20 @@
 
 from ceilometer.storage import base
 from ceilometer.storage import impl_mongodb
+from ceilometer.tests import base as test_base
 from ceilometer.tests import db as tests_db
 from ceilometer.tests.storage import test_storage_scenarios
 
 
-class MongoDBEngineTestBase(tests_db.TestBase):
-    database_connection = tests_db.MongoDBFakeConnectionUrl()
-
-
-class MongoDBConnection(MongoDBEngineTestBase):
+@tests_db.run_with('mongodb')
+class MongoDBConnection(tests_db.TestBase):
     def test_connection_pooling(self):
-        self.assertEqual(self.conn.conn,
-                         impl_mongodb.Connection(self.CONF).conn)
+        test_conn = impl_mongodb.Connection(self.db_manager.url)
+        self.assertEqual(self.conn.conn, test_conn.conn)
 
     def test_replica_set(self):
-        self.CONF.set_override(
-            'connection',
-            str(tests_db.MongoDBFakeConnectionUrl()) + '?replicaSet=foobar',
-            group='database')
-        conn = impl_mongodb.Connection(self.CONF)
+        url = self.db_manager._url + '?replicaSet=foobar'
+        conn = impl_mongodb.Connection(url)
         self.assertTrue(conn.conn)
 
     def test_recurse_sort_keys(self):
@@ -58,8 +52,8 @@ class MongoDBConnection(MongoDBEngineTestBase):
         self.assertEqual(expect, ret)
 
 
-class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase,
-                            MongoDBEngineTestBase):
+@tests_db.run_with('mongodb')
+class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase):
     #NOTE(Fengqian): All these three test case are the same for resource
     #and meter collection. As to alarm, we will set up in AlarmTestPagination.
     def test_get_marker(self):
@@ -87,7 +81,8 @@ class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase,
             self.assertTrue(True)
 
 
-class IndexTest(MongoDBEngineTestBase):
+@tests_db.run_with('mongodb')
+class IndexTest(tests_db.TestBase):
     def test_meter_ttl_index_absent(self):
         # create a fake index and check it is deleted
         self.conn.db.meter.ensure_index('foo', name='meter_ttl')
@@ -115,8 +110,8 @@ class IndexTest(MongoDBEngineTestBase):
                                                         name='meter_ttl'))
 
 
-class AlarmTestPagination(test_storage_scenarios.AlarmTestBase,
-                          MongoDBEngineTestBase):
+@tests_db.run_with('mongodb')
+class AlarmTestPagination(test_storage_scenarios.AlarmTestBase):
     def test_alarm_get_marker(self):
         self.add_some_alarms()
         marker_pairs = {'name': 'red-alert'}
@@ -145,7 +140,7 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase,
             self.assertTrue(True)
 
 
-class CapabilitiesTest(MongoDBEngineTestBase):
+class CapabilitiesTest(test_base.BaseTestCase):
     # Check the returned capabilities list, which is specific to each DB
     # driver
 
@@ -186,5 +181,13 @@ class CapabilitiesTest(MongoDBEngineTestBase):
             'events': {'query': {'simple': False}}
         }
 
-        actual_capabilities = self.conn.get_capabilities()
+        actual_capabilities = impl_mongodb.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_storage_capabilities(self):
+        expected_capabilities = {
+            'storage': {'production_ready': True},
+        }
+        actual_capabilities = impl_mongodb.Connection.\
+            get_storage_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)

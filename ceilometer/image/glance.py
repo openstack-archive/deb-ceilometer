@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2012 New Dream Network, LLC (DreamHost)
+# Copyright 2012 New Dream Network, LLC (DreamHost)
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -24,12 +23,12 @@ import itertools
 import glanceclient
 from oslo.config import cfg
 
+from ceilometer.central import plugin
 from ceilometer.openstack.common import timeutils
-from ceilometer import plugin
 from ceilometer import sample
 
 
-class _Base(plugin.PollsterBase):
+class _Base(plugin.CentralPollster):
 
     @staticmethod
     def get_glance_client(ksclient):
@@ -103,8 +102,8 @@ class _Base(plugin.PollsterBase):
 
 
 class ImagePollster(_Base):
-
-    def get_samples(self, manager, cache, resources=[]):
+    @plugin.check_keystone
+    def get_samples(self, manager, cache, resources=None):
         for image in self._iter_images(manager.keystone, cache):
             yield sample.Sample(
                 name='image',
@@ -120,8 +119,8 @@ class ImagePollster(_Base):
 
 
 class ImageSizePollster(_Base):
-
-    def get_samples(self, manager, cache, resources=[]):
+    @plugin.check_keystone
+    def get_samples(self, manager, cache, resources=None):
         for image in self._iter_images(manager.keystone, cache):
             yield sample.Sample(
                 name='image.size',

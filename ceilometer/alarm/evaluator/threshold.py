@@ -1,6 +1,5 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Red Hat, Inc
+# Copyright 2013 Red Hat, Inc
 #
 # Author: Eoghan Glynn <eglynn@redhat.com>
 # Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
@@ -22,7 +21,7 @@ import operator
 
 from ceilometer.alarm import evaluator
 from ceilometer.alarm.evaluator import utils
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 

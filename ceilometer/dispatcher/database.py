@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Copyright 2013 IBM Corp
 #
@@ -17,7 +16,7 @@
 # under the License.
 
 from ceilometer import dispatcher
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils as publisher_utils
@@ -39,7 +38,7 @@ class DatabaseDispatcher(dispatcher.Base):
     '''
     def __init__(self, conf):
         super(DatabaseDispatcher, self).__init__(conf)
-        self.storage_conn = storage.get_connection(conf)
+        self.storage_conn = storage.get_connection_from_config(conf)
 
     def record_metering_data(self, data):
         # We may have receive only one counter on the wire

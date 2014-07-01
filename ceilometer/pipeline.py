@@ -1,7 +1,6 @@
-# -*- encoding: utf-8 -*-
 #
-# Copyright © 2013 Intel Corp.
-# Copyright © 2014 Red Hat, Inc
+# Copyright 2013 Intel Corp.
+# Copyright 2014 Red Hat, Inc
 #
 # Authors: Yunhong Jiang <yunhong.jiang@intel.com>
 #          Eoghan Glynn <eglynn@redhat.com>
@@ -26,7 +25,7 @@ import os
 from oslo.config import cfg
 import yaml
 
-from ceilometer.openstack.common.gettextutils import _  # noqa
+from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import publisher
 from ceilometer import transformer as xformer
@@ -55,7 +54,8 @@ class PipelineException(Exception):
 
 class PublishContext(object):
 
-    def __init__(self, context, pipelines=[]):
+    def __init__(self, context, pipelines=None):
+        pipelines = pipelines or []
         self.pipelines = set(pipelines)
         self.context = context
 
@@ -303,7 +303,6 @@ class Sink(object):
                 transformed_samples.append(sample)
 
         if transformed_samples:
-            LOG.audit(_("Pipeline %s: Publishing samples"), self)
             for p in self.publishers:
                 try:
                     p.publish_samples(ctxt, transformed_samples)
@@ -312,7 +311,6 @@ class Sink(object):
                         "Pipeline %(pipeline)s: Continue after error "
                         "from publisher %(pub)s") % ({'pipeline': self,
                                                       'pub': p}))
-            LOG.audit(_("Pipeline %s: Published samples") % self)
 
     def publish_samples(self, ctxt, samples):
         for meter_name, samples in itertools.groupby(
