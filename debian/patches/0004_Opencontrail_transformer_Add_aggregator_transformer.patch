@@ -1,27 +1,31 @@
 Description: transformer: Add aggregator transformer
  This adds a transformer aggregate counters until a threshold and/or a
  retention time and then flushing them out.
+ .
+ Also cherry picked bug-fixes related to this commit.
+Origin: upstream, https://review.openstack.org/#/c/104491/
 Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
 Date: Wed, 9 Apr 2014 14:28:54 +0000 (+0200)
-X-Git-Url: https://review.openstack.org/gitweb?p=openstack%2Fceilometer.git;a=commitdiff_plain;h=6957e7b66aa37685ec0d75fe7ef65cdab981d55f
+X-Git-Url: https://review.openstack.org/gitweb?p=openstack%2Fceilometer.git;a=commitdiff_plain;h=231862a2184c8e4a2efe14025da5f36a1e66a948
 Change-Id: If4a950e585fe5309ddec58ed2c9a92928ac1acb2
 Co-Authored-By: Jordan Pittier <jordan.pittier@cloudwatt.com>
-Origin: upstream, https://review.openstack.org/#/c/87238/
-Last-Update: 2014-05-21
+Last-Update: 2014-07-09
 
 diff --git a/ceilometer/tests/pipeline_base.py b/ceilometer/tests/pipeline_base.py
-index db51c64..f4f5a64 100644
+index db51c64..9e37391 100644
 --- a/ceilometer/tests/pipeline_base.py
 +++ b/ceilometer/tests/pipeline_base.py
-@@ -20,6 +20,7 @@
+@@ -19,7 +19,9 @@
+ 
  import abc
  import datetime
++import traceback
  
 +import mock
  import six
  from stevedore import extension
  
-@@ -52,6 +53,7 @@ class BasePipelineTestCase(test.BaseTestCase):
+@@ -52,6 +54,7 @@ class BasePipelineTestCase(test.BaseTestCase):
              'except': self.TransformerClassException,
              'drop': self.TransformerClassDrop,
              'cache': accumulator.TransformerAccumulator,
@@ -29,12 +33,45 @@ index db51c64..f4f5a64 100644
              'unit_conversion': conversions.ScalingTransformer,
              'rate_of_change': conversions.RateOfChangeTransformer,
          }
-@@ -1113,3 +1115,329 @@ class BasePipelineTestCase(test.BaseTestCase):
+@@ -142,6 +145,15 @@ class BasePipelineTestCase(test.BaseTestCase):
+ 
+         self._setup_pipeline_cfg()
+ 
++        self._reraise_exception = True
++        self.useFixture(mockpatch.Patch(
++            'ceilometer.pipeline.LOG.exception',
++            side_effect=self._handle_reraise_exception))
++
++    def _handle_reraise_exception(self, msg):
++        if self._reraise_exception:
++            raise Exception(traceback.format_exc())
++
+     @abc.abstractmethod
+     def _setup_pipeline_cfg(self):
+         """Setup the appropriate form of pipeline config."""
+@@ -418,6 +430,7 @@ class BasePipelineTestCase(test.BaseTestCase):
+                          getattr(self.TransformerClass.samples[1], "name"))
+ 
+     def test_multiple_pipeline_exception(self):
++        self._reraise_exception = False
+         self._break_pipeline_cfg()
+         pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                     self.transformer_manager)
+@@ -590,6 +603,7 @@ class BasePipelineTestCase(test.BaseTestCase):
+                          getattr(publisher.samples[0], 'name'))
+ 
+     def test_multiple_publisher_isolation(self):
++        self._reraise_exception = False
+         self._set_pipeline_cfg('publishers', ['except://', 'new://'])
+         pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                     self.transformer_manager)
+@@ -1113,3 +1127,402 @@ class BasePipelineTestCase(test.BaseTestCase):
          meters = ('disk.read.bytes', 'disk.write.requests')
          units = ('B', 'request')
          self._do_test_rate_of_change_mapping(pipe, meters, units)
 +
 +    def _do_test_aggregator(self, parameters, expected_length):
++        timeutils.set_time_override()
 +        transformer_cfg = [
 +            {
 +                'name': 'aggregator',
@@ -275,6 +312,7 @@ index db51c64..f4f5a64 100644
 +                         s.resource_metadata)
 +
 +    def test_aggregator_sized_flush(self):
++        timeutils.set_time_override()
 +        transformer_cfg = [
 +            {
 +                'name': 'aggregator',
@@ -359,11 +397,82 @@ index db51c64..f4f5a64 100644
 +        pipe.flush(None)
 +        publisher = pipeline_manager.pipelines[0].publishers[0]
 +        self.assertEqual(1, len(publisher.samples))
++
++    def test_aggregator_without_authentication(self):
++        timeutils.set_time_override()
++        transformer_cfg = [
++            {
++                'name': 'aggregator',
++                'parameters': {'size': 2},
++            },
++        ]
++        self._set_pipeline_cfg('transformers', transformer_cfg)
++        self._set_pipeline_cfg('counters', ['storage.objects.outgoing.bytes'])
++        counters = [
++            sample.Sample(
++                name='storage.objects.outgoing.bytes',
++                type=sample.TYPE_DELTA,
++                volume=26,
++                unit='B',
++                user_id=None,
++                project_id=None,
++                resource_id='test_resource',
++                timestamp=timeutils.utcnow().isoformat(),
++                resource_metadata={'version': '1.0'}
++            ),
++            sample.Sample(
++                name='storage.objects.outgoing.bytes',
++                type=sample.TYPE_DELTA,
++                volume=16,
++                unit='B',
++                user_id=None,
++                project_id=None,
++                resource_id='test_resource',
++                timestamp=timeutils.utcnow().isoformat(),
++                resource_metadata={'version': '2.0'}
++            )
++        ]
++
++        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
++                                                    self.transformer_manager)
++        pipe = pipeline_manager.pipelines[0]
++
++        pipe.publish_samples(None, [counters[0]])
++        pipe.flush(None)
++        publisher = pipe.publishers[0]
++        self.assertEqual(0, len(publisher.samples))
++
++        pipe.publish_samples(None, [counters[1]])
++        pipe.flush(None)
++        publisher = pipe.publishers[0]
++
++        self.assertEqual(1, len(publisher.samples))
++        self.assertEqual(42, getattr(publisher.samples[0], 'volume'))
++        self.assertEqual("test_resource", getattr(publisher.samples[0],
++                                                  'resource_id'))
++
++    def test_aggregator_timed_flush_no_matching_samples(self):
++        timeutils.set_time_override()
++        transformer_cfg = [
++            {
++                'name': 'aggregator',
++                'parameters': {'size': 900, 'retention_time': 60},
++            },
++        ]
++        self._set_pipeline_cfg('transformers', transformer_cfg)
++        self._set_pipeline_cfg('counters', ['unrelated-sample'])
++        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
++                                                    self.transformer_manager)
++        timeutils.advance_time_seconds(200)
++        pipe = pipeline_manager.pipelines[0]
++        pipe.flush(None)
++        publisher = pipeline_manager.pipelines[0].publishers[0]
++        self.assertEqual(0, len(publisher.samples))
 diff --git a/ceilometer/transformer/conversions.py b/ceilometer/transformer/conversions.py
-index 3a7d079..bfa9f0c 100644
+index 3a7d079..616f517 100644
 --- a/ceilometer/transformer/conversions.py
 +++ b/ceilometer/transformer/conversions.py
-@@ -163,3 +163,89 @@ class RateOfChangeTransformer(ScalingTransformer):
+@@ -163,3 +163,97 @@ class RateOfChangeTransformer(ScalingTransformer):
                       (s,))
              s = None
          return s
@@ -417,8 +526,13 @@ index 3a7d079..bfa9f0c 100644
 +            self.key_attributes.append(name)
 +
 +    def _get_unique_key(self, s):
-+        non_aggregated_keys = "-".join([getattr(s, field)
-+                                        for field in self.key_attributes])
++        #NOTE(arezmerita): in samples generated by ceilometer middleware,
++        #when accessing without authentication publicly readable/writable
++        #swift containers, the project_id and the user_id are missing.
++        #They will be replaced by <undefined> for unique key construction.
++        keys = ['<undefined>' if getattr(s, f) is None else getattr(s, f)
++                for f in self.key_attributes]
++        non_aggregated_keys = "-".join(keys)
 +        #NOTE(sileht): it assumes, a meter always have the same unit/type
 +        return "%s-%s-%s" % (s.name, s.resource_id, non_aggregated_keys)
 +
@@ -442,6 +556,9 @@ index 3a7d079..bfa9f0c 100644
 +                            getattr(sample, field))
 +
 +    def flush(self, context):
++        if not self.initial_timestamp:
++            return []
++
 +        expired = self.retention_time and \
 +            timeutils.is_older_than(self.initial_timestamp,
 +                                    self.retention_time)
@@ -454,7 +571,7 @@ index 3a7d079..bfa9f0c 100644
 +            return x
 +        return []
 diff --git a/setup.cfg b/setup.cfg
-index ef67325..3f19142 100644
+index b395980..5ec1659 100644
 --- a/setup.cfg
 +++ b/setup.cfg
 @@ -156,6 +156,7 @@ ceilometer.transformer =

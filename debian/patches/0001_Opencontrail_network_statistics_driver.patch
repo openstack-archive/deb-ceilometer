@@ -1,28 +1,20 @@
+Description: Opencontrail network statistics driver
+ This patch introduces a network statistics driver for Opencontrail. Only port
+ statistics are currently returned by the driver.
+Origin: origin, https://review.openstack.org/#/c/94350/
 From: Sylvain Afchain <sylvain.afchain@enovance.com>
 Date: Sat, 5 Apr 2014 05:43:55 +0000 (+0200)
 Subject: Opencontrail network statistics driver
 X-Git-Url: https://review.openstack.org/gitweb?p=openstack%2Fceilometer.git;a=commitdiff_plain;h=891819736dcbd04b9ca81245419f87dadb237b97
-
-Opencontrail network statistics driver
-
-This patch introduces a network statistics driver
-for Opencontrail. Only port statistics are currently
-returned by the driver.
-
 Implements: blueprint meter-from-opencontrail
 Co-Authored-By: Edouard Thuleau <edouard.thuleau@cloudwatt.com>
 Change-Id: Ic0afc478362fb4170903ee4e3723b82cd6c723fa
-(cherry picked from commit 6e0f4d9bd9c7f3b957adc6f73bf1a48c8c120e1b)
----
+Last-Update: 2014-07-09
 
-diff --git a/ceilometer/network/statistics/opencontrail/__init__.py b/ceilometer/network/statistics/opencontrail/__init__.py
-new file mode 100644
-index 0000000..e69de29
-diff --git a/ceilometer/network/statistics/opencontrail/client.py b/ceilometer/network/statistics/opencontrail/client.py
-new file mode 100644
-index 0000000..51f786d
---- /dev/null
-+++ b/ceilometer/network/statistics/opencontrail/client.py
+Index: ceilometer/ceilometer/network/statistics/opencontrail/client.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ ceilometer/ceilometer/network/statistics/opencontrail/client.py	2014-07-09 23:23:16.000000000 +0800
 @@ -0,0 +1,165 @@
 +# Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 +#
@@ -189,11 +181,10 @@ index 0000000..51f786d
 +    def __init__(self, endpoint, username, password, domain, verify_ssl=True):
 +        self.networks = NetworksAPIClient(endpoint, username, password,
 +                                          domain, verify_ssl)
-diff --git a/ceilometer/network/statistics/opencontrail/driver.py b/ceilometer/network/statistics/opencontrail/driver.py
-new file mode 100644
-index 0000000..a54de7d
---- /dev/null
-+++ b/ceilometer/network/statistics/opencontrail/driver.py
+Index: ceilometer/ceilometer/network/statistics/opencontrail/driver.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ ceilometer/ceilometer/network/statistics/opencontrail/driver.py	2014-07-09 23:23:16.000000000 +0800
 @@ -0,0 +1,149 @@
 +# Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 +#
@@ -344,11 +335,10 @@ index 0000000..a54de7d
 +    @staticmethod
 +    def _switch_port_transmit_bytes(statistic, resource_id, resource_meta):
 +        return (int(statistic['out_bytes']), resource_id, resource_meta)
-diff --git a/ceilometer/neutron_client.py b/ceilometer/neutron_client.py
-new file mode 100644
-index 0000000..993df58
---- /dev/null
-+++ b/ceilometer/neutron_client.py
+Index: ceilometer/ceilometer/neutron_client.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ ceilometer/ceilometer/neutron_client.py	2014-07-09 23:23:16.000000000 +0800
 @@ -0,0 +1,73 @@
 +# Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 +#
@@ -423,14 +413,10 @@ index 0000000..993df58
 +    def port_get_all(self):
 +        resp = self.client.list_ports()
 +        return resp.get('ports')
-diff --git a/ceilometer/tests/network/statistics/opencontrail/__init__.py b/ceilometer/tests/network/statistics/opencontrail/__init__.py
-new file mode 100644
-index 0000000..e69de29
-diff --git a/ceilometer/tests/network/statistics/opencontrail/test_client.py b/ceilometer/tests/network/statistics/opencontrail/test_client.py
-new file mode 100644
-index 0000000..1817a32
---- /dev/null
-+++ b/ceilometer/tests/network/statistics/opencontrail/test_client.py
+Index: ceilometer/ceilometer/tests/network/statistics/opencontrail/test_client.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ ceilometer/ceilometer/tests/network/statistics/opencontrail/test_client.py	2014-07-09 23:23:16.000000000 +0800
 @@ -0,0 +1,76 @@
 +# Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 +#
@@ -508,11 +494,10 @@ index 0000000..1817a32
 +        expected_cookies = {'connect.sid': 'aaa'}
 +        self.assertEqual(expected_data, data)
 +        self.assertEqual(expected_cookies, cookies)
-diff --git a/ceilometer/tests/network/statistics/opencontrail/test_driver.py b/ceilometer/tests/network/statistics/opencontrail/test_driver.py
-new file mode 100644
-index 0000000..940e998
---- /dev/null
-+++ b/ceilometer/tests/network/statistics/opencontrail/test_driver.py
+Index: ceilometer/ceilometer/tests/network/statistics/opencontrail/test_driver.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ ceilometer/ceilometer/tests/network/statistics/opencontrail/test_driver.py	2014-07-09 23:23:16.000000000 +0800
 @@ -0,0 +1,145 @@
 +# Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 +#
@@ -659,11 +644,10 @@ index 0000000..940e998
 +              'tenant_id': '89271fa581ab4380bf172f868c3615f9'},
 +             mock.ANY)]
 +        self._test_meter('switch.port.transmit.bytes', expected)
-diff --git a/ceilometer/tests/test_neutronclient.py b/ceilometer/tests/test_neutronclient.py
-new file mode 100644
-index 0000000..17d39b6
---- /dev/null
-+++ b/ceilometer/tests/test_neutronclient.py
+Index: ceilometer/ceilometer/tests/test_neutronclient.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ ceilometer/ceilometer/tests/test_neutronclient.py	2014-07-09 23:23:16.000000000 +0800
 @@ -0,0 +1,74 @@
 +# Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 +#
@@ -739,11 +723,11 @@ index 0000000..17d39b6
 +        self.assertEqual(1, len(networks))
 +        self.assertEqual('298a3088-a446-4d5a-bad8-f92ecacd786b',
 +                         networks[0]['id'])
-diff --git a/requirements.txt b/requirements.txt
-index 654f568..d325ea8 100644
---- a/requirements.txt
-+++ b/requirements.txt
-@@ -23,6 +23,7 @@ python-glanceclient>=0.9.0
+Index: ceilometer/requirements.txt
+===================================================================
+--- ceilometer.orig/requirements.txt	2014-07-09 23:23:08.000000000 +0800
++++ ceilometer/requirements.txt	2014-07-09 23:23:16.000000000 +0800
+@@ -23,6 +23,7 @@
  python-keystoneclient>=0.7.0
  python-novaclient>=2.17.0
  python-swiftclient>=1.6
@@ -751,11 +735,11 @@ index 654f568..d325ea8 100644
  pytz>=2010h
  PyYAML>=3.1.0
  requests>=1.1
-diff --git a/setup.cfg b/setup.cfg
-index 8cd49ed..b7ce034 100644
---- a/setup.cfg
-+++ b/setup.cfg
-@@ -200,6 +200,7 @@ ceilometer.dispatcher =
+Index: ceilometer/setup.cfg
+===================================================================
+--- ceilometer.orig/setup.cfg	2014-07-09 23:23:08.000000000 +0800
++++ ceilometer/setup.cfg	2014-07-09 23:23:16.000000000 +0800
+@@ -200,6 +200,7 @@
  
  network.statistics.drivers =
      opendaylight = ceilometer.network.statistics.opendaylight.driver:OpenDayLightDriver

@@ -1,0 +1,112 @@
+Description: Handle non-ascii character in meter name
+ In Ceilometer, meter's name is user supplied, thus can contain non ascii
+ characters. This patch encode Unicode objects to UTF-8 before returning the
+ meter to the client.
+ .
+ Because I5814202e3d59fd29f96c8734e445367f766e6a4a is not backported in
+ Icehouse, one resource can't have several meters with the HBase driver thus
+ test_list_meters_scenarios.py has been modified to introduce a new sample with
+ a new resource-id.
+Origin: upstream, https://review.openstack.org/#/c/104794/
+Author: JordanP <jordan.pittier@cloudwatt.com>
+Date: Fri, 4 Jul 2014 13:54:40 +0000 (+0000)
+X-Git-Url: https://review.openstack.org/gitweb?p=openstack%2Fceilometer.git;a=commitdiff_plain;h=d71783a6eca62a2055d12894686e1dd20a75e023
+Change-Id: I15696b1b09286270de237084869d4a2d4418be8d
+Bug-Ubuntu: https://bugs.launchpad.net/bug/1333177
+Last-Update: 2014-07-09
+
+diff --git a/ceilometer/api/controllers/v2.py b/ceilometer/api/controllers/v2.py
+index 16ecf22..480e95d 100644
+--- a/ceilometer/api/controllers/v2.py
++++ b/ceilometer/api/controllers/v2.py
+@@ -952,8 +952,10 @@ class Meter(_Base):
+     "The unique identifier for the meter"
+ 
+     def __init__(self, **kwargs):
+-        meter_id = base64.encodestring('%s+%s' % (kwargs['resource_id'],
+-                                                  kwargs['name']))
++        meter_id = '%s+%s' % (kwargs['resource_id'], kwargs['name'])
++        # meter_id is of type Unicode but base64.encodestring() only accepts
++        # strings. See bug #1333177
++        meter_id = base64.encodestring(meter_id.encode('utf-8'))
+         kwargs['meter_id'] = meter_id
+         super(Meter, self).__init__(**kwargs)
+ 
+diff --git a/ceilometer/tests/api/v2/test_list_meters_scenarios.py b/ceilometer/tests/api/v2/test_list_meters_scenarios.py
+index e8c5d44..2c8ea53 100644
+--- a/ceilometer/tests/api/v2/test_list_meters_scenarios.py
++++ b/ceilometer/tests/api/v2/test_list_meters_scenarios.py
+@@ -154,6 +154,17 @@ class TestListMeters(FunctionalTest,
+                                        'size': 0,
+                                        'util': 0.58,
+                                        'is_public': True},
++                    source='test_source1'),
++                sample.Sample(
++                    u'meter.accent\xe9\u0437',
++                    'gauge',
++                    '',
++                    1,
++                    'user-id4',
++                    'project-id2',
++                    'resource-id5',
++                    timestamp=datetime.datetime(2014, 7, 2, 10, 43),
++                    resource_metadata={},
+                     source='test_source1')]:
+             msg = utils.meter_message_from_counter(
+                 cnt,
+@@ -163,13 +174,15 @@ class TestListMeters(FunctionalTest,
+ 
+     def test_list_meters(self):
+         data = self.get_json('/meters')
+-        self.assertEqual(4, len(data))
++        self.assertEqual(5, len(data))
+         self.assertEqual(set(['resource-id',
+                               'resource-id2',
+                               'resource-id3',
+-                              'resource-id4']),
++                              'resource-id4',
++                              'resource-id5']),
+                          set(r['resource_id'] for r in data))
+-        self.assertEqual(set(['meter.test', 'meter.mine']),
++        self.assertEqual(set(['meter.test', 'meter.mine',
++                              u'meter.accent\xe9\u0437']),
+                          set(r['name'] for r in data))
+         self.assertEqual(set(['test_source', 'test_source1']),
+                          set(r['source'] for r in data))
+@@ -190,7 +203,7 @@ class TestListMeters(FunctionalTest,
+ 
+     def test_list_samples(self):
+         data = self.get_json('/samples')
+-        self.assertEqual(5, len(data))
++        self.assertEqual(6, len(data))
+ 
+     def test_query_samples_with_invalid_field_name_and_non_eq_operator(self):
+         resp = self.get_json('/samples',
+@@ -597,7 +610,8 @@ class TestListMeters(FunctionalTest,
+                                  }],
+                              )
+         rids = set(r['resource_id'] for r in data)
+-        self.assertEqual(set(['resource-id3', 'resource-id4']), rids)
++        self.assertEqual(set(['resource-id3', 'resource-id4',
++                              'resource-id5']), rids)
+ 
+         sids = set(r['source'] for r in data)
+         self.assertEqual(set(['test_source', 'test_source1']), sids)
+@@ -612,7 +626,7 @@ class TestListMeters(FunctionalTest,
+                                  }],
+                              )
+         rids = set(r['resource_id'] for r in data)
+-        self.assertEqual(set(['resource-id4']), rids)
++        self.assertEqual(set(['resource-id4', 'resource-id5']), rids)
+ 
+         sids = set(r['source'] for r in data)
+         self.assertEqual(set(['test_source1']), sids)
+@@ -644,6 +658,6 @@ class TestListMeters(FunctionalTest,
+     def test_list_meters_meter_id(self):
+         data = self.get_json('/meters')
+         for i in data:
+-            expected = base64.encodestring('%s+%s' % (i['resource_id'],
+-                                                      i['name']))
++            meter_id = '%s+%s' % (i['resource_id'], i['name'])
++            expected = base64.encodestring(meter_id.encode('utf-8'))
+             self.assertEqual(expected, i['meter_id'])

@@ -1,0 +1,587 @@
+Description: Fix Opencontrail pollster according the API changes
+ With this patch the Opencontrail pollster now uses the Analytics API instead
+ of the Web UI API proxy. Since the Analytics API doesn't implement any
+ authentication mechanism, this patch removes the previous authentication
+ code.
+ .
+ Also fix the pollster according to the API changes. New UT have been added for
+ new resources that can be retrieved.
+Origin: upstream, https://review.openstack.org/#/c/104913/
+Author: Sylvain Afchain <sylvain.afchain@enovance.com>
+Date: Thu, 3 Jul 2014 21:21:50 +0000 (+0200)
+X-Git-Url: https://review.openstack.org/gitweb?p=openstack%2Fceilometer.git;a=commitdiff_plain;h=a72f47314c13ab93e759ce73fc4a46d6544eec2a
+Change-Id: I13bca29c3393baa85d2e121af2c065321d32b39a
+Bug-Ubuntu: https://bugs.launchpad.net/bug/1337836
+Last-Update: 2014-07-09
+
+diff --git a/ceilometer/network/statistics/opencontrail/client.py b/ceilometer/network/statistics/opencontrail/client.py
+index 51f786d..3a170b8 100644
+--- a/ceilometer/network/statistics/opencontrail/client.py
++++ b/ceilometer/network/statistics/opencontrail/client.py
+@@ -36,53 +36,22 @@ class OpencontrailAPIFailed(Exception):
+ class AnalyticsAPIBaseClient(object):
+     """Opencontrail Base Statistics REST API Client."""
+
+-    def __init__(self, endpoint, username, password, domain, verify_ssl=True):
++    def __init__(self, endpoint, data):
+         self.endpoint = endpoint
+-        self.username = username
+-        self.password = password
+-        self.domain = domain
+-        self.verify_ssl = verify_ssl
+-        self.sid = None
+-
+-    def authenticate(self):
+-        path = '/authenticate'
+-        data = {'username': self.username,
+-                'password': self.password,
+-                'domain': self.domain}
+-
+-        req_params = self._get_req_params(data=data)
+-        url = url_parse.urljoin(self.endpoint, path)
+-        resp = requests.post(url, **req_params)
+-        if resp.status_code != 302:
+-            raise OpencontrailAPIFailed(
+-                _('Opencontrail API returned %(status)s %(reason)s') %
+-                {'status': resp.status_code, 'reason': resp.reason})
+-        self.sid = resp.cookies['connect.sid']
++        self.data = data or {}
+
+-    def request(self, path, fqdn_uuid, data, retry=True):
+-        if not self.sid:
+-            self.authenticate()
++    def request(self, path, fqdn_uuid, data=None):
++        req_data = self.data
++        if data:
++            req_data.update(data)
+
+-        if not data:
+-            data = {'fqnUUID': fqdn_uuid}
+-        else:
+-            data['fqnUUID'] = fqdn_uuid
++        req_params = self._get_req_params(data=req_data)
+
+-        req_params = self._get_req_params(data=data,
+-                                          cookies={'connect.sid': self.sid})
+-
+-        url = url_parse.urljoin(self.endpoint, path)
++        url = urlparse.urljoin(self.endpoint, path + fqdn_uuid)
+         self._log_req(url, req_params)
+         resp = requests.get(url, **req_params)
+         self._log_res(resp)
+
+-        # it seems that the sid token has to be renewed
+-        if resp.status_code == 302:
+-            self.sid = 0
+-            if retry:
+-                return self.request(path, fqdn_uuid, data,
+-                                    retry=False)
+-
+         if resp.status_code != 200:
+             raise OpencontrailAPIFailed(
+                 _('Opencontrail API returned %(status)s %(reason)s') %
+@@ -90,15 +59,13 @@ class AnalyticsAPIBaseClient(object):
+
+         return resp
+
+-    def _get_req_params(self, params=None, data=None, cookies=None):
++    def _get_req_params(self, data=None):
+         req_params = {
+             'headers': {
+                 'Accept': 'application/json'
+             },
+             'data': data,
+-            'verify': self.verify_ssl,
+             'allow_redirects': False,
+-            'cookies': cookies
+         }
+
+         return req_params
+@@ -142,24 +109,20 @@ class AnalyticsAPIBaseClient(object):
+ class NetworksAPIClient(AnalyticsAPIBaseClient):
+     """Opencontrail Statistics REST API Client."""
+
+-    def get_port_statistics(self, fqdn_uuid):
+-        """Get port statistics of a network
++    def get_vm_statistics(self, fqdn_uuid, data=None):
++        """Get statistics of a virtual-machines
+
+         URL:
+-            /tenant/networking/virtual-machines/details
+-        PARAMS:
+-            fqdnUUID=fqdn_uuid
+-            type=vn
++            {endpoint}/analytics/uves/virtual-machine/{fqdn_uuid}
+         """
+
+-        path = '/api/tenant/networking/virtual-machines/details'
+-        resp = self.request(path, fqdn_uuid, {'type': 'vn'})
++        path = '/analytics/uves/virtual-machine/'
++        resp = self.request(path, fqdn_uuid, data)
+
+         return resp.json()
+
+
+ class Client(object):
+
+-    def __init__(self, endpoint, username, password, domain, verify_ssl=True):
+-        self.networks = NetworksAPIClient(endpoint, username, password,
+-                                          domain, verify_ssl)
++    def __init__(self, endpoint, data=None):
++        self.networks = NetworksAPIClient(endpoint, data)
+diff --git a/ceilometer/network/statistics/opencontrail/driver.py b/ceilometer/network/statistics/opencontrail/driver.py
+index a54de7d..d1ebb64 100644
+--- a/ceilometer/network/statistics/opencontrail/driver.py
++++ b/ceilometer/network/statistics/opencontrail/driver.py
+@@ -26,6 +26,7 @@ class OpencontrailDriver(driver.Driver):
+     """Driver of network analytics of Opencontrail.
+
+     This driver uses resources in "pipeline.yaml".
++
+     Resource requires below conditions:
+     * resource is url
+     * scheme is "opencontrail"
+@@ -33,21 +34,26 @@ class OpencontrailDriver(driver.Driver):
+     This driver can be configured via query parameters.
+     Supported parameters:
+     * scheme:
+-        The scheme of request url to Opencontrail Analytics endpoint.
+-        (default http)
+-    * username:
+-        This is username used by Opencontrail Analytics.(default None)
+-    * password:
+-        This is password used by Opencontrail Analytics.(default None)
+-    * domain
+-        This is domain used by Opencontrail Analytics.(default None)
+-    * verify_ssl
+-        Specify if the certificate will be checked for https request.
+-        (default false)
+-
+-    e.g.
+-        opencontrail://localhost:8143/?username=admin&password=admin&
+-        scheme=https&domain=&verify_ssl=true
++      The scheme of request url to Opencontrail Analytics endpoint.
++      (default "http")
++    * virtual_network
++      Specify the virtual network.
++      (default None)
++    * fqdn_uuid:
++      Specify the VM fqdn UUID.
++      (default "*")
++    * resource:
++      The resource on which the counters are retrieved.
++      (default "if_stats_list")
++
++      * fip_stats_list:
++        Traffic on floating ips
++      * if_stats_list:
++        Traffic on VM interfaces
++
++    e.g.::
++      opencontrail://localhost:8081/?resource=fip_stats_list&
++      virtual_network=default-domain:openstack:public
+     """
+     @staticmethod
+     def _prepare_cache(endpoint, params, cache):
+@@ -56,11 +62,7 @@ class OpencontrailDriver(driver.Driver):
+             return cache['network.statistics.opencontrail']
+
+         data = {
+-            'o_client': client.Client(endpoint,
+-                                      params['username'],
+-                                      params['password'],
+-                                      params.get('domain'),
+-                                      params.get('verify_ssl') == 'true'),
++            'o_client': client.Client(endpoint),
+             'n_client': neutron_client.Client()
+         }
+
+@@ -93,23 +95,22 @@ class OpencontrailDriver(driver.Driver):
+         data = self._prepare_cache(endpoint, params, cache)
+
+         ports = data['n_client'].port_get_all()
+-        ports_map = dict((port['id'], port['tenant_id']) for port in ports)
+-
+-        networks = data['n_client'].network_get_all()
++        ports_map = dict((port['id'], port) for port in ports)
+
+-        for network in networks:
+-            net_id = network['id']
++        resource = params.get('resource', ['if_stats_list'])[0]
++        fqdn_uuid = params.get('fqdn_uuid', ['*'])[0]
++        virtual_network = params.get('virtual_network', [None])[0]
+
+-            timestamp = timeutils.utcnow().isoformat()
+-            statistics = data['o_client'].networks.get_port_statistics(net_id)
+-            if not statistics:
+-                continue
++        timestamp = timeutils.utcnow().isoformat()
++        statistics = data['o_client'].networks.get_vm_statistics(fqdn_uuid)
++        if not statistics:
++            return
+
+-            for value in statistics['value']:
+-                for sample in iter(extractor, value, ports_map):
+-                    if sample is not None:
+-                        sample[2]['network_id'] = net_id
+-                        yield sample + (timestamp, )
++        for value in statistics['value']:
++            for sample in iter(extractor, value, ports_map,
++                               resource, virtual_network):
++                if sample is not None:
++                    yield sample + (timestamp, )
+
+     def _get_iter(self, meter_name):
+         if meter_name.startswith('switch.port'):
+@@ -120,17 +121,37 @@ class OpencontrailDriver(driver.Driver):
+         return getattr(self, method_name, None)
+
+     @staticmethod
+-    def _iter_port(extractor, value, ports_map):
+-        ifstats = value['value']['UveVirtualMachineAgent']['if_stats_list']
+-        for ifstat in ifstats:
+-            name = ifstat['name']
+-            device_owner_id, port_id = name.split(':')
+-
+-            tenant_id = ports_map.get(port_id)
++    def _iter_port(extractor, value, ports_map, resource,
++                   virtual_network=None):
++        stats = value['value']['UveVirtualMachineAgent'].get(resource, [])
++        for stat in stats:
++            if resource == 'fip_stats_list':
++                if virtual_network and (
++                        virtual_network != stat['virtual_network']):
++                    continue
++                name = stat['iface_name']
++            else:
++                name = stat['name']
++
++            domain, project, port_id = name.split(':')
++            port = ports_map.get(port_id)
++
++            tenant_id = None
++            network_id = None
++            device_owner_id = None
++
++            if port:
++                tenant_id = port['tenant_id']
++                network_id = port['network_id']
++                device_owner_id = port['device_id']
+
+             resource_meta = {'device_owner_id': device_owner_id,
+-                             'tenant_id': tenant_id}
+-            yield extractor(ifstat, port_id, resource_meta)
++                             'network_id': network_id,
++                             'project_id': tenant_id,
++                             'project': project,
++                             'resource': resource,
++                             'domain': domain}
++            yield extractor(stat, port_id, resource_meta)
+
+     @staticmethod
+     def _switch_port_receive_packets(statistic, resource_id, resource_meta):
+diff --git a/ceilometer/tests/network/statistics/opencontrail/test_client.py b/ceilometer/tests/network/statistics/opencontrail/test_client.py
+index 1817a32..e718ca6 100644
+--- a/ceilometer/tests/network/statistics/opencontrail/test_client.py
++++ b/ceilometer/tests/network/statistics/opencontrail/test_client.py
+@@ -24,53 +24,44 @@ class TestOpencontrailClient(test.BaseTestCase):
+
+     def setUp(self):
+         super(TestOpencontrailClient, self).setUp()
+-        self.client = client.Client('http://127.0.0.1:8143',
+-                                    'admin', 'admin', None, False)
+-
+-        self.post_resp = mock.MagicMock()
+-        self.post = mock.patch('requests.post',
+-                               return_value=self.post_resp).start()
+-
+-        self.post_resp.raw.version = 1.1
+-        self.post_resp.status_code = 302
+-        self.post_resp.reason = 'Moved'
+-        self.post_resp.headers = {}
+-        self.post_resp.cookies = {'connect.sid': 'aaa'}
+-        self.post_resp.content = 'dummy'
++        self.client = client.Client('http://127.0.0.1:8081', {'arg1': 'aaa'})
+
+         self.get_resp = mock.MagicMock()
+         self.get = mock.patch('requests.get',
+                               return_value=self.get_resp).start()
+         self.get_resp.raw_version = 1.1
+         self.get_resp.status_code = 200
+-        self.post_resp.content = 'dqs'
+
+-    def test_port_statistics(self):
+-        uuid = 'bbb'
+-        self.client.networks.get_port_statistics(uuid)
++    def test_vm_statistics(self):
++        self.client.networks.get_vm_statistics('bbb')
+
+-        call_args = self.post.call_args_list[0][0]
+-        call_kwargs = self.post.call_args_list[0][1]
++        call_args = self.get.call_args_list[0][0]
++        call_kwargs = self.get.call_args_list[0][1]
+
+-        expected_url = 'http://127.0.0.1:8143/authenticate'
++        expected_url = ('http://127.0.0.1:8081/analytics/'
++                        'uves/virtual-machine/bbb')
+         self.assertEqual(expected_url, call_args[0])
+
+         data = call_kwargs.get('data')
+-        expected_data = {'domain': None, 'password': 'admin',
+-                         'username': 'admin'}
++
++        expected_data = {'arg1': 'aaa'}
+         self.assertEqual(expected_data, data)
+
++    def test_vm_statistics_params(self):
++        self.client.networks.get_vm_statistics('bbb',
++                                               {'resource': 'fip_stats_list',
++                                                'virtual_network': 'ccc'})
++
+         call_args = self.get.call_args_list[0][0]
+         call_kwargs = self.get.call_args_list[0][1]
+
+-        expected_url = ('http://127.0.0.1:8143/api/tenant/'
+-                        'networking/virtual-machines/details')
++        expected_url = ('http://127.0.0.1:8081/analytics/'
++                        'uves/virtual-machine/bbb')
+         self.assertEqual(expected_url, call_args[0])
+
+         data = call_kwargs.get('data')
+-        cookies = call_kwargs.get('cookies')
+
+-        expected_data = {'fqnUUID': 'bbb', 'type': 'vn'}
+-        expected_cookies = {'connect.sid': 'aaa'}
++        expected_data = {'arg1': 'aaa',
++                         'resource': 'fip_stats_list',
++                         'virtual_network': 'ccc'}
+         self.assertEqual(expected_data, data)
+-        self.assertEqual(expected_cookies, cookies)
+diff --git a/ceilometer/tests/network/statistics/opencontrail/test_driver.py b/ceilometer/tests/network/statistics/opencontrail/test_driver.py
+index 940e998..0219f9d 100644
+--- a/ceilometer/tests/network/statistics/opencontrail/test_driver.py
++++ b/ceilometer/tests/network/statistics/opencontrail/test_driver.py
+@@ -31,11 +31,6 @@ class TestOpencontrailDriver(test.BaseTestCase):
+                                    return_value=self.fake_ports())
+         self.nc_ports.start()
+
+-        self.nc_networks = mock.patch('ceilometer.neutron_client'
+-                                      '.Client.network_get_all',
+-                                      return_value=self.fake_networks())
+-        self.nc_networks.start()
+-
+         self.driver = driver.OpencontrailDriver()
+         self.parse_url = url_parse.ParseResult('opencontrail',
+                                                '127.0.0.1:8143',
+@@ -43,7 +38,8 @@ class TestOpencontrailDriver(test.BaseTestCase):
+         self.params = {'password': ['admin'],
+                        'scheme': ['http'],
+                        'username': ['admin'],
+-                       'verify_ssl': ['false']}
++                       'verify_ssl': ['false'],
++                       'resource': ['if_stats_list']}
+
+     @staticmethod
+     def fake_ports():
+@@ -59,20 +55,6 @@ class TestOpencontrailDriver(test.BaseTestCase):
+                  'tenant_id': '89271fa581ab4380bf172f868c3615f9'}]
+
+     @staticmethod
+-    def fake_networks():
+-        return [{'admin_state_up': True,
+-                 'id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
+-                 'name': 'public',
+-                 'provider:network_type': 'gre',
+-                 'provider:physical_network': None,
+-                 'provider:segmentation_id': 2,
+-                 'router:external': True,
+-                 'shared': False,
+-                 'status': 'ACTIVE',
+-                 'subnets': [u'c4b6f5b8-3508-4896-b238-a441f25fb492'],
+-                 'tenant_id': '62d6f08bbd3a44f6ad6f00ca15cce4e5'}]
+-
+-    @staticmethod
+     def fake_port_stats():
+         return {"value": [{
+             "name": "c588ebb7-ae52-485a-9f0c-b2791c5da196",
+@@ -85,15 +67,26 @@ class TestOpencontrailDriver(test.BaseTestCase):
+                         "out_bandwidth_usage": 0,
+                         "out_pkts": 5,
+                         "in_pkts": 6,
+-                        "name": ("674e553b-8df9-4321-87d9-93ba05b93558:"
++                        "name": ("default-domain:demo:"
+                                  "96d49cc3-4e01-40ce-9cac-c0e32642a442")
+-                    }]}}}]}
++                    }],
++                    "fip_stats_list": [{
++                        "in_bytes": 33,
++                        "iface_name": ("default-domain:demo:"
++                                       "96d49cc3-4e01-40ce-9cac-c0e32642a442"),
++                        "out_bytes": 44,
++                        "out_pkts": 10,
++                        "virtual_network": "default-domain:openstack:public",
++                        "in_pkts": 11,
++                        "ip_address": "1.1.1.1"
++                    }]
++                }}}]}
+
+     def _test_meter(self, meter_name, expected):
+         with mock.patch('ceilometer.network.'
+                         'statistics.opencontrail.'
+                         'client.NetworksAPIClient.'
+-                        'get_port_statistics',
++                        'get_vm_statistics',
+                         return_value=self.fake_port_stats()) as port_stats:
+
+             samples = self.driver.get_sample_data(meter_name, self.parse_url,
+@@ -101,45 +94,117 @@ class TestOpencontrailDriver(test.BaseTestCase):
+
+             self.assertEqual(expected, [s for s in samples])
+
+-            net_id = '298a3088-a446-4d5a-bad8-f92ecacd786b'
+-            port_stats.assert_called_with(net_id)
++            port_stats.assert_called_with('*')
+
+     def test_switch_port_receive_packets(self):
+-        expected = [
+-            (6,
+-             '96d49cc3-4e01-40ce-9cac-c0e32642a442',
+-             {'device_owner_id': '674e553b-8df9-4321-87d9-93ba05b93558',
+-              'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
+-              'tenant_id': '89271fa581ab4380bf172f868c3615f9'},
+-             mock.ANY)]
++        expected = [(6,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'if_stats_list'},
++                     mock.ANY)]
+         self._test_meter('switch.port.receive.packets', expected)
+
+     def test_switch_port_transmit_packets(self):
+-        expected = [
+-            (5,
+-             '96d49cc3-4e01-40ce-9cac-c0e32642a442',
+-             {'device_owner_id': '674e553b-8df9-4321-87d9-93ba05b93558',
+-              'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
+-              'tenant_id': '89271fa581ab4380bf172f868c3615f9'},
+-             mock.ANY)]
++        expected = [(5,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'if_stats_list'},
++                     mock.ANY)]
+         self._test_meter('switch.port.transmit.packets', expected)
+
+     def test_switch_port_receive_bytes(self):
+-        expected = [
+-            (23,
+-             '96d49cc3-4e01-40ce-9cac-c0e32642a442',
+-             {'device_owner_id': '674e553b-8df9-4321-87d9-93ba05b93558',
+-              'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
+-              'tenant_id': '89271fa581ab4380bf172f868c3615f9'},
+-             mock.ANY)]
++        expected = [(23,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'if_stats_list'},
++                     mock.ANY)]
+         self._test_meter('switch.port.receive.bytes', expected)
+
+     def test_switch_port_transmit_bytes(self):
+-        expected = [
+-            (22,
+-             '96d49cc3-4e01-40ce-9cac-c0e32642a442',
+-             {'device_owner_id': '674e553b-8df9-4321-87d9-93ba05b93558',
+-              'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
+-              'tenant_id': '89271fa581ab4380bf172f868c3615f9'},
+-             mock.ANY)]
++        expected = [(22,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'if_stats_list'},
++                     mock.ANY)]
++        self._test_meter('switch.port.transmit.bytes', expected)
++
++    def test_switch_port_receive_packets_fip(self):
++        self.params['resource'] = ['fip_stats_list']
++        expected = [(11,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'fip_stats_list'},
++                     mock.ANY)]
++        self._test_meter('switch.port.receive.packets', expected)
++
++    def test_switch_port_transmit_packets_fip(self):
++        self.params['resource'] = ['fip_stats_list']
++        expected = [(10,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'fip_stats_list'},
++                     mock.ANY)]
++        self._test_meter('switch.port.transmit.packets', expected)
++
++    def test_switch_port_receive_bytes_fip(self):
++        self.params['resource'] = ['fip_stats_list']
++        expected = [(33,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'fip_stats_list'},
++                     mock.ANY)]
++        self._test_meter('switch.port.receive.bytes', expected)
++
++    def test_switch_port_transmit_bytes_fip(self):
++        self.params['resource'] = ['fip_stats_list']
++        expected = [(44,
++                     '96d49cc3-4e01-40ce-9cac-c0e32642a442',
++                     {'device_owner_id':
++                      '674e553b-8df9-4321-87d9-93ba05b93558',
++                      'domain': 'default-domain',
++                      'network_id': '298a3088-a446-4d5a-bad8-f92ecacd786b',
++                      'project': 'demo',
++                      'project_id': '89271fa581ab4380bf172f868c3615f9',
++                      'resource': 'fip_stats_list'},
++                     mock.ANY)]
+         self._test_meter('switch.port.transmit.bytes', expected)
++
++    def test_switch_port_transmit_bytes_non_existing_network(self):
++        self.params['virtual_network'] = ['aaa']
++        self.params['resource'] = ['fip_stats_list']
++        self._test_meter('switch.port.transmit.bytes', [])
+--
+1.7.9.5
+
