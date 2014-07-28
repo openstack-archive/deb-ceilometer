@@ -1,4 +1,4 @@
-ceilometer (2014.2~b1-1) experimental; urgency=medium
+ceilometer (2014.2~b2-1) experimental; urgency=medium
 
   * New upstream release.
   * Generating config file from script, since it's gone from upstream.
