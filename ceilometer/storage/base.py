@@ -18,6 +18,7 @@
 """
 
 import datetime
+import inspect
 import math
 
 from six import moves
@@ -26,14 +27,14 @@ from ceilometer.openstack.common import timeutils
 
 
 def iter_period(start, end, period):
-    """Split a time from start to end in periods of a number of seconds. This
-    function yield the (start, end) time for each period composing the time
-    passed as argument.
+    """Split a time from start to end in periods of a number of seconds.
+
+    This function yields the (start, end) time for each period composing the
+    time passed as argument.
 
     :param start: When the period set start.
     :param end: When the period end starts.
     :param period: The duration of the period.
-
     """
     period_start = start
     increment = datetime.timedelta(seconds=period)
@@ -61,7 +62,7 @@ def _handle_sort_key(model_name, sort_key=None):
     if not sort_key:
         return sort_keys
     # NOTE(Fengqian): We need to put the sort key from user
-    #in the first place of sort keys list.
+    # in the first place of sort keys list.
     try:
         sort_keys.remove(sort_key)
     except ValueError:
@@ -102,6 +103,34 @@ class Pagination(object):
         self.sort_dirs = sort_dirs or []
 
 
+class Model(object):
+    """Base class for storage API models."""
+
+    def __init__(self, **kwds):
+        self.fields = list(kwds)
+        for k, v in kwds.iteritems():
+            setattr(self, k, v)
+
+    def as_dict(self):
+        d = {}
+        for f in self.fields:
+            v = getattr(self, f)
+            if isinstance(v, Model):
+                v = v.as_dict()
+            elif isinstance(v, list) and v and isinstance(v[0], Model):
+                v = [sub.as_dict() for sub in v]
+            d[f] = v
+        return d
+
+    def __eq__(self, other):
+        return self.as_dict() == other.as_dict()
+
+    @classmethod
+    def get_field_names(cls):
+        fields = inspect.getargspec(cls.__init__)[0]
+        return set(fields) - set(["self"])
+
+
 class Connection(object):
     """Base class for storage system connections."""
 
@@ -136,10 +165,6 @@ class Connection(object):
                                            'stddev': False,
                                            'cardinality': False}}
                        },
-        'alarms': {'query': {'simple': False,
-                             'complex': False},
-                   'history': {'query': {'simple': False,
-                                         'complex': False}}},
         'events': {'query': {'simple': False}},
     }
 
@@ -168,11 +193,11 @@ class Connection(object):
 
     @staticmethod
     def clear_expired_metering_data(ttl):
-        """Clear expired data from the backend storage system according to the
-        time-to-live.
+        """Clear expired data from the backend storage system.
+
+        Clearing occurs according to the time-to-live.
 
         :param ttl: Number of seconds to keep records for.
-
         """
         raise NotImplementedError('Clearing samples not implemented')
 
@@ -181,9 +206,9 @@ class Connection(object):
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
                       metaquery=None, resource=None, pagination=None):
-        """Return an iterable of models.Resource instances containing
-        resource information.
+        """Return an iterable of models.Resource instances.
 
+        Iterable items containing resource information.
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
         :param source: Optional source filter.
@@ -200,9 +225,9 @@ class Connection(object):
     @staticmethod
     def get_meters(user=None, project=None, resource=None, source=None,
                    metaquery=None, pagination=None):
-        """Return an iterable of model.Meter instances containing meter
-        information.
+        """Return an iterable of model.Meter instances.
 
+        Iterable items containing meter information.
         :param user: Optional ID for user that owns the resource.
         :param project: Optional ID for project that owns the resource.
         :param resource: Optional resource filter.
@@ -231,65 +256,6 @@ class Connection(object):
         raise NotImplementedError('Statistics not implemented')
 
     @staticmethod
-    def get_alarms(name=None, user=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None):
-        """Yields a lists of alarms that match filters."""
-        raise NotImplementedError('Alarms not implemented')
-
-    @staticmethod
-    def create_alarm(alarm):
-        """Create an alarm. Returns the alarm as created.
-
-        :param alarm: The alarm to create.
-        """
-        raise NotImplementedError('Alarms not implemented')
-
-    @staticmethod
-    def update_alarm(alarm):
-        """Update alarm."""
-        raise NotImplementedError('Alarms not implemented')
-
-    @staticmethod
-    def delete_alarm(alarm_id):
-        """Delete an alarm."""
-        raise NotImplementedError('Alarms not implemented')
-
-    @staticmethod
-    def get_alarm_changes(alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
-        """Yields list of AlarmChanges describing alarm history
-
-        Changes are always sorted in reverse order of occurrence, given
-        the importance of currency.
-
-        Segregation for non-administrative users is done on the basis
-        of the on_behalf_of parameter. This allows such users to have
-        visibility on both the changes initiated by themselves directly
-        (generally creation, rule changes, or deletion) and also on those
-        changes initiated on their behalf by the alarming service (state
-        transitions after alarm thresholds are crossed).
-
-        :param alarm_id: ID of alarm to return changes for
-        :param on_behalf_of: ID of tenant to scope changes query (None for
-                             administrative user, indicating all projects)
-        :param user: Optional ID of user to return changes for
-        :param project: Optional ID of project to return changes for
-        :project type: Optional change type
-        :param start_timestamp: Optional modified timestamp start range
-        :param start_timestamp_op: Optional timestamp start range operation
-        :param end_timestamp: Optional modified timestamp end range
-        :param end_timestamp_op: Optional timestamp end range operation
-        """
-        raise NotImplementedError('Alarm history not implemented')
-
-    @staticmethod
-    def record_alarm_change(alarm_change):
-        """Record alarm change event."""
-        raise NotImplementedError('Alarm history not implemented')
-
-    @staticmethod
     def clear():
         """Clear database."""
 
@@ -303,31 +269,29 @@ class Connection(object):
 
     @staticmethod
     def get_events(event_filter):
-        """Return an iterable of model.Event objects.
-        """
+        """Return an iterable of model.Event objects."""
         raise NotImplementedError('Events not implemented.')
 
     @staticmethod
     def get_event_types():
-        """Return all event types as an iterable of strings.
-        """
+        """Return all event types as an iterable of strings."""
         raise NotImplementedError('Events not implemented.')
 
     @staticmethod
     def get_trait_types(event_type):
-        """Return a dictionary containing the name and data type of
-        the trait type. Only trait types for the provided event_type are
-        returned.
+        """Return a dictionary containing the name and data type of the trait.
 
+        Only trait types for the provided event_type are
+        returned.
         :param event_type: the type of the Event
         """
         raise NotImplementedError('Events not implemented.')
 
     @staticmethod
     def get_traits(event_type, trait_type=None):
-        """Return all trait instances associated with an event_type. If
-        trait_type is specified, only return instances of that trait type.
+        """Return all trait instances associated with an event_type.
 
+        If trait_type is specified, only return instances of that trait type.
         :param event_type: the type of the Event to filter by
         :param trait_type: the name of the Trait to filter by
         """
@@ -346,34 +310,9 @@ class Connection(object):
         raise NotImplementedError('Complex query for samples '
                                   'is not implemented.')
 
-    @staticmethod
-    def query_alarms(filter_expr=None, orderby=None, limit=None):
-        """Return an iterable of model.Alarm objects.
-
-        :param filter_expr: Filter expression for query.
-        :param orderby: List of field name and direction pairs for order by.
-        :param limit: Maximum number of results to return.
-        """
-
-        raise NotImplementedError('Complex query for alarms '
-                                  'is not implemented.')
-
-    @staticmethod
-    def query_alarm_history(filter_expr=None, orderby=None, limit=None):
-        """Return an iterable of model.AlarmChange objects.
-
-        :param filter_expr: Filter expression for query.
-        :param orderby: List of field name and direction pairs for order by.
-        :param limit: Maximum number of results to return.
-        """
-
-        raise NotImplementedError('Complex query for alarms '
-                                  'history is not implemented.')
-
     @classmethod
     def get_capabilities(cls):
-        """Return an dictionary representing the capabilities of each driver.
-        """
+        """Return an dictionary with the capabilities of each driver."""
         return cls.CAPABILITIES
 
     @classmethod

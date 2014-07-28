@@ -40,8 +40,8 @@ class _Base(plugin.ComputePollster):
         metadata = copy.copy(vnic_data)
         resource_metadata = dict(zip(metadata._fields, metadata))
         resource_metadata['instance_id'] = instance.id
-        resource_metadata['instance_type'] = \
-            instance.flavor['id'] if instance.flavor else None
+        resource_metadata['instance_type'] = (instance.flavor['id'] if
+                                              instance.flavor else None)
 
         if vnic_data.fref is not None:
             rid = vnic_data.fref
@@ -117,8 +117,8 @@ class _Base(plugin.ComputePollster):
 class _RateBase(_Base):
 
     NET_USAGE_MESSAGE = ' '.join(["NETWORK RATE:", "%s %s:",
-                                 "read-bytes-rate=%d",
-                                 "write-bytes-rate=%d"])
+                                  "read-bytes-rate=%d",
+                                  "write-bytes-rate=%d"])
 
     CACHE_KEY_VNIC = 'vnic-rates'
 

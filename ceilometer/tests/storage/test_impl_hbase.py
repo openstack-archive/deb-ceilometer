@@ -23,8 +23,9 @@
   running the tests. Make sure the Thrift server is running on that server.
 
 """
-from mock import patch
+import mock
 
+from ceilometer.storage.hbase import inmemory as hbase_inmemory
 from ceilometer.storage import impl_hbase as hbase
 from ceilometer.tests import base as test_base
 from ceilometer.tests import db as tests_db
@@ -36,7 +37,8 @@ class ConnectionTest(tests_db.TestBase,
     @tests_db.run_with('hbase')
     def test_hbase_connection(self):
         conn = hbase.Connection(self.db_manager.url)
-        self.assertIsInstance(conn.conn_pool.connection(), hbase.MConnection)
+        self.assertIsInstance(conn.conn_pool.connection(),
+                              hbase_inmemory.MConnection)
 
         class TestConn(object):
             def __init__(self, host, port):
@@ -48,8 +50,8 @@ class ConnectionTest(tests_db.TestBase,
         def get_connection_pool(conf):
             return TestConn(conf['host'], conf['port'])
 
-        with patch.object(hbase.Connection, '_get_connection_pool',
-                          side_effect=get_connection_pool):
+        with mock.patch.object(hbase.Connection, '_get_connection_pool',
+                               side_effect=get_connection_pool):
             conn = hbase.Connection('hbase://test_hbase:9090')
         self.assertIsInstance(conn.conn_pool, TestConn)
 
@@ -88,9 +90,9 @@ class CapabilitiesTest(test_base.BaseTestCase):
                                                'stddev': False,
                                                'cardinality': False}}
                            },
-            'alarms': {'query': {'simple': False,
+            'alarms': {'query': {'simple': True,
                                  'complex': False},
-                       'history': {'query': {'simple': False,
+                       'history': {'query': {'simple': True,
                                              'complex': False}}},
             'events': {'query': {'simple': True}},
         }

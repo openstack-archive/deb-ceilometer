@@ -132,15 +132,13 @@ class SingletonAlarmService(AlarmService, os_service.Service):
                                             'value': True}])
 
 
-cfg.CONF.import_opt('host', 'ceilometer.service')
-
-
 class PartitionedAlarmService(AlarmService, os_service.Service):
 
     def __init__(self):
         super(PartitionedAlarmService, self).__init__()
+        transport = messaging.get_transport()
         self.rpc_server = messaging.get_rpc_server(
-            cfg.CONF.alarm.partition_rpc_topic, self)
+            transport, cfg.CONF.alarm.partition_rpc_topic, self)
 
         self._load_evaluators()
         self.api_client = None
@@ -193,8 +191,9 @@ class AlarmNotifierService(os_service.Service):
 
     def __init__(self):
         super(AlarmNotifierService, self).__init__()
+        transport = messaging.get_transport()
         self.rpc_server = messaging.get_rpc_server(
-            cfg.CONF.alarm.notifier_rpc_topic, self)
+            transport, cfg.CONF.alarm.notifier_rpc_topic, self)
         self.notifiers = extension.ExtensionManager(self.EXTENSIONS_NAMESPACE,
                                                     invoke_on_load=True)
 
@@ -240,17 +239,16 @@ class AlarmNotifierService(os_service.Service):
     def notify_alarm(self, context, data):
         """Notify that alarm has been triggered.
 
-        data should be a dict with the following keys:
-        - actions, the URL of the action to run;
-          this is a mapped to extensions automatically
-        - alarm_id, the ID of the alarm that has been triggered
-        - previous, the previous state of the alarm
-        - current, the new state the alarm has transitioned to
-        - reason, the reason the alarm changed its state
-        - reason_data, a dict representation of the reason
+           :param context: Request context.
+           :param data: (dict):
 
-        :param context: Request context.
-        :param data: A dict as described above.
+             - actions, the URL of the action to run; this is mapped to
+               extensions automatically
+             - alarm_id, the ID of the alarm that has been triggered
+             - previous, the previous state of the alarm
+             - current, the new state the alarm has transitioned to
+             - reason, the reason the alarm changed its state
+             - reason_data, a dict representation of the reason
         """
         actions = data.get('actions')
         if not actions:

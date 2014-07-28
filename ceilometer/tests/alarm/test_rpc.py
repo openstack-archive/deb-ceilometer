@@ -21,15 +21,17 @@ from ceilometerclient.v2 import alarms
 import eventlet
 
 from ceilometer.alarm import rpc as rpc_alarm
+from ceilometer.alarm.storage import models
 from ceilometer import messaging
-from ceilometer.openstack.common import test
+from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import timeutils
-from ceilometer.storage import models
+from ceilometer.tests import base as tests_base
 
 
 class FakeNotifier(object):
-    def __init__(self):
-        self.rpc = messaging.get_rpc_server("alarm_notifier", self)
+    def __init__(self, transport):
+        self.rpc = messaging.get_rpc_server(
+            transport, "alarm_notifier", self)
         self.notified = []
 
     def start(self, expected_length):
@@ -42,13 +44,13 @@ class FakeNotifier(object):
             self.rpc.stop()
 
 
-class TestRPCAlarmNotifier(test.BaseTestCase):
+class TestRPCAlarmNotifier(tests_base.BaseTestCase):
     def setUp(self):
         super(TestRPCAlarmNotifier, self).setUp()
-        messaging.setup('fake://')
-        self.addCleanup(messaging.cleanup)
+        self.CONF = self.useFixture(config.Config()).conf
+        self.setup_messaging(self.CONF)
 
-        self.notifier_server = FakeNotifier()
+        self.notifier_server = FakeNotifier(self.transport)
         self.notifier = rpc_alarm.RPCAlarmNotifier()
         self.alarms = [
             alarms.Alarm(None, info={
@@ -144,9 +146,9 @@ class TestRPCAlarmNotifier(test.BaseTestCase):
 
 
 class FakeCoordinator(object):
-    def __init__(self):
+    def __init__(self, transport):
         self.rpc = messaging.get_rpc_server(
-            "alarm_partition_coordination", self)
+            transport, "alarm_partition_coordination", self)
         self.notified = []
 
     def presence(self, context, data):
@@ -163,17 +165,17 @@ class FakeCoordinator(object):
         self.rpc.stop()
 
 
-class TestRPCAlarmPartitionCoordination(test.BaseTestCase):
+class TestRPCAlarmPartitionCoordination(tests_base.BaseTestCase):
     def setUp(self):
         super(TestRPCAlarmPartitionCoordination, self).setUp()
-        messaging.setup('fake://')
-        self.addCleanup(messaging.cleanup)
+        self.CONF = self.useFixture(config.Config()).conf
+        self.setup_messaging(self.CONF)
 
-        self.coordinator_server = FakeCoordinator()
+        self.coordinator_server = FakeCoordinator(self.transport)
         self.coordinator_server.rpc.start()
         eventlet.sleep()  # must be sure that fanout queue is created
 
-        self.ordination = rpc_alarm.RPCAlarmPartitionCoordination()
+        self.coordination = rpc_alarm.RPCAlarmPartitionCoordination()
         self.alarms = [
             alarms.Alarm(None, info={
                 'name': 'instance_running_hot',
@@ -209,28 +211,28 @@ class TestRPCAlarmPartitionCoordination(test.BaseTestCase):
             }),
         ]
 
-    def test_ordination_presence(self):
+    def test_coordination_presence(self):
         id = str(uuid.uuid4())
         priority = float(timeutils.utcnow().strftime('%s.%f'))
-        self.ordination.presence(id, priority)
+        self.coordination.presence(id, priority)
         self.coordinator_server.rpc.wait()
         method, args = self.coordinator_server.notified[0]
         self.assertEqual(id, args['uuid'])
         self.assertEqual(priority, args['priority'])
         self.assertEqual('presence', method)
 
-    def test_ordination_assign(self):
+    def test_coordination_assign(self):
         id = str(uuid.uuid4())
-        self.ordination.assign(id, self.alarms)
+        self.coordination.assign(id, self.alarms)
         self.coordinator_server.rpc.wait()
         method, args = self.coordinator_server.notified[0]
         self.assertEqual(id, args['uuid'])
         self.assertEqual(2, len(args['alarms']))
         self.assertEqual('assign', method)
 
-    def test_ordination_allocate(self):
+    def test_coordination_allocate(self):
         id = str(uuid.uuid4())
-        self.ordination.allocate(id, self.alarms)
+        self.coordination.allocate(id, self.alarms)
         self.coordinator_server.rpc.wait()
         method, args = self.coordinator_server.notified[0]
         self.assertEqual(id, args['uuid'])

@@ -20,15 +20,16 @@
 """
 
 import datetime
+import operator
 
 import mock
 
+from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer import storage
 from ceilometer.storage import base
-from ceilometer.storage import impl_mongodb as mongodb
 from ceilometer.storage import models
 from ceilometer.tests import db as tests_db
 
@@ -37,8 +38,7 @@ class DBTestBase(tests_db.TestBase):
     def create_and_store_sample(self, timestamp=datetime.datetime.utcnow(),
                                 metadata={
                                     'display_name': 'test-server',
-                                    'tag': 'self.counter'
-                                },
+                                    'tag': 'self.counter'},
                                 name='instance',
                                 sample_type=sample.TYPE_CUMULATIVE, unit='',
                                 volume=1, user_id='user-id',
@@ -471,10 +471,10 @@ class RawSampleTest(DBTestBase,
     def test_get_samples_in_default_order(self):
         f = storage.SampleFilter()
         prev_timestamp = None
-        for sample in self.conn.get_samples(f):
+        for sample_item in self.conn.get_samples(f):
             if prev_timestamp is not None:
-                self.assertTrue(prev_timestamp >= sample.timestamp)
-            prev_timestamp = sample.timestamp
+                self.assertTrue(prev_timestamp >= sample_item.timestamp)
+            prev_timestamp = sample_item.timestamp
 
     def test_get_samples_by_user(self):
         f = storage.SampleFilter(user='user-id')
@@ -621,11 +621,10 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_samples(f))
         self.assertEqual(len(results), 2)
 
+    @tests_db.run_with('sqlite', 'hbase', 'db2')
     def test_clear_metering_data(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
-        if isinstance(self.conn, mongodb.Connection):
-            return
 
         self.mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(3 * 60)
@@ -635,11 +634,10 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_resources())
         self.assertEqual(len(results), 5)
 
+    @tests_db.run_with('sqlite', 'hbase', 'db2')
     def test_clear_metering_data_no_data_to_remove(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
-        if isinstance(self.conn, mongodb.Connection):
-            return
 
         self.mock_utcnow.return_value = datetime.datetime(2010, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(3 * 60)
@@ -649,40 +647,39 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_resources())
         self.assertEqual(len(results), 9)
 
+    @tests_db.run_with('sqlite', 'hbase', 'db2')
     def test_clear_metering_data_with_alarms(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
-        if isinstance(self.conn, mongodb.Connection):
-            return
 
-        alarm = models.Alarm(alarm_id='r3d',
-                             enabled=True,
-                             type='threshold',
-                             name='red-alert',
-                             description='my red-alert',
-                             timestamp=None,
-                             user_id='user-id',
-                             project_id='project-id',
-                             state="insufficient data",
-                             state_timestamp=None,
-                             ok_actions=[],
-                             alarm_actions=['http://nowhere/alarms'],
-                             insufficient_data_actions=[],
-                             repeat_actions=False,
-                             time_constraints=[],
-                             rule=dict(comparison_operator='eq',
-                                       threshold=36,
-                                       statistic='count',
-                                       evaluation_periods=1,
-                                       period=60,
-                                       meter_name='test.one',
-                                       query=[{'field': 'key',
-                                               'op': 'eq',
-                                               'value': 'value',
-                                              'type': 'string'}]),
-                             )
+        alarm = alarm_models.Alarm(alarm_id='r3d',
+                                   enabled=True,
+                                   type='threshold',
+                                   name='red-alert',
+                                   description='my red-alert',
+                                   timestamp=None,
+                                   user_id='user-id',
+                                   project_id='project-id',
+                                   state="insufficient data",
+                                   state_timestamp=None,
+                                   ok_actions=[],
+                                   alarm_actions=['http://nowhere/alarms'],
+                                   insufficient_data_actions=[],
+                                   repeat_actions=False,
+                                   time_constraints=[],
+                                   rule=dict(comparison_operator='eq',
+                                             threshold=36,
+                                             statistic='count',
+                                             evaluation_periods=1,
+                                             period=60,
+                                             meter_name='test.one',
+                                             query=[{'field': 'key',
+                                                     'op': 'eq',
+                                                     'value': 'value',
+                                                     'type': 'string'}]),
+                                   )
 
-        self.conn.create_alarm(alarm)
+        self.alarm_conn.create_alarm(alarm)
         self.mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(5)
         f = storage.SampleFilter(meter='instance')
@@ -742,8 +739,8 @@ class ComplexSampleQueryTest(DBTestBase,
     def test_no_filter(self):
         results = list(self.conn.query_samples())
         self.assertEqual(len(results), len(self.msgs))
-        for sample in results:
-            d = sample.as_dict()
+        for sample_item in results:
+            d = sample_item.as_dict()
             del d['recorded_at']
             self.assertIn(d, self.msgs)
 
@@ -761,28 +758,28 @@ class ComplexSampleQueryTest(DBTestBase,
         simple_filter = {"=": {"resource_id": "resource-id-8"}}
         results = list(self.conn.query_samples(filter_expr=simple_filter))
         self.assertEqual(len(results), 1)
-        for sample in results:
-            self.assertEqual(sample.resource_id, "resource-id-8")
+        for sample_item in results:
+            self.assertEqual(sample_item.resource_id, "resource-id-8")
 
     def test_query_simple_filter_with_not_equal_relation(self):
         simple_filter = {"!=": {"resource_id": "resource-id-8"}}
         results = list(self.conn.query_samples(filter_expr=simple_filter))
         self.assertEqual(len(results), len(self.msgs) - 1)
-        for sample in results:
-            self.assertNotEqual(sample.resource_id, "resource-id-8")
+        for sample_item in results:
+            self.assertNotEqual(sample_item.resource_id, "resource-id-8")
 
     def test_query_complex_filter(self):
         self._create_samples()
-        results = list(self.conn.query_samples(filter_expr=
-                                               self.complex_filter))
+        results = list(self.conn.query_samples(filter_expr=(
+                                               self.complex_filter)))
         self.assertEqual(len(results), 6)
-        for sample in results:
-            self.assertIn(sample.resource_id,
+        for sample_item in results:
+            self.assertIn(sample_item.resource_id,
                           set(["resource-id-42", "resource-id-44"]))
-            self.assertEqual(sample.counter_name,
+            self.assertEqual(sample_item.counter_name,
                              "cpu_util")
-            self.assertTrue(sample.counter_volume > 0.4)
-            self.assertTrue(sample.counter_volume <= 0.8)
+            self.assertTrue(sample_item.counter_volume > 0.4)
+            self.assertTrue(sample_item.counter_volume <= 0.8)
 
     def test_query_complex_filter_with_limit(self):
         self._create_samples()
@@ -822,15 +819,15 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(
             self.conn.query_samples(filter_expr=self.complex_filter_list))
         self.assertEqual(len(results), 9)
-        for sample in results:
-            self.assertIn(sample.resource_id,
+        for sample_item in results:
+            self.assertIn(sample_item.resource_id,
                           set(["resource-id-42",
                                "resource-id-43",
                                "resource-id-44"]))
-            self.assertEqual(sample.counter_name,
+            self.assertEqual(sample_item.counter_name,
                              "cpu_util")
-            self.assertTrue(sample.counter_volume > 0.4)
-            self.assertTrue(sample.counter_volume <= 0.8)
+            self.assertTrue(sample_item.counter_volume > 0.4)
+            self.assertTrue(sample_item.counter_volume <= 0.8)
 
     def test_query_complex_filter_with_list_with_limit(self):
         self._create_samples()
@@ -878,8 +875,8 @@ class ComplexSampleQueryTest(DBTestBase,
         orderby = [{"counter_volume": "not valid order"},
                    {"resource_id": "desc"}]
 
-        query = lambda: list(self.conn.query_samples(filter_expr=
-                                                     self.complex_filter,
+        query = lambda: list(self.conn.query_samples(filter_expr=(
+                                                     self.complex_filter),
                                                      orderby=orderby))
         self.assertRaises(KeyError, query)
 
@@ -888,15 +885,15 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(
             self.conn.query_samples(filter_expr=self.complex_filter_in))
         self.assertEqual(len(results), 9)
-        for sample in results:
-            self.assertIn(sample.resource_id,
+        for sample_item in results:
+            self.assertIn(sample_item.resource_id,
                           set(["resource-id-42",
                                "resource-id-43",
                                "resource-id-44"]))
-            self.assertEqual(sample.counter_name,
+            self.assertEqual(sample_item.counter_name,
                              "cpu_util")
-            self.assertTrue(sample.counter_volume > 0.4)
-            self.assertTrue(sample.counter_volume <= 0.8)
+            self.assertTrue(sample_item.counter_volume > 0.4)
+            self.assertTrue(sample_item.counter_volume <= 0.8)
 
     def test_query_simple_metadata_filter(self):
         self._create_samples()
@@ -906,8 +903,8 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 6)
-        for sample in results:
-            self.assertTrue(sample.resource_metadata["a_bool_key"])
+        for sample_item in results:
+            self.assertTrue(sample_item.resource_metadata["a_bool_key"])
 
     def test_query_simple_metadata_with_in_op(self):
         self._create_samples()
@@ -917,8 +914,9 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 12)
-        for sample in results:
-            self.assertIn(sample.resource_metadata["an_int_key"], [42, 43])
+        for sample_item in results:
+            self.assertIn(sample_item.resource_metadata["an_int_key"],
+                          [42, 43])
 
     def test_query_complex_metadata_filter(self):
         self._create_samples()
@@ -931,11 +929,12 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 8)
-        for sample in results:
-            self.assertTrue((sample.resource_metadata["a_string_key"] ==
+        for sample_item in results:
+            self.assertTrue((sample_item.resource_metadata["a_string_key"] ==
                             "meta-value0.81" or
-                            sample.resource_metadata["a_float_key"] <= 0.41))
-            self.assertTrue(sample.resource_metadata["an_int_key"] > 42)
+                             sample_item.resource_metadata["a_float_key"] <=
+                             0.41))
+            self.assertTrue(sample_item.resource_metadata["an_int_key"] > 42)
 
     def test_query_mixed_data_and_metadata_filter(self):
         self._create_samples()
@@ -949,11 +948,12 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 4)
-        for sample in results:
-            self.assertTrue((sample.resource_metadata["a_string_key"] ==
+        for sample_item in results:
+            self.assertTrue((sample_item.resource_metadata["a_string_key"] ==
                             "meta-value0.81" or
-                            sample.resource_metadata["a_float_key"] <= 0.41))
-            self.assertEqual(sample.resource_id, "resource-id-42")
+                             sample_item.resource_metadata["a_float_key"] <=
+                             0.41))
+            self.assertEqual(sample_item.resource_id, "resource-id-42")
 
     def test_query_non_existing_metadata_with_result(self):
         self._create_samples()
@@ -966,8 +966,8 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 3)
-        for sample in results:
-            self.assertEqual(sample.resource_metadata["a_string_key"],
+        for sample_item in results:
+            self.assertEqual(sample_item.resource_metadata["a_string_key"],
                              "meta-value0.81")
 
     def test_query_non_existing_metadata_without_result(self):
@@ -994,10 +994,11 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 3)
-        for sample in results:
-            self.assertEqual(sample.resource_id, "resource-id-42")
-            self.assertTrue(sample.resource_metadata["an_int_key"] <= 43)
-            self.assertTrue(sample.resource_metadata["a_float_key"] > 0.41)
+        for sample_item in results:
+            self.assertEqual(sample_item.resource_id, "resource-id-42")
+            self.assertTrue(sample_item.resource_metadata["an_int_key"] <= 43)
+            self.assertTrue(sample_item.resource_metadata["a_float_key"] >
+                            0.41)
 
     def test_query_negated_complex_expression(self):
         self._create_samples()
@@ -1016,11 +1017,11 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 4)
-        for sample in results:
-            self.assertEqual(sample.resource_id,
+        for sample_item in results:
+            self.assertEqual(sample_item.resource_id,
                              "resource-id-43")
-            self.assertIn(sample.counter_volume, [0.39, 0.4, 0.8, 0.81])
-            self.assertEqual(sample.counter_name,
+            self.assertIn(sample_item.counter_volume, [0.39, 0.4, 0.8, 0.81])
+            self.assertEqual(sample_item.counter_name,
                              "cpu_util")
 
     def test_query_with_double_negation(self):
@@ -1039,11 +1040,11 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 4)
-        for sample in results:
-            self.assertEqual(sample.resource_id,
+        for sample_item in results:
+            self.assertEqual(sample_item.resource_id,
                              "resource-id-43")
-            self.assertIn(sample.counter_volume, [0.39, 0.4, 0.8, 0.81])
-            self.assertEqual(sample.counter_name,
+            self.assertIn(sample_item.counter_volume, [0.39, 0.4, 0.8, 0.81])
+            self.assertEqual(sample_item.counter_name,
                              "cpu_util")
 
     def test_query_negate_not_equal(self):
@@ -1053,8 +1054,8 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 6)
-        for sample in results:
-            self.assertEqual(sample.resource_id,
+        for sample_item in results:
+            self.assertEqual(sample_item.resource_id,
                              "resource-id-43")
 
     def test_query_negated_in_op(self):
@@ -1066,8 +1067,8 @@ class ComplexSampleQueryTest(DBTestBase,
         results = list(self.conn.query_samples(filter_expr=filter_expr))
 
         self.assertEqual(len(results), 3)
-        for sample in results:
-            self.assertIn(sample.counter_volume,
+        for sample_item in results:
+            self.assertIn(sample_item.counter_volume,
                           [0.41, 0.8, 0.81])
 
 
@@ -2302,121 +2303,121 @@ class CounterDataTypeTest(DBTestBase,
 
 class AlarmTestBase(DBTestBase):
     def add_some_alarms(self):
-        alarms = [models.Alarm(alarm_id='r3d',
-                               enabled=True,
-                               type='threshold',
-                               name='red-alert',
-                               description='my red-alert',
-                               timestamp=None,
-                               user_id='me',
-                               project_id='and-da-boys',
-                               state="insufficient data",
-                               state_timestamp=None,
-                               ok_actions=[],
-                               alarm_actions=['http://nowhere/alarms'],
-                               insufficient_data_actions=[],
-                               repeat_actions=False,
-                               time_constraints=[dict(name='testcons',
-                                                      start='0 11 * * *',
-                                                      duration=300)],
-                               rule=dict(comparison_operator='eq',
-                                         threshold=36,
-                                         statistic='count',
-                                         evaluation_periods=1,
-                                         period=60,
-                                         meter_name='test.one',
-                                         query=[{'field': 'key',
-                                                 'op': 'eq',
-                                                 'value': 'value',
-                                                 'type': 'string'}]),
-                               ),
-                  models.Alarm(alarm_id='0r4ng3',
-                               enabled=True,
-                               type='threshold',
-                               name='orange-alert',
-                               description='a orange',
-                               timestamp=None,
-                               user_id='me',
-                               project_id='and-da-boys',
-                               state="insufficient data",
-                               state_timestamp=None,
-                               ok_actions=[],
-                               alarm_actions=['http://nowhere/alarms'],
-                               insufficient_data_actions=[],
-                               repeat_actions=False,
-                               time_constraints=[],
-                               rule=dict(comparison_operator='gt',
-                                         threshold=75,
-                                         statistic='avg',
-                                         evaluation_periods=1,
-                                         period=60,
-                                         meter_name='test.fourty',
-                                         query=[{'field': 'key2',
-                                                 'op': 'eq',
-                                                 'value': 'value2',
-                                                 'type': 'string'}]),
-                               ),
-                  models.Alarm(alarm_id='y3ll0w',
-                               enabled=False,
-                               type='threshold',
-                               name='yellow-alert',
-                               description='yellow',
-                               timestamp=None,
-                               user_id='me',
-                               project_id='and-da-boys',
-                               state="insufficient data",
-                               state_timestamp=None,
-                               ok_actions=[],
-                               alarm_actions=['http://nowhere/alarms'],
-                               insufficient_data_actions=[],
-                               repeat_actions=False,
-                               time_constraints=[],
-                               rule=dict(comparison_operator='lt',
-                                         threshold=10,
-                                         statistic='min',
-                                         evaluation_periods=1,
-                                         period=60,
-                                         meter_name='test.five',
-                                         query=[{'field': 'key2',
-                                                 'op': 'eq',
-                                                 'value': 'value2',
-                                                 'type': 'string'},
-                                                {'field':
-                                                 'user_metadata.key3',
-                                                 'op': 'eq',
-                                                 'value': 'value3',
-                                                 'type': 'string'}]),
-                               )]
+        alarms = [alarm_models.Alarm(alarm_id='r3d',
+                                     enabled=True,
+                                     type='threshold',
+                                     name='red-alert',
+                                     description='my red-alert',
+                                     timestamp=None,
+                                     user_id='me',
+                                     project_id='and-da-boys',
+                                     state="insufficient data",
+                                     state_timestamp=None,
+                                     ok_actions=[],
+                                     alarm_actions=['http://nowhere/alarms'],
+                                     insufficient_data_actions=[],
+                                     repeat_actions=False,
+                                     time_constraints=[dict(name='testcons',
+                                                            start='0 11 * * *',
+                                                            duration=300)],
+                                     rule=dict(comparison_operator='eq',
+                                               threshold=36,
+                                               statistic='count',
+                                               evaluation_periods=1,
+                                               period=60,
+                                               meter_name='test.one',
+                                               query=[{'field': 'key',
+                                                       'op': 'eq',
+                                                       'value': 'value',
+                                                       'type': 'string'}]),
+                                     ),
+                  alarm_models.Alarm(alarm_id='0r4ng3',
+                                     enabled=True,
+                                     type='threshold',
+                                     name='orange-alert',
+                                     description='a orange',
+                                     timestamp=None,
+                                     user_id='me',
+                                     project_id='and-da-boys',
+                                     state="insufficient data",
+                                     state_timestamp=None,
+                                     ok_actions=[],
+                                     alarm_actions=['http://nowhere/alarms'],
+                                     insufficient_data_actions=[],
+                                     repeat_actions=False,
+                                     time_constraints=[],
+                                     rule=dict(comparison_operator='gt',
+                                               threshold=75,
+                                               statistic='avg',
+                                               evaluation_periods=1,
+                                               period=60,
+                                               meter_name='test.fourty',
+                                               query=[{'field': 'key2',
+                                                       'op': 'eq',
+                                                       'value': 'value2',
+                                                       'type': 'string'}]),
+                                     ),
+                  alarm_models.Alarm(alarm_id='y3ll0w',
+                                     enabled=False,
+                                     type='threshold',
+                                     name='yellow-alert',
+                                     description='yellow',
+                                     timestamp=None,
+                                     user_id='me',
+                                     project_id='and-da-boys',
+                                     state="insufficient data",
+                                     state_timestamp=None,
+                                     ok_actions=[],
+                                     alarm_actions=['http://nowhere/alarms'],
+                                     insufficient_data_actions=[],
+                                     repeat_actions=False,
+                                     time_constraints=[],
+                                     rule=dict(comparison_operator='lt',
+                                               threshold=10,
+                                               statistic='min',
+                                               evaluation_periods=1,
+                                               period=60,
+                                               meter_name='test.five',
+                                               query=[{'field': 'key2',
+                                                       'op': 'eq',
+                                                       'value': 'value2',
+                                                       'type': 'string'},
+                                                      {'field':
+                                                       'user_metadata.key3',
+                                                       'op': 'eq',
+                                                       'value': 'value3',
+                                                       'type': 'string'}]),
+                                     )]
 
         for a in alarms:
-            self.conn.create_alarm(a)
+            self.alarm_conn.create_alarm(a)
 
 
 class AlarmTest(AlarmTestBase,
                 tests_db.MixinTestsWithBackendScenarios):
 
     def test_empty(self):
-        alarms = list(self.conn.get_alarms())
+        alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual([], alarms)
 
     def test_list(self):
         self.add_some_alarms()
-        alarms = list(self.conn.get_alarms())
+        alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(len(alarms), 3)
 
     def test_list_enabled(self):
         self.add_some_alarms()
-        alarms = list(self.conn.get_alarms(enabled=True))
+        alarms = list(self.alarm_conn.get_alarms(enabled=True))
         self.assertEqual(len(alarms), 2)
 
     def test_list_disabled(self):
         self.add_some_alarms()
-        alarms = list(self.conn.get_alarms(enabled=False))
+        alarms = list(self.alarm_conn.get_alarms(enabled=False))
         self.assertEqual(len(alarms), 1)
 
     def test_add(self):
         self.add_some_alarms()
-        alarms = list(self.conn.get_alarms())
+        alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(len(alarms), 3)
 
         meter_names = sorted([a.rule['meter_name'] for a in alarms])
@@ -2425,58 +2426,59 @@ class AlarmTest(AlarmTestBase,
 
     def test_update(self):
         self.add_some_alarms()
-        orange = list(self.conn.get_alarms(name='orange-alert'))[0]
+        orange = list(self.alarm_conn.get_alarms(name='orange-alert'))[0]
         orange.enabled = False
-        orange.state = models.Alarm.ALARM_INSUFFICIENT_DATA
+        orange.state = alarm_models.Alarm.ALARM_INSUFFICIENT_DATA
         query = [{'field': 'metadata.group',
                   'op': 'eq',
                   'value': 'test.updated',
                   'type': 'string'}]
         orange.rule['query'] = query
         orange.rule['meter_name'] = 'new_meter_name'
-        updated = self.conn.update_alarm(orange)
+        updated = self.alarm_conn.update_alarm(orange)
         self.assertEqual(updated.enabled, False)
-        self.assertEqual(updated.state, models.Alarm.ALARM_INSUFFICIENT_DATA)
+        self.assertEqual(updated.state,
+                         alarm_models.Alarm.ALARM_INSUFFICIENT_DATA)
         self.assertEqual(updated.rule['query'], query)
         self.assertEqual(updated.rule['meter_name'], 'new_meter_name')
 
     def test_update_llu(self):
-        llu = models.Alarm(alarm_id='llu',
-                           enabled=True,
-                           type='threshold',
-                           name='llu',
-                           description='llu',
-                           timestamp=None,
-                           user_id='bla',
-                           project_id='ffo',
-                           state="insufficient data",
-                           state_timestamp=None,
-                           ok_actions=[],
-                           alarm_actions=[],
-                           insufficient_data_actions=[],
-                           repeat_actions=False,
-                           time_constraints=[],
-                           rule=dict(comparison_operator='lt',
-                                     threshold=34,
-                                     statistic='max',
-                                     evaluation_periods=1,
-                                     period=60,
-                                     meter_name='llt',
-                                     query=[])
-                           )
-        updated = self.conn.update_alarm(llu)
-        updated.state = models.Alarm.ALARM_OK
+        llu = alarm_models.Alarm(alarm_id='llu',
+                                 enabled=True,
+                                 type='threshold',
+                                 name='llu',
+                                 description='llu',
+                                 timestamp=None,
+                                 user_id='bla',
+                                 project_id='ffo',
+                                 state="insufficient data",
+                                 state_timestamp=None,
+                                 ok_actions=[],
+                                 alarm_actions=[],
+                                 insufficient_data_actions=[],
+                                 repeat_actions=False,
+                                 time_constraints=[],
+                                 rule=dict(comparison_operator='lt',
+                                           threshold=34,
+                                           statistic='max',
+                                           evaluation_periods=1,
+                                           period=60,
+                                           meter_name='llt',
+                                           query=[])
+                                 )
+        updated = self.alarm_conn.update_alarm(llu)
+        updated.state = alarm_models.Alarm.ALARM_OK
         updated.description = ':)'
-        self.conn.update_alarm(updated)
+        self.alarm_conn.update_alarm(updated)
 
-        all = list(self.conn.get_alarms())
+        all = list(self.alarm_conn.get_alarms())
         self.assertEqual(len(all), 1)
 
     def test_delete(self):
         self.add_some_alarms()
-        victim = list(self.conn.get_alarms(name='orange-alert'))[0]
-        self.conn.delete_alarm(victim.alarm_id)
-        survivors = list(self.conn.get_alarms())
+        victim = list(self.alarm_conn.get_alarms(name='orange-alert'))[0]
+        self.alarm_conn.delete_alarm(victim.alarm_id)
+        survivors = list(self.alarm_conn.get_alarms())
         self.assertEqual(len(survivors), 2)
         for s in survivors:
             self.assertNotEqual(victim.name, s.name)
@@ -2488,26 +2490,26 @@ class AlarmTestPagination(AlarmTestBase,
     def test_get_alarm_all_limit(self):
         self.add_some_alarms()
         pagination = base.Pagination(limit=2)
-        alarms = list(self.conn.get_alarms(pagination=pagination))
+        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(len(alarms), 2)
 
         pagination = base.Pagination(limit=1)
-        alarms = list(self.conn.get_alarms(pagination=pagination))
+        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(len(alarms), 1)
 
     def test_get_alarm_all_marker(self):
         self.add_some_alarms()
 
         pagination = base.Pagination(marker_value='orange-alert')
-        alarms = list(self.conn.get_alarms(pagination=pagination))
+        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(len(alarms), 0)
 
         pagination = base.Pagination(marker_value='red-alert')
-        alarms = list(self.conn.get_alarms(pagination=pagination))
+        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(len(alarms), 1)
 
         pagination = base.Pagination(marker_value='yellow-alert')
-        alarms = list(self.conn.get_alarms(pagination=pagination))
+        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(len(alarms), 2)
 
     def test_get_alarm_paginate(self):
@@ -2515,12 +2517,12 @@ class AlarmTestPagination(AlarmTestBase,
         self.add_some_alarms()
 
         pagination = base.Pagination(limit=4, marker_value='yellow-alert')
-        page = list(self.conn.get_alarms(pagination=pagination))
+        page = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(['red-alert', 'orange-alert'], [i.name for i in page])
 
         pagination = base.Pagination(limit=2, marker_value='orange-alert',
                                      primary_sort_dir='asc')
-        page1 = list(self.conn.get_alarms(pagination=pagination))
+        page1 = list(self.alarm_conn.get_alarms(pagination=pagination))
         self.assertEqual(['red-alert', 'yellow-alert'],
                          [i.name for i in page1])
 
@@ -2530,12 +2532,12 @@ class ComplexAlarmQueryTest(AlarmTestBase,
 
     def test_no_filter(self):
         self.add_some_alarms()
-        result = list(self.conn.query_alarms())
+        result = list(self.alarm_conn.query_alarms())
         self.assertEqual(3, len(result))
 
     def test_no_filter_with_limit(self):
         self.add_some_alarms()
-        result = list(self.conn.query_alarms(limit=2))
+        result = list(self.alarm_conn.query_alarms(limit=2))
         self.assertEqual(2, len(result))
 
     def test_filter(self):
@@ -2544,9 +2546,9 @@ class ComplexAlarmQueryTest(AlarmTestBase,
                        [{"or":
                         [{"=": {"name": "yellow-alert"}},
                          {"=": {"name": "red-alert"}}]},
-                       {"=": {"enabled": True}}]}
+                        {"=": {"enabled": True}}]}
 
-        result = list(self.conn.query_alarms(filter_expr=filter_expr))
+        result = list(self.alarm_conn.query_alarms(filter_expr=filter_expr))
 
         self.assertEqual(1, len(result))
         for a in result:
@@ -2557,7 +2559,7 @@ class ComplexAlarmQueryTest(AlarmTestBase,
         self.add_some_alarms()
         filter_expr = {"=": {"alarm_id": "0r4ng3"}}
 
-        result = list(self.conn.query_alarms(filter_expr=filter_expr))
+        result = list(self.alarm_conn.query_alarms(filter_expr=filter_expr))
 
         self.assertEqual(1, len(result))
         for a in result:
@@ -2565,10 +2567,9 @@ class ComplexAlarmQueryTest(AlarmTestBase,
 
     def test_filter_and_orderby(self):
         self.add_some_alarms()
-        result = list(self.conn.query_alarms(filter_expr={"=":
-                                                          {"enabled":
-                                                          True}},
-                                             orderby=[{"name": "asc"}]))
+        result = list(self.alarm_conn.query_alarms(filter_expr=(
+            {"=": {"enabled": True}}),
+            orderby=[{"name": "asc"}]))
         self.assertEqual(2, len(result))
         self.assertEqual(["orange-alert", "red-alert"],
                          [a.name for a in result])
@@ -2589,13 +2590,13 @@ class ComplexAlarmHistoryQueryTest(AlarmTestBase,
         self.prepare_alarm_history()
 
     def prepare_alarm_history(self):
-        alarms = list(self.conn.get_alarms())
+        alarms = list(self.alarm_conn.get_alarms())
         for alarm in alarms:
             i = alarms.index(alarm)
-            alarm_change = dict(event_id=
-                                "16fd2706-8baf-433b-82eb-8c7fada847c%s" % i,
+            alarm_change = dict(event_id=(
+                                "16fd2706-8baf-433b-82eb-8c7fada847c%s" % i),
                                 alarm_id=alarm.alarm_id,
-                                type=models.AlarmChange.CREATION,
+                                type=alarm_models.AlarmChange.CREATION,
                                 detail="detail %s" % alarm.name,
                                 user_id=alarm.user_id,
                                 project_id=alarm.project_id,
@@ -2603,12 +2604,12 @@ class ComplexAlarmHistoryQueryTest(AlarmTestBase,
                                 timestamp=datetime.datetime(2012, 9, 24,
                                                             7 + i,
                                                             30 + i))
-            self.conn.record_alarm_change(alarm_change=alarm_change)
+            self.alarm_conn.record_alarm_change(alarm_change=alarm_change)
 
-            alarm_change2 = dict(event_id=
-                                 "16fd2706-8baf-433b-82eb-8c7fada847d%s" % i,
+            alarm_change2 = dict(event_id=(
+                                 "16fd2706-8baf-433b-82eb-8c7fada847d%s" % i),
                                  alarm_id=alarm.alarm_id,
-                                 type=models.AlarmChange.RULE_CHANGE,
+                                 type=alarm_models.AlarmChange.RULE_CHANGE,
                                  detail="detail %s" % i,
                                  user_id=alarm.user_id,
                                  project_id=alarm.project_id,
@@ -2616,32 +2617,30 @@ class ComplexAlarmHistoryQueryTest(AlarmTestBase,
                                  timestamp=datetime.datetime(2012, 9, 25,
                                                              10 + i,
                                                              30 + i))
-            self.conn.record_alarm_change(alarm_change=alarm_change2)
+            self.alarm_conn.record_alarm_change(alarm_change=alarm_change2)
 
-            alarm_change3 = dict(event_id=
-                                 "16fd2706-8baf-433b-82eb-8c7fada847e%s"
-                                 % i,
-                                 alarm_id=alarm.alarm_id,
-                                 type=models.AlarmChange.STATE_TRANSITION,
-                                 detail="detail %s" % (i + 1),
-                                 user_id=alarm.user_id,
-                                 project_id=alarm.project_id,
-                                 on_behalf_of=alarm.project_id,
-                                 timestamp=datetime.datetime(2012, 9, 26,
-                                                             10 + i,
-                                                             30 + i))
+            alarm_change3 = dict(
+                event_id="16fd2706-8baf-433b-82eb-8c7fada847e%s" % i,
+                alarm_id=alarm.alarm_id,
+                type=alarm_models.AlarmChange.STATE_TRANSITION,
+                detail="detail %s" % (i + 1),
+                user_id=alarm.user_id,
+                project_id=alarm.project_id,
+                on_behalf_of=alarm.project_id,
+                timestamp=datetime.datetime(2012, 9, 26, 10 + i, 30 + i)
+            )
 
             if alarm.name == "red-alert":
                 alarm_change3['on_behalf_of'] = 'and-da-girls'
 
-            self.conn.record_alarm_change(alarm_change=alarm_change3)
+            self.alarm_conn.record_alarm_change(alarm_change=alarm_change3)
 
             if alarm.name in ["red-alert", "yellow-alert"]:
-                alarm_change4 = dict(event_id=
+                alarm_change4 = dict(event_id=(
                                      "16fd2706-8baf-433b-82eb-8c7fada847f%s"
-                                     % i,
+                                     % i),
                                      alarm_id=alarm.alarm_id,
-                                     type=models.AlarmChange.DELETION,
+                                     type=alarm_models.AlarmChange.DELETION,
                                      detail="detail %s" % (i + 2),
                                      user_id=alarm.user_id,
                                      project_id=alarm.project_id,
@@ -2649,62 +2648,63 @@ class ComplexAlarmHistoryQueryTest(AlarmTestBase,
                                      timestamp=datetime.datetime(2012, 9, 27,
                                                                  10 + i,
                                                                  30 + i))
-                self.conn.record_alarm_change(alarm_change=alarm_change4)
+                self.alarm_conn.record_alarm_change(alarm_change=alarm_change4)
 
     def test_alarm_history_with_no_filter(self):
-        history = list(self.conn.query_alarm_history())
+        history = list(self.alarm_conn.query_alarm_history())
         self.assertEqual(11, len(history))
 
     def test_alarm_history_with_no_filter_and_limit(self):
-        history = list(self.conn.query_alarm_history(limit=3))
+        history = list(self.alarm_conn.query_alarm_history(limit=3))
         self.assertEqual(3, len(history))
 
     def test_alarm_history_with_filter(self):
         history = list(
-            self.conn.query_alarm_history(filter_expr=self.filter_expr))
+            self.alarm_conn.query_alarm_history(filter_expr=self.filter_expr))
         self.assertEqual(2, len(history))
 
     def test_alarm_history_with_filter_and_orderby(self):
         history = list(
-            self.conn.query_alarm_history(filter_expr=self.filter_expr,
-                                          orderby=[{"timestamp":
-                                                   "asc"}]))
-        self.assertEqual([models.AlarmChange.RULE_CHANGE,
-                          models.AlarmChange.STATE_TRANSITION],
+            self.alarm_conn.query_alarm_history(filter_expr=self.filter_expr,
+                                                orderby=[{"timestamp":
+                                                          "asc"}]))
+        self.assertEqual([alarm_models.AlarmChange.RULE_CHANGE,
+                          alarm_models.AlarmChange.STATE_TRANSITION],
                          [h.type for h in history])
 
     def test_alarm_history_with_filter_and_orderby_and_limit(self):
         history = list(
-            self.conn.query_alarm_history(filter_expr=self.filter_expr,
-                                          orderby=[{"timestamp":
-                                                    "asc"}],
-                                          limit=1))
-        self.assertEqual(models.AlarmChange.RULE_CHANGE, history[0].type)
+            self.alarm_conn.query_alarm_history(filter_expr=self.filter_expr,
+                                                orderby=[{"timestamp":
+                                                          "asc"}],
+                                                limit=1))
+        self.assertEqual(alarm_models.AlarmChange.RULE_CHANGE, history[0].type)
 
     def test_alarm_history_with_on_behalf_of_filter(self):
         filter_expr = {"=": {"on_behalf_of": "and-da-girls"}}
-        history = list(self.conn.query_alarm_history(filter_expr=filter_expr))
+        history = list(self.alarm_conn.query_alarm_history(
+            filter_expr=filter_expr))
         self.assertEqual(1, len(history))
         self.assertEqual("16fd2706-8baf-433b-82eb-8c7fada847e0",
                          history[0].event_id)
 
     def test_alarm_history_with_alarm_id_as_filter(self):
         filter_expr = {"=": {"alarm_id": "r3d"}}
-        history = list(self.conn.query_alarm_history(filter_expr=filter_expr,
-                                                     orderby=[{"timestamp":
-                                                               "asc"}]))
+        history = list(self.alarm_conn.query_alarm_history(
+            filter_expr=filter_expr, orderby=[{"timestamp": "asc"}]))
         self.assertEqual(4, len(history))
-        self.assertEqual([models.AlarmChange.CREATION,
-                          models.AlarmChange.RULE_CHANGE,
-                          models.AlarmChange.STATE_TRANSITION,
-                          models.AlarmChange.DELETION],
+        self.assertEqual([alarm_models.AlarmChange.CREATION,
+                          alarm_models.AlarmChange.RULE_CHANGE,
+                          alarm_models.AlarmChange.STATE_TRANSITION,
+                          alarm_models.AlarmChange.DELETION],
                          [h.type for h in history])
 
 
 class EventTestBase(tests_db.TestBase,
                     tests_db.MixinTestsWithBackendScenarios):
-    """Separate test base class because we don't want to
-    inherit all the Meter stuff.
+    """Separate test base class.
+
+    We don't want to inherit all the Meter stuff.
     """
 
     def setUp(self):
@@ -2735,16 +2735,15 @@ class GetEventTest(EventTestBase):
         self.start = datetime.datetime(2013, 12, 31, 5, 0)
         now = self.start
         for event_type in ['Foo', 'Bar', 'Zoo', 'Foo', 'Bar', 'Zoo']:
-            trait_models = \
-                [models.Trait(name, dtype, value)
-                    for name, dtype, value in [
-                        ('trait_A', models.Trait.TEXT_TYPE,
-                            "my_%s_text" % event_type),
-                        ('trait_B', models.Trait.INT_TYPE,
-                            base + 1),
-                        ('trait_C', models.Trait.FLOAT_TYPE,
-                            float(base) + 0.123456),
-                        ('trait_D', models.Trait.DATETIME_TYPE, now)]]
+            trait_models = [models.Trait(name, dtype, value)
+                            for name, dtype, value in [
+                                ('trait_A', models.Trait.TEXT_TYPE,
+                                    "my_%s_text" % event_type),
+                                ('trait_B', models.Trait.INT_TYPE,
+                                    base + 1),
+                                ('trait_C', models.Trait.FLOAT_TYPE,
+                                    float(base) + 0.123456),
+                                ('trait_D', models.Trait.DATETIME_TYPE, now)]]
             self.event_models.append(
                 models.Event("id_%s_%d" % (event_type, base),
                              event_type, now, trait_models))
@@ -2756,7 +2755,7 @@ class GetEventTest(EventTestBase):
 
     def test_generated_is_datetime(self):
         event_filter = storage.EventFilter(self.start, self.end)
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(6, len(events))
         for i, event in enumerate(events):
             self.assertIsInstance(event.generated, datetime.datetime)
@@ -2770,7 +2769,7 @@ class GetEventTest(EventTestBase):
 
     def test_simple_get(self):
         event_filter = storage.EventFilter(self.start, self.end)
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(6, len(events))
         start_time = None
         for i, type in enumerate(['Foo', 'Bar', 'Zoo']):
@@ -2799,7 +2798,7 @@ class GetEventTest(EventTestBase):
         }
 
         event_filter = storage.EventFilter(self.start, self.end, "Bar")
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(2, len(events))
         self.assertEqual(events[0].event_type, "Bar")
         self.assertEqual(events[1].event_type, "Bar")
@@ -2821,7 +2820,7 @@ class GetEventTest(EventTestBase):
         trait_filters = [{'key': 'trait_B', 'integer': 101}]
         event_filter = storage.EventFilter(self.start, self.end,
                                            traits_filter=trait_filters)
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(1, len(events))
         self.assertEqual(events[0].event_type, "Bar")
         self.assertEqual(4, len(events[0].traits))
@@ -2831,7 +2830,7 @@ class GetEventTest(EventTestBase):
                          {'key': 'trait_A', 'string': 'my_Foo_text'}]
         event_filter = storage.EventFilter(self.start, self.end,
                                            traits_filter=trait_filters)
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(1, len(events))
         self.assertEqual(events[0].event_type, "Foo")
         self.assertEqual(4, len(events[0].traits))
@@ -2841,7 +2840,7 @@ class GetEventTest(EventTestBase):
                          {'key': 'trait_A', 'string': 'my_Zoo_text'}]
         event_filter = storage.EventFilter(self.start, self.end,
                                            traits_filter=trait_filters)
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(0, len(events))
 
     def test_get_event_types(self):
@@ -2870,8 +2869,7 @@ class GetEventTest(EventTestBase):
 
     def test_get_traits(self):
         traits = self.conn.get_traits("Bar")
-        #format results in a way that makes them easier to
-        #work with
+        # format results in a way that makes them easier to work with
         trait_dict = {}
         for trait in traits:
             trait_dict[trait.name] = trait.dtype
@@ -2887,11 +2885,9 @@ class GetEventTest(EventTestBase):
                          trait_dict["trait_D"])
 
     def test_get_all_traits(self):
-        traits = self.conn.\
-            get_traits("Foo")
-        traits = [t for t in traits]
+        traits = self.conn.get_traits("Foo")
+        traits = sorted([t for t in traits], key=operator.attrgetter('dtype'))
         self.assertEqual(8, len(traits))
-
         trait = traits[0]
         self.assertEqual("trait_A", trait.name)
         self.assertEqual(models.Trait.TEXT_TYPE, trait.dtype)
@@ -2900,7 +2896,7 @@ class GetEventTest(EventTestBase):
         new_events = [models.Event("id_notraits", "NoTraits", self.start, [])]
         bad_events = self.conn.record_events(new_events)
         event_filter = storage.EventFilter(self.start, self.end, "NoTraits")
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(0, len(bad_events))
         self.assertEqual(1, len(events))
         self.assertEqual(events[0].message_id, "id_notraits")
@@ -2909,7 +2905,7 @@ class GetEventTest(EventTestBase):
 
     def test_simple_get_no_filters(self):
         event_filter = storage.EventFilter(None, None, None)
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(6, len(events))
 
     def test_get_by_message_id(self):
@@ -2920,7 +2916,7 @@ class GetEventTest(EventTestBase):
 
         bad_events = self.conn.record_events(new_events)
         event_filter = storage.EventFilter(message_id="id_testid")
-        events = self.conn.get_events(event_filter)
+        events = [event for event in self.conn.get_events(event_filter)]
         self.assertEqual(0, len(bad_events))
         self.assertEqual(1, len(events))
         event = events[0]

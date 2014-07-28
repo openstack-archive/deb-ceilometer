@@ -48,23 +48,23 @@ class StackCRUD(plugin.NotificationBase):
 
     @staticmethod
     def get_targets(conf):
-        """Return a sequence of oslo.messaging.Target defining the exchange and
-        topics to be connected for this plugin.
+        """Return a sequence of oslo.messaging.Target
+
+        It is defining the exchange and topics to be connected for this plugin.
         """
         return [oslo.messaging.Target(topic=topic,
                                       exchange=conf.heat_control_exchange)
                 for topic in conf.notification_topics]
 
     def process_notification(self, message):
-        name = message['event_type']                \
-            .replace(self.resource_name, 'stack')   \
-            .replace('.end', '')
+        name = (message['event_type'].replace(self.resource_name, 'stack')
+                .replace('.end', ''))
 
         project_id = message['payload']['tenant_id']
 
         # Trying to use the trustor_id if trusts is used by Heat,
-        user_id = message.get('_context_trustor_user_id') or \
-            message['_context_user_id']
+        user_id = (message.get('_context_trustor_user_id') or
+                   message['_context_user_id'])
 
         yield sample.Sample.from_notification(
             name=name,

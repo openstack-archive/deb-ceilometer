@@ -17,7 +17,7 @@
 from oslo.config import cfg
 import requests
 import six
-from six.moves.urllib import parse as url_parse
+from six.moves.urllib import parse as urlparse
 
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
@@ -51,7 +51,7 @@ class AnalyticsAPIBaseClient(object):
                 'domain': self.domain}
 
         req_params = self._get_req_params(data=data)
-        url = url_parse.urljoin(self.endpoint, path)
+        url = urlparse.urljoin(self.endpoint, path)
         resp = requests.post(url, **req_params)
         if resp.status_code != 302:
             raise OpencontrailAPIFailed(
@@ -71,7 +71,7 @@ class AnalyticsAPIBaseClient(object):
         req_params = self._get_req_params(data=data,
                                           cookies={'connect.sid': self.sid})
 
-        url = url_parse.urljoin(self.endpoint, path)
+        url = urlparse.urljoin(self.endpoint, path)
         self._log_req(url, req_params)
         resp = requests.get(url, **req_params)
         self._log_res(resp)
@@ -130,8 +130,8 @@ class AnalyticsAPIBaseClient(object):
         dump.append('HTTP %.1f %s %s\n' % (resp.raw.version,
                                            resp.status_code,
                                            resp.reason))
-        dump.extend(['%s: %s\n' % (k, v)
-                     for k, v in six.iteritems(resp.headers)])
+        dump.extend('%s: %s\n' % (k, v)
+                    for k, v in six.iteritems(resp.headers))
         dump.append('\n')
         if resp.content:
             dump.extend([resp.content, '\n'])

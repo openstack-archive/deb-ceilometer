@@ -16,14 +16,13 @@ import contextlib
 import copy
 import datetime
 
-from mock import call
-from mock import patch
+import mock
 import pymongo
 
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.publisher import utils
 from ceilometer import sample
-from ceilometer.storage import pymongo_base
+from ceilometer.storage.mongo import utils as pymongo_utils
 from ceilometer.tests import db as tests_db
 from ceilometer.tests.storage import test_storage_scenarios
 
@@ -72,8 +71,8 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
             self.db.meter.insert(record)
 
         # Stubout with the old version DB schema, the one w/o 'counter_unit'
-        with patch.object(self.conn, 'record_metering_data',
-                          side_effect=old_record_metering_data):
+        with mock.patch.object(self.conn, 'record_metering_data',
+                               side_effect=old_record_metering_data):
             self.counters = []
             c = sample.Sample(
                 'volume.size',
@@ -118,7 +117,7 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
                      repeat_actions=False,
                      matching_metadata={'key': 'value'})
 
-        self.conn.db.alarm.update(
+        self.alarm_conn.db.alarm.update(
             {'alarm_id': alarm['alarm_id']},
             {'$set': alarm},
             upsert=True)
@@ -127,13 +126,13 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
         alarm['name'] = 'other-old-alaert'
         alarm['matching_metadata'] = [{'key': 'key1', 'value': 'value1'},
                                       {'key': 'key2', 'value': 'value2'}]
-        self.conn.db.alarm.update(
+        self.alarm_conn.db.alarm.update(
             {'alarm_id': alarm['alarm_id']},
             {'$set': alarm},
             upsert=True)
 
     def test_alarm_get_old_format_matching_metadata_dict(self):
-        old = list(self.conn.get_alarms(name='old-alert'))[0]
+        old = list(self.alarm_conn.get_alarms(name='old-alert'))[0]
         self.assertEqual('threshold', old.type)
         self.assertEqual([{'field': 'key',
                            'op': 'eq',
@@ -148,7 +147,7 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
         self.assertEqual(36, old.rule['threshold'])
 
     def test_alarm_get_old_format_matching_metadata_array(self):
-        old = list(self.conn.get_alarms(name='other-old-alaert'))[0]
+        old = list(self.alarm_conn.get_alarms(name='other-old-alaert'))[0]
         self.assertEqual('threshold', old.type)
         self.assertEqual(sorted([{'field': 'key1',
                                   'op': 'eq',
@@ -185,17 +184,18 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
             'connection', self.db_manager.url.replace('db2:', 'mongodb:', 1),
             group='database')
 
-        pool = pymongo_base.ConnectionPool()
+        pool = pymongo_utils.ConnectionPool()
         with contextlib.nested(
-                patch('pymongo.MongoClient',
-                      side_effect=pymongo.errors.ConnectionFailure('foo')),
-                patch.object(pymongo_base.LOG, 'error'),
-                patch.object(pymongo_base.LOG, 'warn'),
-                patch.object(pymongo_base.time, 'sleep')
+                mock.patch(
+                    'pymongo.MongoClient',
+                    side_effect=pymongo.errors.ConnectionFailure('foo')),
+                mock.patch.object(pymongo_utils.LOG, 'error'),
+                mock.patch.object(pymongo_utils.LOG, 'warn'),
+                mock.patch.object(pymongo_utils.time, 'sleep')
         ) as (MockMongo, MockLOGerror, MockLOGwarn, Mocksleep):
             self.assertRaises(pymongo.errors.ConnectionFailure,
                               pool.connect, self.CONF.database.connection)
-            Mocksleep.assert_has_calls([call(retry_interval)
+            Mocksleep.assert_has_calls([mock.call(retry_interval)
                                         for i in range(max_retries)])
             MockLOGwarn.assert_any_call(
                 _('Unable to connect to the database server: %(errmsg)s.'

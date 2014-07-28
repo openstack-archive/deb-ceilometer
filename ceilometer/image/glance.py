@@ -45,11 +45,11 @@ class _Base(plugin.CentralPollster):
 
     def _get_images(self, ksclient):
         client = self.get_glance_client(ksclient)
-        #TODO(eglynn): use pagination to protect against unbounded
+        # TODO(eglynn): use pagination to protect against unbounded
         #              memory usage
         rawImageList = list(itertools.chain(
             client.images.list(filters={"is_public": True}),
-            #TODO(eglynn): extend glance API with all_tenants logic to
+            # TODO(eglynn): extend glance API with all_tenants logic to
             #              avoid second call to retrieve private images
             client.images.list(filters={"is_public": False})))
 
@@ -62,7 +62,7 @@ class _Base(plugin.CentralPollster):
         # all the public images together with private images.
         # As a result, if the user/tenant has an admin role
         # for ceilometer to collect image list,
-        # the _Base.iter_images method will return a image list
+        # the _Base.iter_images method will return an image list
         # which contains duplicate images. Add the following
         # code to avoid recording down duplicate image events.
         imageIdSet = set(image.id for image in rawImageList)
@@ -97,8 +97,7 @@ class _Base(plugin.CentralPollster):
                         "checksum",
                         "deleted_at",
                         "min_ram",
-                        "size",
-                    ])
+                        "size", ])
 
 
 class ImagePollster(_Base):

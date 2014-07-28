@@ -26,15 +26,17 @@ Configuration:
 In /etc/swift/proxy-server.conf on the main pipeline add "ceilometer" just
 before "proxy-server" and add the following filter in the file:
 
-[filter:ceilometer]
-use = egg:ceilometer#swift
+.. code-block:: python
 
-# Some optional configuration
-# this allow to publish additional metadata
-metadata_headers = X-TEST
+    [filter:ceilometer]
+    use = egg:ceilometer#swift
 
-# Set reseller prefix (defaults to "AUTH_" if not set)
-reseller_prefix = AUTH_
+    # Some optional configuration
+    # this allow to publish additional metadata
+    metadata_headers = X-TEST
+
+    # Set reseller prefix (defaults to "AUTH_" if not set)
+    reseller_prefix = AUTH_
 """
 
 from __future__ import absolute_import
@@ -51,10 +53,11 @@ except ImportError:
 
 try:
     # Swift > 1.7.5 ... module exists but doesn't contain class.
-    from swift.common.utils import InputProxy
-except ImportError:
+    InputProxy = utils.InputProxy
+except AttributeError:
     # Swift <= 1.7.5 ... module exists and has class.
-    from swift.common.middleware.proxy_logging import InputProxy
+    from swift.common.middleware import proxy_logging
+    InputProxy = proxy_logging.InputProxy
 
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common import timeutils
@@ -91,14 +94,22 @@ class CeilometerMiddleware(object):
             start_response_args[0] = (status, list(headers), exc_info)
 
         def iter_response(iterable):
+            iterator = iter(iterable)
+            try:
+                chunk = iterator.next()
+                while not chunk:
+                    chunk = iterator.next()
+            except StopIteration:
+                chunk = ''
+
             if start_response_args[0]:
                 start_response(*start_response_args[0])
             bytes_sent = 0
             try:
-                for chunk in iterable:
-                    if chunk:
-                        bytes_sent += len(chunk)
+                while chunk:
+                    bytes_sent += len(chunk)
                     yield chunk
+                    chunk = iterator.next()
             finally:
                 try:
                     self.publish_sample(env,

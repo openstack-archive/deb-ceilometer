@@ -25,13 +25,12 @@
 import datetime
 import repr
 
-from mock import patch
+import mock
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import impl_sqlalchemy
 from ceilometer.storage import models
 from ceilometer.storage.sqlalchemy import models as sql_models
-
 from ceilometer.tests import base as test_base
 from ceilometer.tests import db as tests_db
 from ceilometer.tests.storage import test_storage_scenarios as scenarios
@@ -154,7 +153,7 @@ class EventTest(tests_db.TestBase):
         m = [models.Event("1", "Foo", now, []),
              models.Event("2", "Zoo", now, [])]
 
-        with patch.object(self.conn, "_record_event") as mock_save:
+        with mock.patch.object(self.conn._conn, "_record_event") as mock_save:
             mock_save.side_effect = MyException("Boom")
             problem_events = self.conn.record_events(m)
         self.assertEqual(2, len(problem_events))
@@ -177,7 +176,7 @@ class RelationshipTest(scenarios.DBTestBase):
     # Note: Do not derive from SQLAlchemyEngineTestBase, since we
     # don't want to automatically inherit all the Meter setup.
 
-    @patch.object(timeutils, 'utcnow')
+    @mock.patch.object(timeutils, 'utcnow')
     def test_clear_metering_data_meta_tables(self, mock_utcnow):
         mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
         self.conn.clear_expired_metering_data(3 * 60)
@@ -186,11 +185,11 @@ class RelationshipTest(scenarios.DBTestBase):
         meta_tables = [sql_models.MetaText, sql_models.MetaFloat,
                        sql_models.MetaBigInt, sql_models.MetaBool]
         for table in meta_tables:
-            self.assertEqual(0, session.query(table)
-                .filter(~table.id.in_(
-                    session.query(sql_models.Sample.id)
-                        .group_by(sql_models.Sample.id)
-                        )).count())
+            self.assertEqual(0, (session.query(table)
+                                 .filter(~table.id.in_(
+                                     session.query(sql_models.Sample.id)
+                                     .group_by(sql_models.Sample.id))).count()
+                                 ))
 
 
 class CapabilitiesTest(test_base.BaseTestCase):
@@ -241,6 +240,6 @@ class CapabilitiesTest(test_base.BaseTestCase):
         expected_capabilities = {
             'storage': {'production_ready': True},
         }
-        actual_capabilities = impl_sqlalchemy.Connection.\
-            get_storage_capabilities()
+        actual_capabilities = (impl_sqlalchemy.
+                               Connection.get_storage_capabilities())
         self.assertEqual(expected_capabilities, actual_capabilities)

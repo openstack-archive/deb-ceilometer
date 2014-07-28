@@ -18,11 +18,11 @@
 from oslo.config import cfg
 import six
 
+from ceilometer.alarm.storage import models
 from ceilometer import messaging
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.storage import models
 
 OPTS = [
     cfg.StrOpt('notifier_rpc_topic',
@@ -42,8 +42,9 @@ LOG = log.getLogger(__name__)
 
 class RPCAlarmNotifier(object):
     def __init__(self):
+        transport = messaging.get_transport()
         self.client = messaging.get_rpc_client(
-            topic=cfg.CONF.alarm.notifier_rpc_topic,
+            transport, topic=cfg.CONF.alarm.notifier_rpc_topic,
             version="1.0")
 
     def notify(self, alarm, previous, reason, reason_data):
@@ -68,8 +69,9 @@ class RPCAlarmNotifier(object):
 
 class RPCAlarmPartitionCoordination(object):
     def __init__(self):
+        transport = messaging.get_transport()
         self.client = messaging.get_rpc_client(
-            topic=cfg.CONF.alarm.partition_rpc_topic,
+            transport, topic=cfg.CONF.alarm.partition_rpc_topic,
             version="1.0")
 
     def presence(self, uuid, priority):

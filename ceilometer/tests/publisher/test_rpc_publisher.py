@@ -28,12 +28,12 @@ from ceilometer import messaging
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import network_utils
-from ceilometer.openstack.common import test
 from ceilometer.publisher import rpc
 from ceilometer import sample
+from ceilometer.tests import base as tests_base
 
 
-class TestPublish(test.BaseTestCase):
+class TestPublish(tests_base.BaseTestCase):
     test_data = [
         sample.Sample(
             name='test',
@@ -95,8 +95,7 @@ class TestPublish(test.BaseTestCase):
     def setUp(self):
         super(TestPublish, self).setUp()
         self.CONF = self.useFixture(config.Config()).conf
-        messaging.setup('fake://')
-        self.addCleanup(messaging.cleanup)
+        self.setup_messaging(self.CONF)
         self.published = []
 
     def test_published_no_mock(self):
@@ -105,9 +104,9 @@ class TestPublish(test.BaseTestCase):
 
         endpoint = mock.MagicMock(['record_metering_data'])
         collector = messaging.get_rpc_server(
-            self.CONF.publisher_rpc.metering_topic, endpoint)
-        endpoint.record_metering_data.side_effect = \
-            lambda *args, **kwds: collector.stop()
+            self.transport, self.CONF.publisher_rpc.metering_topic, endpoint)
+        endpoint.record_metering_data.side_effect = (lambda *args, **kwds:
+                                                     collector.stop())
 
         collector.start()
         eventlet.sleep()
@@ -118,8 +117,8 @@ class TestPublish(test.BaseTestCase):
         class Matcher(object):
             @staticmethod
             def __eq__(data):
-                for i, sample in enumerate(data):
-                    if sample['counter_name'] != self.test_data[i].name:
+                for i, sample_item in enumerate(data):
+                    if sample_item['counter_name'] != self.test_data[i].name:
                         return False
                 return True
 
@@ -168,9 +167,7 @@ class TestPublish(test.BaseTestCase):
             self.assertEqual(expected, prepare.mock_calls)
 
     def test_published_concurrency(self):
-        """This test the concurrent access to the local queue
-        of the rpc publisher
-        """
+        """Test concurrent access to the local queue of the rpc publisher."""
 
         publisher = rpc.RPCPublisher(network_utils.urlsplit('rpc://'))
         cast_context = mock.MagicMock()

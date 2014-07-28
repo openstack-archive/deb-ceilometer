@@ -17,7 +17,6 @@ Tests for VMware Vsphere inspector.
 """
 
 import mock
-
 from oslo.vmware import api
 
 from ceilometer.compute.virt import inspector as virt_inspector
@@ -31,7 +30,6 @@ class TestVsphereInspection(test.BaseTestCase):
         api_session = api.VMwareAPISession("test_server", "test_user",
                                            "test_password", 0, None,
                                            create_session=False)
-        api_session._vim = mock.MagicMock()
         vsphere_inspector.get_api_session = mock.Mock(
             return_value=api_session)
         self._inspector = vsphere_inspector.VsphereInspector()
@@ -53,10 +51,10 @@ class TestVsphereInspection(test.BaseTestCase):
 
         fake_instance = construct_mock_instance_object(fake_instance_id)
         self._inspector._ops.get_vm_moid.return_value = fake_instance_moid
-        self._inspector._ops.get_perf_counter_id.return_value = \
-            fake_perf_counter_id
-        self._inspector._ops.query_vm_aggregate_stats.return_value = \
-            fake_memory_value
+        (self._inspector._ops.
+         get_perf_counter_id.return_value) = fake_perf_counter_id
+        (self._inspector._ops.query_vm_aggregate_stats.
+         return_value) = fake_memory_value
         memory_stat = self._inspector.inspect_memory_usage(fake_instance)
         self.assertEqual(fake_stat, memory_stat)
 
@@ -74,10 +72,10 @@ class TestVsphereInspection(test.BaseTestCase):
 
         fake_instance = construct_mock_instance_object(fake_instance_id)
         self._inspector._ops.get_vm_moid.return_value = fake_instance_moid
-        self._inspector._ops.get_perf_counter_id.return_value = \
-            fake_perf_counter_id
-        self._inspector._ops.query_vm_aggregate_stats.return_value = \
-            fake_cpu_util_value * 100
+        (self._inspector._ops.get_perf_counter_id.
+         return_value) = fake_perf_counter_id
+        (self._inspector._ops.query_vm_aggregate_stats.
+         return_value) = fake_cpu_util_value * 100
         cpu_util_stat = self._inspector.inspect_cpu_util(fake_instance)
         self.assertEqual(fake_stat, cpu_util_stat)
 
@@ -109,8 +107,7 @@ class TestVsphereInspection(test.BaseTestCase):
         ops_mock = self._inspector._ops
         ops_mock.get_vm_moid.return_value = test_vm_moid
         ops_mock.get_perf_counter_id.side_effect = get_counter_id_side_effect
-        ops_mock.query_vm_device_stats.side_effect = \
-            query_stat_side_effect
+        ops_mock.query_vm_device_stats.side_effect = query_stat_side_effect
         result = self._inspector.inspect_vnic_rates(mock.MagicMock())
 
         # validate result

@@ -17,13 +17,11 @@
 """Tests for Ceilometer notify daemon."""
 
 import mock
-
 from oslo.config import cfg
 import oslo.messaging
 from stevedore import extension
 
 from ceilometer.event import endpoint as event_endpoint
-from ceilometer import messaging
 from ceilometer.openstack.common.fixture import config
 from ceilometer.storage import models
 from ceilometer.tests import base as tests_base
@@ -90,17 +88,20 @@ class TestEventEndpoint(tests_base.BaseTestCase):
         super(TestEventEndpoint, self).setUp()
         self.CONF = self.useFixture(config.Config()).conf
         self.CONF([])
-        messaging.setup('fake://')
-        self.addCleanup(messaging.cleanup)
         self.CONF.set_override("connection", "log://", group='database')
         self.CONF.set_override("store_events", True, group="notification")
+        self.setup_messaging(self.CONF)
 
         self.mock_dispatcher = mock.MagicMock()
         self.endpoint = event_endpoint.EventsNotificationEndpoint()
-        self.endpoint.dispatcher_manager = \
-            extension.ExtensionManager.make_test_instance([
-                extension.Extension('test', None, None, self.mock_dispatcher)
-            ])
+        (self.endpoint.
+         dispatcher_manager) = (extension.ExtensionManager.
+                                make_test_instance([extension.
+                                                    Extension('test', None,
+                                                              None,
+                                                              self.
+                                                              mock_dispatcher)
+                                                    ]))
         self.endpoint.event_converter = mock.MagicMock()
         self.endpoint.event_converter.to_event.return_value = mock.MagicMock(
             event_type='test.test')

@@ -19,9 +19,7 @@ from ceilometer.hardware.inspector import base
 
 
 class InspectorBaseTest(object):
-    """Subclass must set self.inspector and self.host in
-    self.setUp()
-    """
+    """Subclass must set self.inspector and self.host in self.setUp()."""
 
     cpu = [base.CPUStats(cpu_1_min=0.1,
                          cpu_5_min=0.2,
@@ -30,9 +28,9 @@ class InspectorBaseTest(object):
 
     network = [(base.Interface(name='eth0',
                                mac='112233445566',
-                               ip='10.0.0.1'),
-                base.InterfaceStats(bandwidth=1250000 / 8,
-                                    rx_bytes=1000,
+                               ip='10.0.0.1',
+                               speed=1250000 / 8),
+                base.InterfaceStats(rx_bytes=1000,
                                     tx_bytes=2000,
                                     error=1)),
                ]

@@ -75,14 +75,12 @@ class PublishContext(object):
 
 
 class Source(object):
-    """Represents a source of samples, in effect a set of pollsters
-    and/or notification handlers emitting samples for a set of matching
-    meters.
+    """Represents a source of samples.
 
-    Each source encapsulates meter name matching, polling interval
-    determination, optional resource enumeration or discovery, and
-    mapping to one or more sinks for publication.
-
+    In effect it is a set of pollsters and/or notification handlers emitting
+    samples for a set of matching meters. Each source encapsulates meter name
+    matching, polling interval determination, optional resource enumeration or
+    discovery, and mapping to one or more sinks for publication.
     """
 
     def __init__(self, cfg):
@@ -100,7 +98,6 @@ class Source(object):
         except KeyError as err:
             raise PipelineException(
                 "Required field %s not specified" % err.args[0], cfg)
-
         if self.interval <= 0:
             raise PipelineException("Interval value should > 0", cfg)
 
@@ -111,7 +108,6 @@ class Source(object):
         self.discovery = cfg.get('discovery') or []
         if not isinstance(self.discovery, list):
             raise PipelineException("Discovery should be a list", cfg)
-
         self._check_meters()
 
     def __str__(self):
@@ -130,8 +126,8 @@ class Source(object):
         if not meters:
             raise PipelineException("No meter specified", self.cfg)
 
-        if [x for x in meters if x[0] not in '!*'] and \
-           [x for x in meters if x[0] == '!']:
+        if ([x for x in meters if x[0] not in '!*'] and
+           [x for x in meters if x[0] == '!']):
             raise PipelineException(
                 "Both included and excluded meters specified",
                 cfg)
@@ -186,8 +182,9 @@ class Source(object):
 
 
 class Sink(object):
-    """Represents a sink for the transformation and publication of
-    samples emitted from a related source.
+    """Represents a sink for the transformation and publication of samples.
+
+    Samples are emitted from a related source.
 
     Each sink config is concerned *only* with the transformation rules
     and publication conduits for samples.
@@ -209,7 +206,6 @@ class Sink(object):
 
     If no transformers are included in the chain, the publishers are
     passed samples directly from the sink which are published unchanged.
-
     """
 
     def __init__(self, cfg, transformer_manager):
@@ -334,8 +330,7 @@ class Sink(object):
 
 
 class Pipeline(object):
-    """Represents a coupling between a sink and a corresponding source.
-    """
+    """Represents a coupling between a sink and a corresponding source."""
 
     def __init__(self, source, sink):
         self.source = source

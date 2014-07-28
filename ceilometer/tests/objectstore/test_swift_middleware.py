@@ -16,9 +16,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import mock
 import six
 
-import mock
 try:
     # Swift >= 1.7.5
     import swift.common.swob
@@ -27,12 +27,11 @@ except ImportError:
     import webob
     REQUEST = webob
 
-from ceilometer import messaging
 from ceilometer.objectstore import swift_middleware
 from ceilometer.openstack.common.fixture import config
-from ceilometer.openstack.common.fixture.mockpatch import PatchObject
-from ceilometer.openstack.common import test
+from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer import pipeline
+from ceilometer.tests import base as tests_base
 
 
 class FakeApp(object):
@@ -40,16 +39,18 @@ class FakeApp(object):
         self.body = body
 
     def __call__(self, env, start_response):
+        yield
         start_response('200 OK', [
             ('Content-Type', 'text/plain'),
             ('Content-Length', str(sum(map(len, self.body))))
         ])
         while env['wsgi.input'].read(5):
             pass
-        return self.body
+        for line in self.body:
+            yield line
 
 
-class TestSwiftMiddleware(test.BaseTestCase):
+class TestSwiftMiddleware(tests_base.BaseTestCase):
 
     class _faux_pipeline_manager(pipeline.PipelineManager):
         class _faux_pipeline(object):
@@ -72,19 +73,15 @@ class TestSwiftMiddleware(test.BaseTestCase):
     def setUp(self):
         super(TestSwiftMiddleware, self).setUp()
         self.pipeline_manager = self._faux_pipeline_manager()
-        self.useFixture(PatchObject(pipeline, 'setup_pipeline',
-                                    side_effect=self._fake_setup_pipeline))
-        messaging.setup('fake://')
-        self.addCleanup(messaging.cleanup)
+        self.useFixture(mockpatch.PatchObject(
+            pipeline, 'setup_pipeline',
+            side_effect=self._fake_setup_pipeline))
         self.CONF = self.useFixture(config.Config()).conf
+        self.setup_messaging(self.CONF)
 
     @staticmethod
     def start_response(*args):
             pass
-
-    def test_rpc_setup(self):
-        swift_middleware.CeilometerMiddleware(FakeApp(), {})
-        self.assertEqual('ceilometer', self.CONF.control_exchange)
 
     def test_get(self):
         app = swift_middleware.CeilometerMiddleware(FakeApp(), {})

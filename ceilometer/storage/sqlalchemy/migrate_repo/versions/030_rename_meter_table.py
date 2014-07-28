@@ -37,16 +37,16 @@ def _handle_meter_indices(meta, downgrade=False):
 
     fk_params = [({'columns': [meter.c.resource_id],
                    'refcolumns': [resource.c.id]},
-                 'fk_meter_resource_id',
-                 'fk_sample_resource_id'),
+                  'fk_meter_resource_id',
+                  'fk_sample_resource_id'),
                  ({'columns': [meter.c.project_id],
                    'refcolumns': [project.c.id]},
-                 'fk_meter_project_id',
-                 'fk_sample_project_id'),
+                  'fk_meter_project_id',
+                  'fk_sample_project_id'),
                  ({'columns': [meter.c.user_id],
                    'refcolumns': [user.c.id]},
-                 'fk_meter_user_id',
-                 'fk_sample_user_id')]
+                  'fk_meter_user_id',
+                  'fk_sample_user_id')]
 
     for fk in fk_params:
         params = fk[0]
@@ -105,7 +105,7 @@ def upgrade(migrate_engine):
     _alter_sourceassoc(meta, 'meter', 'idx_sm')
     sourceassoc = sa.Table('sourceassoc', meta, autoload=True)
     sourceassoc.c.meter_id.alter(name='sample_id')
-    #re-bind metadata to pick up alter name change
+    # re-bind metadata to pick up alter name change
     meta = sa.MetaData(bind=migrate_engine)
     _alter_sourceassoc(meta, 'sample', 'idx_ss', True)
 

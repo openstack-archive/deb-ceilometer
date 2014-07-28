@@ -18,8 +18,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""MongoDB storage backend
-"""
+"""MongoDB storage backend"""
 
 import calendar
 import copy
@@ -30,15 +29,15 @@ import uuid
 
 import bson.code
 import bson.objectid
-import pymongo
-
 from oslo.config import cfg
+import pymongo
 
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
+from ceilometer.storage.mongo import utils as pymongo_utils
 from ceilometer.storage import pymongo_base
 from ceilometer import utils
 
@@ -85,7 +84,7 @@ class Connection(pymongo_base.Connection):
 
     CAPABILITIES = utils.update_nested(pymongo_base.Connection.CAPABILITIES,
                                        AVAILABLE_CAPABILITIES)
-    CONNECTION_POOL = pymongo_base.ConnectionPool()
+    CONNECTION_POOL = pymongo_utils.ConnectionPool()
 
     REDUCE_GROUP_CLEAN = bson.code.Code("""
     function ( curr, result ) {
@@ -535,11 +534,10 @@ class Connection(pymongo_base.Connection):
         self.db.meter.insert(record)
 
     def clear_expired_metering_data(self, ttl):
-        """Clear expired data from the backend storage system according to the
-        time-to-live.
+        """Clear expired data from the backend storage system.
 
+        Clearing occurs according to the time-to-live.
         :param ttl: Number of seconds to keep records for.
-
         """
         results = self.db.meter.group(
             key={},
@@ -606,14 +604,15 @@ class Connection(pymongo_base.Connection):
             sort_criteria_list = []
 
             for i in range(len(sort_keys)):
-                #NOTE(fengqian): Generate the query criteria recursively.
-                #sort_keys=[k1, k2, k3], maker_value=[v1, v2, v3]
-                #sort_flags = ['$lt', '$gt', 'lt'].
-                #The query criteria should be
-                #{'k3': {'$lt': 'v3'}, 'k2': {'eq': 'v2'}, 'k1': {'eq': 'v1'}},
-                #{'k2': {'$gt': 'v2'}, 'k1': {'eq': 'v1'}},
-                #{'k1': {'$lt': 'v1'}} with 'OR' operation.
-                #Each recurse will generate one items of three.
+                # NOTE(fengqian): Generate the query criteria recursively.
+                # sort_keys=[k1, k2, k3], maker_value=[v1, v2, v3]
+                # sort_flags = ['$lt', '$gt', 'lt'].
+                # The query criteria should be
+                # {'k3': {'$lt': 'v3'}, 'k2': {'eq': 'v2'}, 'k1':
+                #     {'eq': 'v1'}},
+                # {'k2': {'$gt': 'v2'}, 'k1': {'eq': 'v1'}},
+                # {'k1': {'$lt': 'v1'}} with 'OR' operation.
+                # Each recurse will generate one items of three.
                 sort_criteria_list.append(cls._recurse_sort_keys(
                                           sort_keys[:(len(sort_keys) - i)],
                                           marker, _op))
@@ -654,6 +653,7 @@ class Connection(pymongo_base.Connection):
         Pagination works by requiring sort_key and sort_dir.
         We use the last item in previous page as the 'marker' for pagination.
         So we return values that follow the passed marker in the order.
+
         :param q: the query dict passed in.
         :param db_collection: Database collection that be query.
         :param limit: maximum number of items to return.
@@ -661,7 +661,8 @@ class Connection(pymongo_base.Connection):
                        results after this item.
         :param sort_keys: array of attributes by which results be sorted.
         :param sort_dir: direction in which results be sorted (asc, desc).
-        return: The query with sorting/pagination added.
+
+        :return: The query with sorting/pagination added.
         """
 
         sort_keys = sort_keys or []
@@ -670,9 +671,9 @@ class Connection(pymongo_base.Connection):
                                                     sort_dir)
         q.update(query)
 
-        #NOTE(Fengqian):MongoDB collection.find can not handle limit
-        #when it equals None, it will raise TypeError, so we treate
-        #None as 0 for the value of limit.
+        # NOTE(Fengqian): MongoDB collection.find can not handle limit
+        # when it equals None, it will raise TypeError, so we treat
+        # None as 0 for the value of limit.
         if limit is None:
             limit = 0
         return db_collection.find(q, limit=limit, sort=all_sort)
@@ -681,9 +682,9 @@ class Connection(pymongo_base.Connection):
                                         start_timestamp, start_timestamp_op,
                                         end_timestamp, end_timestamp_op,
                                         metaquery, resource):
-        """Return an iterable of models.Resource instances constrained
-           by sample timestamp.
+        """Return an iterable of models.Resource instances
 
+        Items are constrained by sample timestamp.
         :param query: project/user/source query
         :param start_timestamp: modified timestamp start range.
         :param start_timestamp_op: start time operator, like gt, ge.
@@ -706,10 +707,10 @@ class Connection(pymongo_base.Connection):
         # Look for resources matching the above criteria and with
         # samples in the time range we care about, then change the
         # resource query to return just those resources by id.
-        ts_range = pymongo_base.make_timestamp_range(start_timestamp,
-                                                     end_timestamp,
-                                                     start_timestamp_op,
-                                                     end_timestamp_op)
+        ts_range = pymongo_utils.make_timestamp_range(start_timestamp,
+                                                      end_timestamp,
+                                                      start_timestamp_op,
+                                                      end_timestamp_op)
         if ts_range:
             query['timestamp'] = ts_range
 
@@ -741,9 +742,9 @@ class Connection(pymongo_base.Connection):
             self.db[out].drop()
 
     def _get_floating_resources(self, query, metaquery, resource):
-        """Return an iterable of models.Resource instances unconstrained
-           by timestamp.
+        """Return an iterable of models.Resource instances
 
+        Items are unconstrained by timestamp.
         :param query: project/user/source query
         :param metaquery: dict with metadata to match on.
         :param resource: resource filter.
@@ -842,18 +843,17 @@ class Connection(pymongo_base.Connection):
 
     def get_meter_statistics(self, sample_filter, period=None, groupby=None,
                              aggregate=None):
-        """Return an iterable of models.Statistics instance containing meter
-        statistics described by the query parameters.
+        """Return an iterable of models.Statistics instance.
 
-        The filter must have a meter value set.
-
+        Items are containing meter statistics described by the query
+        parameters. The filter must have a meter value set.
         """
         if (groupby and
                 set(groupby) - set(['user_id', 'project_id',
                                     'resource_id', 'source'])):
             raise NotImplementedError("Unable to group by these fields")
 
-        q = pymongo_base.make_query_from_filter(sample_filter)
+        q = pymongo_utils.make_query_from_filter(sample_filter)
 
         if period:
             if sample_filter.start:

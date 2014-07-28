@@ -24,18 +24,18 @@ import mock
 
 from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer.openstack.common import timeutils
-from ceilometer.tests.api.v2 import FunctionalTest
+from ceilometer.tests.api import v2
 from ceilometer.tests import db as tests_db
 
 
-class TestPostSamples(FunctionalTest,
+class TestPostSamples(v2.FunctionalTest,
                       tests_db.MixinTestsWithBackendScenarios):
     def fake_cast(self, ctxt, target, data):
         for m in data:
             del m['message_signature']
         self.published.append(data)
 
-    def fake_get_rpc_client(self, **kwargs):
+    def fake_get_rpc_client(self, *args, **kwargs):
         cast_ctxt = mock.Mock()
         cast_ctxt.cast.side_effect = self.fake_cast
         client = mock.Mock()
@@ -166,6 +166,7 @@ class TestPostSamples(FunctionalTest,
 
     def test_multiple_samples(self):
         """Send multiple samples.
+
         The usecase here is to reduce the chatter and send the counters
         at a slower cadence.
         """
@@ -269,8 +270,10 @@ class TestPostSamples(FunctionalTest,
             self.assertEqual(s, self.published[0][x])
 
     def test_multiple_samples_multiple_sources(self):
-        """Do accept a single post with some multiples sources
-        with some of them null
+        """Test posting with special conditions.
+
+        Do accept a single post with some multiples sources with some of them
+        null.
         """
         s1 = [{'counter_name': 'my_counter_name',
                'counter_type': 'gauge',
@@ -317,8 +320,7 @@ class TestPostSamples(FunctionalTest,
             self.assertEqual(s, self.published[0][x])
 
     def test_missing_project_user_id(self):
-        """Ensure missing project & user IDs are defaulted appropriately.
-        """
+        """Ensure missing project & user IDs are defaulted appropriately."""
         s1 = [{'counter_name': 'my_counter_name',
                'counter_type': 'gauge',
                'counter_unit': 'instance',

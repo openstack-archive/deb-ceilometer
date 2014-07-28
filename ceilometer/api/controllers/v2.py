@@ -44,6 +44,7 @@ import wsme
 from wsme import types as wtypes
 import wsmeext.pecan as wsme_pecan
 
+from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.api import acl
 from ceilometer import messaging
 from ceilometer.openstack.common import context
@@ -88,8 +89,7 @@ class EntityNotFound(ClientSideError):
 
 
 class AdvEnum(wtypes.wsproperty):
-    """Handle default and mandatory for wtypes.Enum
-    """
+    """Handle default and mandatory for wtypes.Enum."""
     def __init__(self, name, *args, **kwargs):
         self._name = '_advenum_%s' % name
         self._default = kwargs.pop('default', None)
@@ -145,8 +145,7 @@ class _Base(wtypes.Base):
 
 
 class Link(_Base):
-    """A link representation
-    """
+    """A link representation."""
 
     href = wtypes.text
     "The url of a link"
@@ -164,8 +163,7 @@ class Link(_Base):
 
 
 class Query(_Base):
-    """Query filter.
-    """
+    """Query filter."""
 
     # The data types supported by the query.
     _supported_types = ['integer', 'float', 'string', 'boolean']
@@ -189,7 +187,7 @@ class Query(_Base):
     field = wtypes.text
     "The name of the field to test"
 
-    #op = wsme.wsattr(operation_kind, default='eq')
+    # op = wsme.wsattr(operation_kind, default='eq')
     # this ^ doesn't seem to work.
     op = wsme.wsproperty(operation_kind, get_op, set_op)
     "The comparison operator. Defaults to 'eq'."
@@ -253,19 +251,19 @@ class Query(_Base):
                     raise TypeError()
                 converted_value = self._type_converters[type](self.value)
         except ValueError:
-            msg = _('Unable to convert the value %(value)s'
-                    ' to the expected data type %(type)s.') % \
-                {'value': self.value, 'type': type}
+            msg = (_('Unable to convert the value %(value)s'
+                     ' to the expected data type %(type)s.') %
+                   {'value': self.value, 'type': type})
             raise ClientSideError(msg)
         except TypeError:
-            msg = _('The data type %(type)s is not supported. The supported'
-                    ' data type list is: %(supported)s') % \
-                {'type': type, 'supported': self._supported_types}
+            msg = (_('The data type %(type)s is not supported. The supported'
+                     ' data type list is: %(supported)s') %
+                   {'type': type, 'supported': self._supported_types})
             raise ClientSideError(msg)
         except Exception:
-            msg = _('Unexpected exception converting %(value)s to'
-                    ' the expected data type %(type)s.') % \
-                {'value': self.value, 'type': type}
+            msg = (_('Unexpected exception converting %(value)s to'
+                     ' the expected data type %(type)s.') %
+                   {'value': self.value, 'type': type})
             raise ClientSideError(msg)
         return converted_value
 
@@ -298,11 +296,12 @@ def _get_auth_project(on_behalf_of=None):
 
 
 def _sanitize_query(query, db_func, on_behalf_of=None):
-    '''Check the query to see if:
+    """Check the query.
+
+    See if:
     1) the request is coming from admin - then allow full visibility
-    2) non-admin - make sure that the query includes the requester's
-    project.
-    '''
+    2) non-admin - make sure that the query includes the requester's project.
+    """
     q = copy.copy(query)
 
     auth_project = _get_auth_project(on_behalf_of)
@@ -321,7 +320,7 @@ def _sanitize_query(query, db_func, on_behalf_of=None):
 
 
 def _verify_query_segregation(query, auth_project=None):
-    '''Ensure non-admin queries are not constrained to another project.'''
+    """Ensure non-admin queries are not constrained to another project."""
     auth_project = (auth_project or
                     acl.get_limited_to_project(pecan.request.headers))
 
@@ -335,9 +334,10 @@ def _verify_query_segregation(query, auth_project=None):
 
 def _validate_query(query, db_func, internal_keys=None,
                     allow_timestamps=True):
-    """Validates the syntax of the query and verifies that the query
-    request is authorized for the included project.
+    """Validates the syntax of the query and verifies the query.
 
+    Verification check if the query request is authorized for the included
+    project.
     :param query: Query expression that should be validated
     :param db_func: the function on the storage level, of which arguments
         will form the valid_keys list, which defines the valid fields for a
@@ -354,7 +354,6 @@ def _validate_query(query, db_func, internal_keys=None,
         search_offset was included without timestamp constraint
     :raises: UnknownArgument: if a field name is not a timestamp field, nor
         in the list of valid keys
-
     """
 
     internal_keys = internal_keys or []
@@ -373,7 +372,7 @@ def _validate_query(query, db_func, internal_keys=None,
                                                      allow_timestamps)
     has_search_offset_query = _validate_timestamp_fields(query,
                                                          'search_offset',
-                                                         ('eq'),
+                                                         'eq',
                                                          allow_timestamps)
 
     if has_search_offset_query and not has_timestamp_query:
@@ -389,7 +388,7 @@ def _validate_query(query, db_func, internal_keys=None,
         if i.field not in ('timestamp', 'search_offset'):
             key = translation.get(i.field, i.field)
             operator = i.op
-            if (key in valid_keys or _is_field_metadata(i.field)):
+            if key in valid_keys or _is_field_metadata(i.field):
                 if operator == 'eq':
                     if key == 'enabled':
                         i._get_value_as_type('boolean')
@@ -407,8 +406,7 @@ def _validate_query(query, db_func, internal_keys=None,
 
 def _validate_timestamp_fields(query, field_name, operator_list,
                                allow_timestamps):
-    """Validates the timestamp related constraints in a query expression, if
-    there are any.
+    """Validates the timestamp related constraints in a query if there are any.
 
     :param query: query expression that may contain the timestamp fields
     :param field_name: timestamp name, which should be checked (timestamp,
@@ -428,14 +426,13 @@ def _validate_timestamp_fields(query, field_name, operator_list,
         field
     :raises UnknownArgument: if the timestamp constraint is not allowed in
         the query
-
     """
 
     for item in query:
         if item.field == field_name:
-            #If *timestamp* or *search_offset* field was specified in the
-            #query, but timestamp is not supported on that resource, on
-            #which the query was invoked, then raise an exception.
+            # If *timestamp* or *search_offset* field was specified in the
+            # query, but timestamp is not supported on that resource, on
+            # which the query was invoked, then raise an exception.
             if not allow_timestamps:
                 raise wsme.exc.UnknownArgument(field_name,
                                                "not valid for " +
@@ -503,9 +500,9 @@ def _query_to_kwargs(query, db_func, internal_keys=None,
 
 
 def _validate_groupby_fields(groupby_fields):
-    """Checks that the list of groupby fields from request is valid and
-    if all fields are valid, returns fields with duplicates removed
+    """Checks that the list of groupby fields from request is valid.
 
+    If all fields are valid, returns fields with duplicates removed.
     """
     # NOTE(terriyu): Currently, metadata fields are not supported in our
     # group by statistics implementation
@@ -573,9 +570,10 @@ def _get_query_timestamps(args=None):
 
 
 def _flatten_metadata(metadata):
-    """Return flattened resource metadata with flattened nested
-    structures (except nested sets) and with all values converted
-    to unicode strings.
+    """Return flattened resource metadata.
+
+    Metadata is returned with flattened nested structures (except nested sets)
+    and with all values converted to unicode strings.
     """
     if metadata:
         # After changing recursive_keypairs` output we need to keep
@@ -597,14 +595,15 @@ def _make_link(rel_name, url, type, type_arg, query=None):
     if query:
         query_str = '?q.field=%s&q.value=%s' % (query['field'],
                                                 query['value'])
-    return Link(href=('%s/v2/%s/%s%s') % (url, type, type_arg, query_str),
+    return Link(href='%s/v2/%s/%s%s' % (url, type, type_arg, query_str),
                 rel=rel_name)
 
 
 def _send_notification(event, payload):
     notification = event.replace(" ", "_")
     notification = "alarm.%s" % notification
-    notifier = messaging.get_notifier(publisher_id="ceilometer.api")
+    transport = messaging.get_transport()
+    notifier = messaging.get_notifier(transport, publisher_id="ceilometer.api")
     # FIXME(sileht): perhaps we need to copy some infos from the
     # pecan request headers like nova does
     notifier.info(context.RequestContext(), notification, payload)
@@ -691,8 +690,7 @@ class OldSample(_Base):
 
 
 class Statistics(_Base):
-    """Computed statistics for a query.
-    """
+    """Computed statistics for a query."""
 
     groupby = {wtypes.text: wtypes.text}
     "Dictionary of field names for group, if groupby statistics are requested"
@@ -810,8 +808,7 @@ class Aggregate(_Base):
 
 
 class MeterController(rest.RestController):
-    """Manages operations on a single meter.
-    """
+    """Manages operations on a single meter."""
     _custom_actions = {
         'statistics': ['GET'],
     }
@@ -942,8 +939,7 @@ class MeterController(rest.RestController):
 
 
 class Meter(_Base):
-    """One category of measurements.
-    """
+    """One category of measurements."""
 
     name = wtypes.text
     "The unique name for the meter"
@@ -970,8 +966,10 @@ class Meter(_Base):
     "The unique identifier for the meter"
 
     def __init__(self, **kwargs):
-        meter_id = base64.encodestring('%s+%s' % (kwargs['resource_id'],
-                                                  kwargs['name']))
+        meter_id = '%s+%s' % (kwargs['resource_id'], kwargs['name'])
+        # meter_id is of type Unicode but base64.encodestring() only accepts
+        # strings. See bug #1333177
+        meter_id = base64.encodestring(meter_id.encode('utf-8'))
         kwargs['meter_id'] = meter_id
         super(Meter, self).__init__(**kwargs)
 
@@ -1002,7 +1000,7 @@ class MetersController(rest.RestController):
         """
         q = q or []
 
-        #Timestamp field is not supported for Meter queries
+        # Timestamp field is not supported for Meter queries
         kwargs = _query_to_kwargs(q, pecan.request.storage_conn.get_meters,
                                   allow_timestamps=False)
         return [Meter.from_db_model(m)
@@ -1267,8 +1265,7 @@ class ValidatedComplexQuery(object):
         self.original_query = query
 
     def validate(self, visibility_field):
-        """Validates the query content and does the necessary transformations.
-        """
+        """Validates the query content and does the necessary conversions."""
         if self.original_query.filter is wtypes.Unset:
             self.filter_expr = None
         else:
@@ -1318,8 +1315,7 @@ class ValidatedComplexQuery(object):
 
     def _check_cross_project_references(self, own_project_id,
                                         visibility_field):
-        """Do not allow other than own_project_id
-        """
+        """Do not allow other than own_project_id."""
         def check_project_id(subfilter):
             op = subfilter.keys()[0]
             if (op.lower() not in self.complex_operators
@@ -1330,8 +1326,10 @@ class ValidatedComplexQuery(object):
         self._traverse_postorder(self.filter_expr, check_project_id)
 
     def _force_visibility(self, visibility_field):
-        """If the tenant is not admin insert an extra
-        "and <visibility_field>=<tenant's project_id>" clause to the query
+        """Force visibility field.
+
+        If the tenant is not admin insert an extra
+        "and <visibility_field>=<tenant's project_id>" clause to the query.
         """
         authorized_project = acl.get_limited_to_project(pecan.request.headers)
         is_admin = authorized_project is None
@@ -1398,8 +1396,7 @@ class ValidatedComplexQuery(object):
 
 
 class Resource(_Base):
-    """An externally defined object for which samples have been received.
-    """
+    """An externally defined object for which samples have been received."""
 
     resource_id = wtypes.text
     "The unique identifier for the resource"
@@ -1457,8 +1454,8 @@ class ResourcesController(rest.RestController):
         links = [_make_link('self', pecan.request.host_url, 'resources',
                             resource_id)]
         if meter_links:
-            for meter in pecan.request.storage_conn.get_meters(resource=
-                                                               resource_id):
+            for meter in pecan.request.storage_conn.get_meters(
+                    resource=resource_id):
                 query = {'field': 'resource_id', 'value': resource_id}
                 links.append(_make_link(meter.name, pecan.request.host_url,
                                         'meters', meter.name, query=query))
@@ -1499,8 +1496,8 @@ class AlarmThresholdRule(_Base):
     meter_name = wsme.wsattr(wtypes.text, mandatory=True)
     "The name of the meter"
 
-    #FIXME(sileht): default doesn't work
-    #workaround: default is set in validate method
+    # FIXME(sileht): default doesn't work
+    # workaround: default is set in validate method
     query = wsme.wsattr([Query], default=[])
     """The query to find the data for computing statistics.
     Ownership settings are automatically included based on the Alarm owner.
@@ -1534,29 +1531,28 @@ class AlarmThresholdRule(_Base):
 
     @staticmethod
     def validate(threshold_rule):
-        #note(sileht): wsme default doesn't work in some case
-        #workaround for https://bugs.launchpad.net/wsme/+bug/1227039
+        # note(sileht): wsme default doesn't work in some case
+        # workaround for https://bugs.launchpad.net/wsme/+bug/1227039
         if not threshold_rule.query:
             threshold_rule.query = []
 
-        #Timestamp is not allowed for AlarmThresholdRule query, as the alarm
-        #evaluator will construct timestamp bounds for the sequence of
-        #statistics queries as the sliding evaluation window advances
-        #over time.
+        # Timestamp is not allowed for AlarmThresholdRule query, as the alarm
+        # evaluator will construct timestamp bounds for the sequence of
+        # statistics queries as the sliding evaluation window advances
+        # over time.
         _validate_query(threshold_rule.query, storage.SampleFilter.__init__,
                         allow_timestamps=False)
         return threshold_rule
 
     @property
     def default_description(self):
-        return _(
-            'Alarm when %(meter_name)s is %(comparison_operator)s a '
-            '%(statistic)s of %(threshold)s over %(period)s seconds') % \
-            dict(comparison_operator=self.comparison_operator,
-                 statistic=self.statistic,
-                 threshold=self.threshold,
-                 meter_name=self.meter_name,
-                 period=self.period)
+        return (_('Alarm when %(meter_name)s is %(comparison_operator)s a '
+                  '%(statistic)s of %(threshold)s over %(period)s seconds') %
+                dict(comparison_operator=self.comparison_operator,
+                     statistic=self.statistic,
+                     threshold=self.threshold,
+                     meter_name=self.meter_name,
+                     period=self.period))
 
     def as_dict(self):
         rule = self.as_dict_from_keys(['period', 'comparison_operator',
@@ -1620,8 +1616,8 @@ class AlarmTimeConstraint(_Base):
 
     def get_description(self):
         if not self._description:
-            return 'Time constraint at %s lasting for %s seconds' \
-                   % (self.start, self.duration)
+            return ('Time constraint at %s lasting for %s seconds'
+                    % (self.start, self.duration))
         return self._description
 
     def set_description(self, value):
@@ -1768,7 +1764,7 @@ class Alarm(_Base):
                                         if alarm.project_id != wtypes.Unset
                                         else None)
             for id in alarm.combination_rule.alarm_ids:
-                alarms = list(pecan.request.storage_conn.get_alarms(
+                alarms = list(pecan.request.alarm_storage_conn.get_alarms(
                     alarm_id=id, project=project))
                 if not alarms:
                     raise EntityNotFound(_('Alarm'), id)
@@ -1825,8 +1821,7 @@ class Alarm(_Base):
 
 
 class AlarmChange(_Base):
-    """Representation of an event in an alarm's history
-    """
+    """Representation of an event in an alarm's history."""
 
     event_id = wtypes.text
     "The UUID of the change event"
@@ -1869,8 +1864,7 @@ class AlarmChange(_Base):
 
 
 class AlarmController(rest.RestController):
-    """Manages operations on a single alarm.
-    """
+    """Manages operations on a single alarm."""
 
     _custom_actions = {
         'history': ['GET'],
@@ -1882,7 +1876,7 @@ class AlarmController(rest.RestController):
         self._id = alarm_id
 
     def _alarm(self):
-        self.conn = pecan.request.storage_conn
+        self.conn = pecan.request.alarm_storage_conn
         auth_project = acl.get_limited_to_project(pecan.request.headers)
         alarms = list(self.conn.get_alarms(alarm_id=self._id,
                                            project=auth_project))
@@ -1893,7 +1887,7 @@ class AlarmController(rest.RestController):
     def _record_change(self, data, now, on_behalf_of=None, type=None):
         if not cfg.CONF.alarm.record_history:
             return
-        type = type or storage.models.AlarmChange.RULE_CHANGE
+        type = type or alarm_models.AlarmChange.RULE_CHANGE
         scrubbed_data = utils.stringify_timestamps(data)
         detail = json.dumps(scrubbed_data)
         user_id = pecan.request.headers.get('X-User-Id')
@@ -1919,8 +1913,7 @@ class AlarmController(rest.RestController):
 
     @wsme_pecan.wsexpose(Alarm)
     def get(self):
-        """Return this alarm.
-        """
+        """Return this alarm."""
         return Alarm.from_db_model(self._alarm())
 
     @wsme_pecan.wsexpose(Alarm, body=Alarm)
@@ -1966,10 +1959,10 @@ class AlarmController(rest.RestController):
                 raise ClientSideError(_('Cannot specify alarm %s itself in '
                                         'combination rule') % self._id)
 
-        old_alarm = Alarm.from_db_model(alarm_in).as_dict(storage.models.Alarm)
-        updated_alarm = data.as_dict(storage.models.Alarm)
+        old_alarm = Alarm.from_db_model(alarm_in).as_dict(alarm_models.Alarm)
+        updated_alarm = data.as_dict(alarm_models.Alarm)
         try:
-            alarm_in = storage.models.Alarm(**updated_alarm)
+            alarm_in = alarm_models.Alarm(**updated_alarm)
         except Exception:
             LOG.exception(_("Error while putting alarm: %s") % updated_alarm)
             raise ClientSideError(_("Alarm incorrect"))
@@ -1984,15 +1977,14 @@ class AlarmController(rest.RestController):
 
     @wsme_pecan.wsexpose(None, status_code=204)
     def delete(self):
-        """Delete this alarm.
-        """
+        """Delete this alarm."""
         # ensure alarm exists before deleting
         alarm = self._alarm()
         self.conn.delete_alarm(alarm.alarm_id)
-        change = Alarm.from_db_model(alarm).as_dict(storage.models.Alarm)
+        change = Alarm.from_db_model(alarm).as_dict(alarm_models.Alarm)
         self._record_change(change,
                             timeutils.utcnow(),
-                            type=storage.models.AlarmChange.DELETION)
+                            type=alarm_models.AlarmChange.DELETION)
 
     # TODO(eglynn): add pagination marker to signature once overall
     #               API support for pagination is finalized
@@ -2007,7 +1999,7 @@ class AlarmController(rest.RestController):
         # returned to those carried out on behalf of the auth'd tenant, to
         # avoid inappropriate cross-tenant visibility of alarm history
         auth_project = acl.get_limited_to_project(pecan.request.headers)
-        conn = pecan.request.storage_conn
+        conn = pecan.request.alarm_storage_conn
         kwargs = _query_to_kwargs(q, conn.get_alarm_changes, ['on_behalf_of',
                                                               'alarm_id'])
         return [AlarmChange.from_db_model(ac)
@@ -2032,20 +2024,18 @@ class AlarmController(rest.RestController):
         alarm = self.conn.update_alarm(alarm)
         change = {'state': alarm.state}
         self._record_change(change, now, on_behalf_of=alarm.project_id,
-                            type=storage.models.AlarmChange.STATE_TRANSITION)
+                            type=alarm_models.AlarmChange.STATE_TRANSITION)
         return alarm.state
 
     @wsme_pecan.wsexpose(state_kind_enum)
     def get_state(self):
-        """Get the state of this alarm.
-        """
+        """Get the state of this alarm."""
         alarm = self._alarm()
         return alarm.state
 
 
 class AlarmsController(rest.RestController):
-    """Manages operations on the alarms collection.
-    """
+    """Manages operations on the alarms collection."""
 
     @pecan.expose()
     def _lookup(self, alarm_id, *remainder):
@@ -2054,7 +2044,7 @@ class AlarmsController(rest.RestController):
     def _record_creation(self, conn, data, alarm_id, now):
         if not cfg.CONF.alarm.record_history:
             return
-        type = storage.models.AlarmChange.CREATION
+        type = alarm_models.AlarmChange.CREATION
         scrubbed_data = utils.stringify_timestamps(data)
         detail = json.dumps(scrubbed_data)
         user_id = pecan.request.headers.get('X-User-Id')
@@ -2083,7 +2073,7 @@ class AlarmsController(rest.RestController):
 
         :param data: an alarm within the request body.
         """
-        conn = pecan.request.storage_conn
+        conn = pecan.request.alarm_storage_conn
         now = timeutils.utcnow()
 
         data.alarm_id = str(uuid.uuid4())
@@ -2108,7 +2098,7 @@ class AlarmsController(rest.RestController):
         data.timestamp = now
         data.state_timestamp = now
 
-        change = data.as_dict(storage.models.Alarm)
+        change = data.as_dict(alarm_models.Alarm)
 
         # make sure alarms are unique by name per project.
         alarms = list(conn.get_alarms(name=data.name,
@@ -2119,7 +2109,7 @@ class AlarmsController(rest.RestController):
                 status_code=409)
 
         try:
-            alarm_in = storage.models.Alarm(**change)
+            alarm_in = alarm_models.Alarm(**change)
         except Exception:
             LOG.exception(_("Error while posting alarm: %s") % change)
             raise ClientSideError(_("Alarm incorrect"))
@@ -2135,12 +2125,12 @@ class AlarmsController(rest.RestController):
         :param q: Filter rules for the alarms to be returned.
         """
         q = q or []
-        #Timestamp is not supported field for Simple Alarm queries
+        # Timestamp is not supported field for Simple Alarm queries
         kwargs = _query_to_kwargs(q,
-                                  pecan.request.storage_conn.get_alarms,
+                                  pecan.request.alarm_storage_conn.get_alarms,
                                   allow_timestamps=False)
         return [Alarm.from_db_model(m)
-                for m in pecan.request.storage_conn.get_alarms(**kwargs)]
+                for m in pecan.request.alarm_storage_conn.get_alarms(**kwargs)]
 
 
 class TraitDescription(_Base):
@@ -2187,6 +2177,20 @@ class Trait(_Base):
     type = wtypes.text
     "the type of the trait (string, integer, float or datetime)"
 
+    @staticmethod
+    def _convert_storage_trait(trait):
+        """Helper method to convert a storage model into an API trait instance.
+
+        If an API trait instance is passed in, just return it.
+        """
+        if isinstance(trait, Trait):
+            return trait
+        value = (six.text_type(trait.value)
+                 if not trait.dtype == storage.models.Trait.DATETIME_TYPE
+                 else trait.value.isoformat())
+        trait_type = storage.models.Trait.get_name_by_type(trait.dtype)
+        return Trait(name=trait.name, type=trait_type, value=value)
+
     @classmethod
     def sample(cls):
         return cls(name='service',
@@ -2209,21 +2213,8 @@ class Event(_Base):
     def get_traits(self):
         return self._traits
 
-    @staticmethod
-    def _convert_storage_trait(t):
-        """Helper method to convert a storage model into an API trait
-        instance. If an API trait instance is passed in, just return it.
-        """
-        if isinstance(t, Trait):
-            return t
-        value = (six.text_type(t.value)
-                 if not t.dtype == storage.models.Trait.DATETIME_TYPE
-                 else t.value.isoformat())
-        type = storage.models.Trait.get_name_by_type(t.dtype)
-        return Trait(name=t.name, type=type, value=value)
-
     def set_traits(self, traits):
-        self._traits = map(self._convert_storage_trait, traits)
+        self._traits = map(Trait._convert_storage_trait, traits)
 
     traits = wsme.wsproperty(wtypes.ArrayType(Trait),
                              get_traits,
@@ -2295,7 +2286,7 @@ class TraitsController(rest.RestController):
         :param trait_name: Trait to return values for
         """
         LOG.debug(_("Getting traits for %s") % event_type)
-        return [Trait(name=t.name, type=t.get_type_name(), value=t.value)
+        return [Trait._convert_storage_trait(t)
                 for t in pecan.request.storage_conn
                 .get_traits(event_type, trait_name)]
 
@@ -2325,8 +2316,7 @@ class EventTypesController(rest.RestController):
     @requires_admin
     @wsme_pecan.wsexpose([unicode])
     def get_all(self):
-        """Get all event types.
-        """
+        """Get all event types."""
         return list(pecan.request.storage_conn.get_event_types())
 
 
@@ -2357,7 +2347,8 @@ class EventsController(rest.RestController):
         :param message_id: Message ID of the Event to be returned
         """
         event_filter = storage.EventFilter(message_id=message_id)
-        events = pecan.request.storage_conn.get_events(event_filter)
+        events = [event for event
+                  in pecan.request.storage_conn.get_events(event_filter)]
         if not events:
             raise EntityNotFound(_("Event"), message_id)
 
@@ -2374,8 +2365,7 @@ class EventsController(rest.RestController):
 
 
 class QuerySamplesController(rest.RestController):
-    """Provides complex query possibilities for samples
-    """
+    """Provides complex query possibilities for samples."""
 
     @wsme_pecan.wsexpose([Sample], body=ComplexQuery)
     def post(self, body):
@@ -2402,8 +2392,7 @@ class QuerySamplesController(rest.RestController):
 
 
 class QueryAlarmHistoryController(rest.RestController):
-    """Provides complex query possibilites for alarm history
-    """
+    """Provides complex query possibilites for alarm history."""
     @wsme_pecan.wsexpose([AlarmChange], body=ComplexQuery)
     def post(self, body):
         """Define query for retrieving AlarmChange data.
@@ -2411,9 +2400,9 @@ class QueryAlarmHistoryController(rest.RestController):
         :param body: Query rules for the alarm history to be returned.
         """
         query = ValidatedComplexQuery(body,
-                                      storage.models.AlarmChange)
+                                      alarm_models.AlarmChange)
         query.validate(visibility_field="on_behalf_of")
-        conn = pecan.request.storage_conn
+        conn = pecan.request.alarm_storage_conn
         return [AlarmChange.from_db_model(s)
                 for s in conn.query_alarm_history(query.filter_expr,
                                                   query.orderby,
@@ -2421,8 +2410,7 @@ class QueryAlarmHistoryController(rest.RestController):
 
 
 class QueryAlarmsController(rest.RestController):
-    """Provides complex query possibilities for alarms
-    """
+    """Provides complex query possibilities for alarms."""
     history = QueryAlarmHistoryController()
 
     @wsme_pecan.wsexpose([Alarm], body=ComplexQuery)
@@ -2432,9 +2420,9 @@ class QueryAlarmsController(rest.RestController):
         :param body: Query rules for the alarms to be returned.
         """
         query = ValidatedComplexQuery(body,
-                                      storage.models.Alarm)
+                                      alarm_models.Alarm)
         query.validate(visibility_field="project_id")
-        conn = pecan.request.storage_conn
+        conn = pecan.request.alarm_storage_conn
         return [Alarm.from_db_model(s)
                 for s in conn.query_alarms(query.filter_expr,
                                            query.orderby,
@@ -2452,13 +2440,16 @@ def _flatten_capabilities(capabilities):
 
 
 class Capabilities(_Base):
-    """A representation of the API and storage capabilities, usually
-       constrained by restrictions imposed by the storage driver.
+    """A representation of the API and storage capabilities.
+
+    Usually constrained by restrictions imposed by the storage driver.
     """
 
     api = {wtypes.text: bool}
     "A flattened dictionary of API capabilities"
     storage = {wtypes.text: bool}
+    "A flattened dictionary of storage capabilities"
+    alarm_storage = {wtypes.text: bool}
     "A flattened dictionary of storage capabilities"
 
     @classmethod
@@ -2500,24 +2491,31 @@ class Capabilities(_Base):
                 'events': {'query': {'simple': True}},
             }),
             storage=_flatten_capabilities({'production_ready': True}),
+            alarm_storage=_flatten_capabilities({'production_ready': True}),
         )
 
 
 class CapabilitiesController(rest.RestController):
-    """Manages capabilities queries.
-    """
+    """Manages capabilities queries."""
 
     @wsme_pecan.wsexpose(Capabilities)
     def get(self):
-        """Returns a flattened dictionary of API capabilities supported
-           by the currently configured storage driver.
+        """Returns a flattened dictionary of API capabilities.
+
+        Capabilities supported by the currently configured storage driver.
         """
         # variation in API capabilities is effectively determined by
         # the lack of strict feature parity across storage drivers
-        driver_capabilities = pecan.request.storage_conn.get_capabilities()
-        driver_perf = pecan.request.storage_conn.get_storage_capabilities()
+        conn = pecan.request.storage_conn
+        alarm_conn = pecan.request.alarm_storage_conn
+        driver_capabilities = conn.get_capabilities().copy()
+        driver_capabilities['alarms'] = alarm_conn.get_capabilities()['alarms']
+        driver_perf = conn.get_storage_capabilities()
+        alarm_driver_perf = alarm_conn.get_storage_capabilities()
         return Capabilities(api=_flatten_capabilities(driver_capabilities),
-                            storage=_flatten_capabilities(driver_perf))
+                            storage=_flatten_capabilities(driver_perf),
+                            alarm_storage=_flatten_capabilities(
+                                alarm_driver_perf))
 
 
 class V2Controller(object):

@@ -275,11 +275,50 @@ network.services.lb.pool                 Gauge       pool          pool ID     p
 network.services.lb.vip                  Gauge       vip           vip ID      pollster   Existence of a LB Vip
 network.services.lb.member               Gauge       member        member ID   pollster   Existence of a LB Member
 network.services.lb.health_monitor       Gauge       monitor       monitor ID  pollster   Existence of a LB Health Probe
-network.services.lb.total_connections    Delta       connection    pool ID     pollster   Total connections on a LB
-network.services.lb.active_connections   Delta       connection    pool ID     pollster   Active connections on a LB
+network.services.lb.total.connections    Gauge       connection    pool ID     pollster   Total connections on a LB
+network.services.lb.active.connections   Gauge       connection    pool ID     pollster   Active connections on a LB
 network.services.lb.incoming.bytes       Cumulative  B             pool ID     pollster   Number of incoming Bytes
 network.services.lb.outgoing.bytes       Cumulative  B             pool ID     pollster   Number of outgoing Bytes
 =======================================  ==========  ==========    ==========  =========  ==============================
+
+VPN as a Service (VPNaaS)
+=========================
+
+================================  =====  ==========    =============  ========  ===============================
+Meter                             Type   Unit          Resource       Origin    Note
+================================  =====  ==========    =============  ========  ===============================
+network.services.vpn              Gauge  vpn           vpn ID         pollster  Existence of a VPN service
+network.services.vpn.connections  Gauge  connection    connection ID  pollster  Existence of a IPSec Connection
+================================  =====  ==========    =============  ========  ===============================
+
+
+Firewall as a Service (FWaaS)
+=============================
+
+================================  =====  ========    ===========  ========  ===============================
+Meter                             Type   Unit        Resource     Origin    Note
+================================  =====  ========    ===========  ========  ===============================
+network.services.firewall         Gauge  firewall    firewall ID  pollster  Existence of a Firewall service
+network.services.firewall.policy  Gauge  policy      policy ID    pollster  Existance of Firewall Policy
+================================  =====  ========    ===========  ========  ===============================
+
+
+Ironic Hardware IPMI Sensor Data
+================================
+
+IPMI sensor data is not available by default in Ironic. To enable these meters
+see the `Ironic Installation Guide`_.
+
+.. _Ironic Installation Guide: http://docs.openstack.org/developer/ironic/deploy/install-guide.html
+
+=============================  ==========  ======  ==============  ============  ==========================
+Meter                          Type        Unit    Resource        Origin        Note
+=============================  ==========  ======  ==============  ============  ==========================
+hardware.ipmi.fan              Gauge       RPM     fan sensor      notification  Fan RPM
+hardware.ipmi.temperature      Gauge       C       temp sensor     notification  Sensor Temperature Reading
+hardware.ipmi.current          Gauge       W       current sensor  notification  Sensor Current Reading
+hardware.ipmi.voltage          Gauge       V       voltage sensor  notification  Sensor Voltage Reading
+=============================  ==========  ======  ==============  ============  ==========================
 
 
 Dynamically retrieving the Meters via ceilometer client
@@ -290,7 +329,7 @@ resource instances available, use the ``meter-list`` command:
 
 ::
 
-    $ ceilometer meter-list -s openstack
+    $ ceilometer meter-list
     +------------+-------+--------------------------------------+---------+----------------------------------+
     | Name       | Type  | Resource ID                          | User ID | Project ID                       |
     +------------+-------+--------------------------------------+---------+----------------------------------+
@@ -337,3 +376,17 @@ refer to :ref:`installing_manually` for details.
 For example, this could be used to distinguish external and internal users. You'd
 have to implement a custom Swift middleware that sets a proper header and just add
 it to metadata_headers.
+
+
+OSprofiler data
+===============
+
+All messages with event type "profiler.*" will be collected as profiling data.
+Using notification plugin profiler/notifications.py.
+
+.. note::
+
+  Be sparing with heavy usage of OSprofiler, especially in case of complex
+  operations like booting and deleting instance that may create over 100kb of
+  sample data per each request.
+

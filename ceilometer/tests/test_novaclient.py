@@ -17,10 +17,10 @@
 # under the License.
 
 import mock
-from mock import patch
 import novaclient
 
 from ceilometer import nova_client
+from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer.openstack.common import test
 
@@ -29,6 +29,8 @@ class TestNovaClient(test.BaseTestCase):
 
     def setUp(self):
         super(TestNovaClient, self).setUp()
+        self._flavors_count = 0
+        self._images_count = 0
         self.nv = nova_client.Client()
         self.useFixture(mockpatch.PatchObject(
             self.nv.nova_client.flavors, 'get',
@@ -36,9 +38,10 @@ class TestNovaClient(test.BaseTestCase):
         self.useFixture(mockpatch.PatchObject(
             self.nv.nova_client.images, 'get',
             side_effect=self.fake_images_get))
+        self.CONF = self.useFixture(config.Config()).conf
 
-    @staticmethod
-    def fake_flavors_get(*args, **kwargs):
+    def fake_flavors_get(self, *args, **kwargs):
+        self._flavors_count += 1
         a = mock.MagicMock()
         a.id = args[0]
         if a.id == 1:
@@ -49,8 +52,8 @@ class TestNovaClient(test.BaseTestCase):
             raise novaclient.exceptions.NotFound('foobar')
         return a
 
-    @staticmethod
-    def fake_images_get(*args, **kwargs):
+    def fake_images_get(self, *args, **kwargs):
+        self._images_count += 1
         a = mock.MagicMock()
         a.id = args[0]
         image_details = {
@@ -71,29 +74,23 @@ class TestNovaClient(test.BaseTestCase):
         return a
 
     @staticmethod
-    def fake_flavors_list():
-        a = mock.MagicMock()
-        a.id = 1
-        a.name = 'm1.tiny'
-        b = mock.MagicMock()
-        b.id = 2
-        b.name = 'm1.large'
-        return [a, b]
-
-    @staticmethod
     def fake_servers_list(*args, **kwargs):
         a = mock.MagicMock()
         a.id = 42
         a.flavor = {'id': 1}
         a.image = {'id': 1}
-        return [a]
+        b = mock.MagicMock()
+        b.id = 43
+        b.flavor = {'id': 2}
+        b.image = {'id': 2}
+        return [a, b]
 
     def test_instance_get_all_by_host(self):
-        with patch.object(self.nv.nova_client.servers, 'list',
-                          side_effect=self.fake_servers_list):
+        with mock.patch.object(self.nv.nova_client.servers, 'list',
+                               side_effect=self.fake_servers_list):
             instances = self.nv.instance_get_all_by_host('foobar')
 
-        self.assertEqual(1, len(instances))
+        self.assertEqual(2, len(instances))
         self.assertEqual('m1.tiny', instances[0].flavor['name'])
         self.assertEqual('ubuntu-12.04-x86', instances[0].image['name'])
         self.assertEqual(11, instances[0].kernel_id)
@@ -108,8 +105,9 @@ class TestNovaClient(test.BaseTestCase):
         return [a]
 
     def test_instance_get_all_by_host_unknown_flavor(self):
-        with patch.object(self.nv.nova_client.servers, 'list',
-                          side_effect=self.fake_servers_list_unknown_flavor):
+        with mock.patch.object(
+                self.nv.nova_client.servers, 'list',
+                side_effect=self.fake_servers_list_unknown_flavor):
             instances = self.nv.instance_get_all_by_host('foobar')
 
         self.assertEqual(1, len(instances))
@@ -140,8 +138,9 @@ class TestNovaClient(test.BaseTestCase):
         return [a]
 
     def test_instance_get_all_by_host_unknown_image(self):
-        with patch.object(self.nv.nova_client.servers, 'list',
-                          side_effect=self.fake_servers_list_unknown_image):
+        with mock.patch.object(
+                self.nv.nova_client.servers, 'list',
+                side_effect=self.fake_servers_list_unknown_image):
             instances = self.nv.instance_get_all_by_host('foobar')
 
         self.assertEqual(1, len(instances))
@@ -150,6 +149,7 @@ class TestNovaClient(test.BaseTestCase):
     def test_with_flavor_and_image(self):
         results = self.nv._with_flavor_and_image(self.fake_servers_list())
         instance = results[0]
+        self.assertEqual(2, len(results))
         self.assertEqual('ubuntu-12.04-x86', instance.image['name'])
         self.assertEqual('m1.tiny', instance.flavor['name'])
         self.assertEqual(11, instance.kernel_id)
@@ -204,6 +204,30 @@ class TestNovaClient(test.BaseTestCase):
         self.assertIsNone(instance.kernel_id)
         self.assertEqual(21, instance.ramdisk_id)
 
+    def test_with_flavor_and_image_no_cache(self):
+        results = self.nv._with_flavor_and_image(self.fake_servers_list())
+        self.assertEqual(2, len(results))
+        self.assertEqual(2, self._flavors_count)
+        self.assertEqual(2, self._images_count)
+
+    def test_with_flavor_and_image_cache(self):
+        results = self.nv._with_flavor_and_image(self.fake_servers_list() * 2)
+        self.assertEqual(4, len(results))
+        self.assertEqual(2, self._flavors_count)
+        self.assertEqual(2, self._images_count)
+
+    def test_with_flavor_and_image_unknown_image_cache(self):
+        instances = self.fake_servers_list_unknown_image()
+        results = self.nv._with_flavor_and_image(instances * 2)
+        self.assertEqual(2, len(results))
+        self.assertEqual(1, self._flavors_count)
+        self.assertEqual(1, self._images_count)
+        for instance in results:
+            self.assertEqual('unknown-id-666', instance.image['name'])
+            self.assertNotEqual(instance.flavor['name'], 'unknown-id-666')
+            self.assertIsNone(instance.kernel_id)
+            self.assertIsNone(instance.ramdisk_id)
+
     def test_with_missing_image_instance(self):
         instances = self.fake_instance_image_missing()
         results = self.nv._with_flavor_and_image(instances)
@@ -211,3 +235,8 @@ class TestNovaClient(test.BaseTestCase):
         self.assertIsNone(instance.kernel_id)
         self.assertIsNone(instance.image)
         self.assertIsNone(instance.ramdisk_id)
+
+    def test_with_nova_http_log_debug(self):
+        self.CONF.set_override("nova_http_log_debug", True)
+        self.nv = nova_client.Client()
+        self.assertTrue(self.nv.nova_client.client.http_log_debug)

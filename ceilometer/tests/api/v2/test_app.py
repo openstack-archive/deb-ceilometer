@@ -29,7 +29,7 @@ from ceilometer.openstack.common.fixture import config
 from ceilometer.openstack.common import gettextutils
 from ceilometer import service
 from ceilometer.tests import api as acl
-from ceilometer.tests.api.v2 import FunctionalTest
+from ceilometer.tests.api import v2
 from ceilometer.tests import base
 
 
@@ -57,15 +57,15 @@ class TestApp(base.BaseTestCase):
     def test_keystone_middleware_parse_conffile(self):
         pipeline_conf = self.path_get("etc/ceilometer/pipeline.yaml")
         api_conf = self.path_get('etc/ceilometer/api_paste.ini')
-        content = "[DEFAULT]\n"\
-                  "rpc_backend = fake\n"\
-                  "pipeline_cfg_file = {0}\n"\
-                  "api_paste_config = {1}\n"\
-                  "[{2}]\n"\
-                  "auth_protocol = file\n"\
-                  "auth_version = v2.0\n".format(pipeline_conf,
-                                                 api_conf,
-                                                 acl.OPT_GROUP_NAME)
+        content = ("[DEFAULT]\n"
+                   "rpc_backend = fake\n"
+                   "pipeline_cfg_file = {0}\n"
+                   "api_paste_config = {1}\n"
+                   "[{2}]\n"
+                   "auth_protocol = file\n"
+                   "auth_version = v2.0\n".format(pipeline_conf,
+                                                  api_conf,
+                                                  acl.OPT_GROUP_NAME))
 
         tmpfile = fileutils.write_to_tempfile(content=content,
                                               prefix='ceilometer',
@@ -78,7 +78,7 @@ class TestApp(base.BaseTestCase):
         os.unlink(tmpfile)
 
 
-class TestPecanApp(FunctionalTest):
+class TestPecanApp(v2.FunctionalTest):
 
     def test_pecan_extension_guessing_unset(self):
         # check Pecan does not assume .jpg is an extension
@@ -86,7 +86,7 @@ class TestPecanApp(FunctionalTest):
         self.assertEqual('application/json', response.content_type)
 
 
-class TestApiMiddleware(FunctionalTest):
+class TestApiMiddleware(v2.FunctionalTest):
 
     no_lang_translated_error = 'No lang translated error'
     en_US_translated_error = 'en-US translated error'
@@ -217,8 +217,8 @@ class TestApiMiddleware(FunctionalTest):
                          json.loads(resp.body)['error_message']
                          ['faultstring'])
 
-        with mock.patch('ceilometer.api.controllers.v2.EntityNotFound') \
-                as CustomErrorClass:
+        with mock.patch('ceilometer.api.controllers.'
+                        'v2.EntityNotFound') as CustomErrorClass:
             CustomErrorClass.return_value = wsme.exc.ClientSideError(
                 "untranslated_error", status_code=404)
             resp = self.get_json('/alarms/alarm-id-5', expect_errors=True)

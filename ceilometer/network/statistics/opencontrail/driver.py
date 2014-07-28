@@ -14,7 +14,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from six.moves.urllib import parse as url_parse
+from six.moves.urllib import parse as urlparse
 
 from ceilometer.network.statistics import driver
 from ceilometer.network.statistics.opencontrail import client
@@ -27,27 +27,30 @@ class OpencontrailDriver(driver.Driver):
 
     This driver uses resources in "pipeline.yaml".
     Resource requires below conditions:
+
     * resource is url
     * scheme is "opencontrail"
 
     This driver can be configured via query parameters.
     Supported parameters:
-    * scheme:
-        The scheme of request url to Opencontrail Analytics endpoint.
-        (default http)
-    * username:
-        This is username used by Opencontrail Analytics.(default None)
-    * password:
-        This is password used by Opencontrail Analytics.(default None)
-    * domain
-        This is domain used by Opencontrail Analytics.(default None)
-    * verify_ssl
-        Specify if the certificate will be checked for https request.
-        (default false)
 
-    e.g.
-        opencontrail://localhost:8143/?username=admin&password=admin&
-        scheme=https&domain=&verify_ssl=true
+    * scheme:
+      The scheme of request url to Opencontrail Analytics endpoint.
+      (default http)
+    * username:
+      This is username used by Opencontrail Analytics.(default None)
+    * password:
+      This is password used by Opencontrail Analytics.(default None)
+    * domain:
+      This is domain used by Opencontrail Analytics.(default None)
+    * verify_ssl:
+      Specify if the certificate will be checked for https request.
+      (default false)
+
+    e.g.::
+
+      opencontrail://localhost:8143/?username=admin&password=admin&
+      scheme=https&domain=&verify_ssl=true
     """
     @staticmethod
     def _prepare_cache(endpoint, params, cache):
@@ -70,13 +73,13 @@ class OpencontrailDriver(driver.Driver):
 
     def get_sample_data(self, meter_name, parse_url, params, cache):
 
-        parts = url_parse.ParseResult(params.get('scheme', ['http'])[0],
-                                      parse_url.netloc,
-                                      parse_url.path,
-                                      None,
-                                      None,
-                                      None)
-        endpoint = url_parse.urlunparse(parts)
+        parts = urlparse.ParseResult(params.get('scheme', ['http'])[0],
+                                     parse_url.netloc,
+                                     parse_url.path,
+                                     None,
+                                     None,
+                                     None)
+        endpoint = urlparse.urlunparse(parts)
 
         iter = self._get_iter(meter_name)
         if iter is None:

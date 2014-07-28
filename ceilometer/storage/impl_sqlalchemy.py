@@ -32,6 +32,8 @@ from sqlalchemy import not_
 from sqlalchemy import or_
 from sqlalchemy.orm import aliased
 
+from ceilometer.alarm.storage import base as alarm_base
+from ceilometer.alarm.storage import models as alarm_api_models
 from ceilometer.openstack.common.db import exception as dbexc
 from ceilometer.openstack.common.db.sqlalchemy import migration
 import ceilometer.openstack.common.db.sqlalchemy.session as sqlalchemy_session
@@ -219,7 +221,9 @@ class Connection(base.Connection):
               }
     """
     CAPABILITIES = utils.update_nested(base.Connection.CAPABILITIES,
-                                       AVAILABLE_CAPABILITIES)
+                                       utils.update_nested(
+                                           alarm_base.Connection.CAPABILITIES,
+                                           AVAILABLE_CAPABILITIES))
     STORAGE_CAPABILITIES = utils.update_nested(
         base.Connection.STORAGE_CAPABILITIES,
         AVAILABLE_STORAGE_CAPABILITIES,
@@ -249,10 +253,10 @@ class Connection(base.Connection):
             nested = session.connection().dialect.name != 'sqlite'
             with session.begin(nested=nested,
                                subtransactions=not nested):
-                obj = session.query(models.Meter)\
-                    .filter(models.Meter.name == name)\
-                    .filter(models.Meter.type == type)\
-                    .filter(models.Meter.unit == unit).first()
+                obj = (session.query(models.Meter)
+                       .filter(models.Meter.name == name)
+                       .filter(models.Meter.type == type)
+                       .filter(models.Meter.unit == unit).first())
                 if obj is None:
                     obj = models.Meter(name=name, type=type, unit=unit)
                     session.add(obj)
@@ -303,20 +307,31 @@ class Connection(base.Connection):
                                                value=v))
 
     def clear_expired_metering_data(self, ttl):
-        """Clear expired data from the backend storage system according to the
-        time-to-live.
+        """Clear expired data from the backend storage system.
 
+        Clearing occurs according to the time-to-live.
         :param ttl: Number of seconds to keep records for.
-
         """
 
         session = self._engine_facade.get_session()
         with session.begin():
             end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
-            sample_query = session.query(models.Sample)\
-                .filter(models.Sample.timestamp < end)
-            for sample_obj in sample_query.all():
-                session.delete(sample_obj)
+            sample_q = (session.query(models.Sample)
+                        .filter(models.Sample.timestamp < end))
+
+            sample_subq = sample_q.subquery()
+            for table in [models.MetaText, models.MetaBigInt,
+                          models.MetaFloat, models.MetaBool]:
+                (session.query(table)
+                 .join(sample_subq, sample_subq.c.id == table.id)
+                 .delete())
+
+            rows = sample_q.delete()
+            # remove Meter defintions with no matching samples
+            (session.query(models.Meter)
+             .filter(~models.Meter.samples.any())
+             .delete(synchronize_session='fetch'))
+            LOG.info(_("%d samples removed from database"), rows)
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
@@ -373,15 +388,15 @@ class Connection(base.Connection):
 
         for res_id in res_q.all():
             # get latest Sample
-            max_q = session.query(models.Sample)\
-                .filter(models.Sample.resource_id == res_id[0])
+            max_q = (session.query(models.Sample)
+                     .filter(models.Sample.resource_id == res_id[0]))
             max_q = _apply_filters(max_q)
             max_q = max_q.order_by(models.Sample.timestamp.desc(),
                                    models.Sample.id.desc()).limit(1)
 
             # get the min timestamp value.
-            min_q = session.query(models.Sample.timestamp)\
-                .filter(models.Sample.resource_id == res_id[0])
+            min_q = (session.query(models.Sample.timestamp)
+                     .filter(models.Sample.resource_id == res_id[0]))
             min_q = _apply_filters(min_q)
             min_q = min_q.order_by(models.Sample.timestamp.asc()).limit(1)
 
@@ -432,17 +447,19 @@ class Connection(base.Connection):
         # by selecting a record for each (resource_id, meter_id).
         # max() is used to choice a sample record, so the latest record
         # is selected for each (resource_id, meter_id).
-        sample_subq = session.query(
-            func.max(models.Sample.id).label('id'))\
-            .group_by(models.Sample.meter_id, models.Sample.resource_id)
+        sample_subq = (session.query(
+                       func.max(models.Sample.id).label('id'))
+                       .group_by(models.Sample.meter_id,
+                                 models.Sample.resource_id))
         sample_subq = sample_subq.subquery()
 
         # SELECT sample.* FROM sample INNER JOIN
         #  (SELECT max(sample.id) AS id FROM sample
         #   GROUP BY sample.resource_id, sample.meter_id) AS anon_2
         # ON sample.id = anon_2.id
-        query_sample = session.query(models.MeterSample).\
-            join(sample_subq, models.MeterSample.id == sample_subq.c.id)
+        query_sample = (session.query(models.MeterSample).
+                        join(sample_subq, models.MeterSample.id ==
+                        sample_subq.c.id))
         query_sample = _apply_filters(query_sample)
 
         for sample in query_sample.all():
@@ -562,9 +579,9 @@ class Connection(base.Connection):
             group_attributes = [getattr(models.Sample, g) for g in groupby]
             select.extend(group_attributes)
 
-        query = session.query(*select).filter(
-            models.Meter.id == models.Sample.meter_id)\
-            .group_by(models.Meter.unit)
+        query = (session.query(*select).join(
+                 models.Sample, models.Meter.id == models.Sample.meter_id).
+                 group_by(models.Meter.unit))
 
         if groupby:
             query = query.group_by(*group_attributes)
@@ -606,11 +623,10 @@ class Connection(base.Connection):
 
     def get_meter_statistics(self, sample_filter, period=None, groupby=None,
                              aggregate=None):
-        """Return an iterable of api_models.Statistics instances containing
-        meter statistics described by the query parameters.
+        """Return an iterable of api_models.Statistics instances.
 
-        The filter must have a meter value set.
-
+        Items are containing meter statistics described by the query
+        parameters. The filter must have a meter value set.
         """
         if groupby:
             for group in groupby:
@@ -664,31 +680,34 @@ class Connection(base.Connection):
 
     @staticmethod
     def _row_to_alarm_model(row):
-        return api_models.Alarm(alarm_id=row.alarm_id,
-                                enabled=row.enabled,
-                                type=row.type,
-                                name=row.name,
-                                description=row.description,
-                                timestamp=row.timestamp,
-                                user_id=row.user_id,
-                                project_id=row.project_id,
-                                state=row.state,
-                                state_timestamp=row.state_timestamp,
-                                ok_actions=row.ok_actions,
-                                alarm_actions=row.alarm_actions,
-                                insufficient_data_actions=
-                                row.insufficient_data_actions,
-                                rule=row.rule,
-                                time_constraints=row.time_constraints,
-                                repeat_actions=row.repeat_actions)
+        return alarm_api_models.Alarm(alarm_id=row.alarm_id,
+                                      enabled=row.enabled,
+                                      type=row.type,
+                                      name=row.name,
+                                      description=row.description,
+                                      timestamp=row.timestamp,
+                                      user_id=row.user_id,
+                                      project_id=row.project_id,
+                                      state=row.state,
+                                      state_timestamp=row.state_timestamp,
+                                      ok_actions=row.ok_actions,
+                                      alarm_actions=row.alarm_actions,
+                                      insufficient_data_actions=(
+                                          row.insufficient_data_actions),
+                                      rule=row.rule,
+                                      time_constraints=row.time_constraints,
+                                      repeat_actions=row.repeat_actions)
 
     def _retrieve_alarms(self, query):
         return (self._row_to_alarm_model(x) for x in query.all())
 
-    def get_alarms(self, name=None, user=None,
+    def get_alarms(self, name=None, user=None, state=None, meter=None,
                    project=None, enabled=None, alarm_id=None, pagination=None):
         """Yields a lists of alarms that match filters
+
         :param user: Optional ID for user that owns the resource.
+        :param state: Optional string for alarm state.
+        :param meter: Optional string for alarms associated with meter.
         :param project: Optional ID for project that owns the resource.
         :param enabled: Optional boolean to list disable alarm.
         :param alarm_id: Optional alarm_id to return one alarm.
@@ -710,8 +729,18 @@ class Connection(base.Connection):
             query = query.filter(models.Alarm.project_id == project)
         if alarm_id is not None:
             query = query.filter(models.Alarm.alarm_id == alarm_id)
+        if state is not None:
+            query = query.filter(models.Alarm.state == state)
 
-        return self._retrieve_alarms(query)
+        alarms = self._retrieve_alarms(query)
+
+        # TODO(cmart): improve this by using sqlalchemy.func factory
+        if meter is not None:
+            alarms = filter(lambda row:
+                            row.rule.get('meter_name', None) == meter,
+                            alarms)
+
+        return alarms
 
     def create_alarm(self, alarm):
         """Create an alarm.
@@ -750,26 +779,24 @@ class Connection(base.Connection):
 
     @staticmethod
     def _row_to_alarm_change_model(row):
-        return api_models.AlarmChange(event_id=row.event_id,
-                                      alarm_id=row.alarm_id,
-                                      type=row.type,
-                                      detail=row.detail,
-                                      user_id=row.user_id,
-                                      project_id=row.project_id,
-                                      on_behalf_of=row.on_behalf_of,
-                                      timestamp=row.timestamp)
+        return alarm_api_models.AlarmChange(event_id=row.event_id,
+                                            alarm_id=row.alarm_id,
+                                            type=row.type,
+                                            detail=row.detail,
+                                            user_id=row.user_id,
+                                            project_id=row.project_id,
+                                            on_behalf_of=row.on_behalf_of,
+                                            timestamp=row.timestamp)
 
     def query_alarms(self, filter_expr=None, orderby=None, limit=None):
-        """Yields a lists of alarms that match filter
-        """
+        """Yields a lists of alarms that match filter."""
         return self._retrieve_data(filter_expr, orderby, limit, models.Alarm)
 
     def _retrieve_alarm_history(self, query):
         return (self._row_to_alarm_change_model(x) for x in query.all())
 
     def query_alarm_history(self, filter_expr=None, orderby=None, limit=None):
-        """Return an iterable of model.AlarmChange objects.
-        """
+        """Return an iterable of model.AlarmChange objects."""
         return self._retrieve_data(filter_expr,
                                    orderby,
                                    limit,
@@ -834,8 +861,7 @@ class Connection(base.Connection):
         return self._retrieve_alarm_history(query)
 
     def record_alarm_change(self, alarm_change):
-        """Record alarm change event.
-        """
+        """Record alarm change event."""
         session = self._engine_facade.get_session()
         with session.begin():
             alarm_change_row = models.AlarmChange(
@@ -844,8 +870,9 @@ class Connection(base.Connection):
             session.add(alarm_change_row)
 
     def _get_or_create_trait_type(self, trait_type, data_type, session=None):
-        """Find if this trait already exists in the database, and
-        if it does not, create a new entry in the trait type table.
+        """Find if this trait already exists in the database.
+
+        If it does not, create a new entry in the trait type table.
         """
         if session is None:
             session = self._engine_facade.get_session()
@@ -874,10 +901,9 @@ class Connection(base.Connection):
         return models.Trait(trait_type, event, **values)
 
     def _get_or_create_event_type(self, event_type, session=None):
-        """Here, we check to see if an event type with the supplied
-        name already exists. If not, we create it and return the record.
+        """Check if an event type with the supplied name is already exists.
 
-        This may result in a flush.
+        If not, we create it and return the record. This may result in a flush.
         """
         if session is None:
             session = self._engine_facade.get_session()
@@ -890,8 +916,7 @@ class Connection(base.Connection):
         return et
 
     def _record_event(self, session, event_model):
-        """Store a single Event, including related Traits.
-        """
+        """Store a single Event, including related Traits."""
         with session.begin(subtransactions=True):
             event_type = self._get_or_create_event_type(event_model.event_type,
                                                         session=session)
@@ -931,7 +956,8 @@ class Connection(base.Connection):
             try:
                 with session.begin():
                     event = self._record_event(session, event_model)
-            except dbexc.DBDuplicateEntry:
+            except dbexc.DBDuplicateEntry as e:
+                LOG.exception(_("Failed to record duplicated event: %s") % e)
                 problem_events.append((api_models.Event.DUPLICATE,
                                        event_model))
             except Exception as e:
@@ -959,8 +985,8 @@ class Connection(base.Connection):
                                      models.Event.event_type_id]
 
             if event_filter.event_type:
-                event_join_conditions\
-                    .append(models.EventType.desc == event_filter.event_type)
+                event_join_conditions.append(models.EventType.desc ==
+                                             event_filter.event_type)
 
             event_query = event_query.join(models.EventType,
                                            and_(*event_join_conditions))
@@ -968,16 +994,16 @@ class Connection(base.Connection):
             # Build up the where conditions
             event_filter_conditions = []
             if event_filter.message_id:
-                event_filter_conditions\
-                    .append(models.Event.message_id == event_filter.message_id)
+                event_filter_conditions.append(models.Event.message_id ==
+                                               event_filter.message_id)
             if start:
                 event_filter_conditions.append(models.Event.generated >= start)
             if end:
                 event_filter_conditions.append(models.Event.generated <= end)
 
             if event_filter_conditions:
-                event_query = event_query\
-                    .filter(and_(*event_filter_conditions))
+                event_query = (event_query.
+                               filter(and_(*event_filter_conditions)))
 
             event_models_dict = {}
             if event_filter.traits_filter:
@@ -1000,34 +1026,35 @@ class Connection(base.Connection):
                         elif key == 'float':
                             conditions.append(models.Trait.t_float == value)
 
-                    trait_query = session.query(models.Trait.event_id)\
-                        .join(models.TraitType, and_(*conditions)).subquery()
+                    trait_query = (session.query(models.Trait.event_id).
+                                   join(models.TraitType,
+                                        and_(*conditions)).subquery())
 
-                    event_query = event_query\
-                        .join(trait_query,
-                              models.Event.id == trait_query.c.event_id)
+                    event_query = (event_query.
+                                   join(trait_query, models.Event.id ==
+                                        trait_query.c.event_id))
             else:
                 # If there are no trait filters, grab the events from the db
-                query = session.query(models.Event.id,
-                                      models.Event.generated,
-                                      models.Event.message_id,
-                                      models.EventType.desc)\
-                    .join(models.EventType,
-                          and_(*event_join_conditions))
+                query = (session.query(models.Event.id,
+                                       models.Event.generated,
+                                       models.Event.message_id,
+                                       models.EventType.desc).
+                         join(models.EventType, and_(*event_join_conditions)))
                 if event_filter_conditions:
                     query = query.filter(and_(*event_filter_conditions))
-                for (id, generated, message_id, desc) in query.all():
-                    event_models_dict[id] = api_models.Event(message_id,
-                                                             desc,
-                                                             generated,
-                                                             [])
+                for (id_, generated, message_id, desc_) in query.all():
+                    event_models_dict[id_] = api_models.Event(message_id,
+                                                              desc_,
+                                                              generated,
+                                                              [])
 
             # Build event models for the events
             event_query = event_query.subquery()
-            query = session.query(models.Trait)\
-                .join(models.TraitType,
-                      models.Trait.trait_type_id == models.TraitType.id)\
-                .join(event_query, models.Trait.event_id == event_query.c.id)
+            query = (session.query(models.Trait).
+                     join(models.TraitType, models.Trait.trait_type_id ==
+                          models.TraitType.id).
+                     join(event_query, models.Trait.event_id ==
+                          event_query.c.id))
 
             # Now convert the sqlalchemy objects back into Models ...
             for trait in query.all():
@@ -1047,22 +1074,20 @@ class Connection(base.Connection):
         return sorted(event_models, key=operator.attrgetter('generated'))
 
     def get_event_types(self):
-        """Return all event types as an iterable of strings.
-        """
+        """Return all event types as an iterable of strings."""
 
         session = self._engine_facade.get_session()
         with session.begin():
-            query = session.query(models.EventType.desc)\
-                .order_by(models.EventType.desc)
+            query = (session.query(models.EventType.desc).
+                     order_by(models.EventType.desc))
             for name in query.all():
                 # The query returns a tuple with one element.
                 yield name[0]
 
     def get_trait_types(self, event_type):
-        """Return a dictionary containing the name and data type of
-        the trait type. Only trait types for the provided event_type are
-        returned.
+        """Return a dictionary containing the name and data type of the trait.
 
+        Only trait types for the provided event_type are returned.
         :param event_type: the type of the Event
         """
         session = self._engine_facade.get_session()
@@ -1086,13 +1111,13 @@ class Connection(base.Connection):
                                models.TraitType.data_type)
                      .distinct())
 
-            for desc, type in query.all():
-                yield {'name': desc, 'data_type': type}
+            for desc_, dtype in query.all():
+                yield {'name': desc_, 'data_type': dtype}
 
     def get_traits(self, event_type, trait_type=None):
-        """Return all trait instances associated with an event_type. If
-        trait_type is specified, only return instances of that trait type.
+        """Return all trait instances associated with an event_type.
 
+        If trait_type is specified, only return instances of that trait type.
         :param event_type: the type of the Event to filter by
         :param trait_type: the name of the Trait to filter by
         """

@@ -23,6 +23,7 @@
 
 """
 
+from ceilometer.alarm.storage import impl_mongodb as impl_mongodb_alarm
 from ceilometer.storage import base
 from ceilometer.storage import impl_mongodb
 from ceilometer.tests import base as test_base
@@ -54,8 +55,8 @@ class MongoDBConnection(tests_db.TestBase):
 
 @tests_db.run_with('mongodb')
 class MongoDBTestMarkerBase(test_storage_scenarios.DBTestBase):
-    #NOTE(Fengqian): All these three test case are the same for resource
-    #and meter collection. As to alarm, we will set up in AlarmTestPagination.
+    # NOTE(Fengqian): All these three test case are the same for resource
+    # and meter collection. As to alarm, we will set up in AlarmTestPagination.
     def test_get_marker(self):
         marker_pairs = {'user_id': 'user-id-4'}
         ret = impl_mongodb.Connection._get_marker(self.conn.db.resource,
@@ -115,7 +116,7 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase):
     def test_alarm_get_marker(self):
         self.add_some_alarms()
         marker_pairs = {'name': 'red-alert'}
-        ret = impl_mongodb.Connection._get_marker(self.conn.db.alarm,
+        ret = impl_mongodb.Connection._get_marker(self.alarm_conn.db.alarm,
                                                   marker_pairs=marker_pairs)
         self.assertEqual('test.one', ret['rule']['meter_name'])
 
@@ -123,7 +124,7 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase):
         self.add_some_alarms()
         try:
             marker_pairs = {'name': 'user-id-foo'}
-            ret = impl_mongodb.Connection._get_marker(self.conn.db.alarm,
+            ret = impl_mongodb.Connection._get_marker(self.alarm_conn.db.alarm,
                                                       marker_pairs)
             self.assertEqual('meter_name-foo', ret['rule']['meter_name'])
         except base.NoResultFound:
@@ -133,7 +134,7 @@ class AlarmTestPagination(test_storage_scenarios.AlarmTestBase):
         self.add_some_alarms()
         try:
             marker_pairs = {'user_id': 'me'}
-            ret = impl_mongodb.Connection._get_marker(self.conn.db.alarm,
+            ret = impl_mongodb.Connection._get_marker(self.alarm_conn.db.alarm,
                                                       marker_pairs)
             self.assertEqual('counter-name-foo', ret['rule']['meter_name'])
         except base.MultipleResultsFound:
@@ -174,20 +175,27 @@ class CapabilitiesTest(test_base.BaseTestCase):
                                                'stddev': True,
                                                'cardinality': True}}
                            },
+            'events': {'query': {'simple': True}}
+        }
+
+        actual_capabilities = impl_mongodb.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_alarm_capabilities(self):
+        expected_capabilities = {
             'alarms': {'query': {'simple': True,
                                  'complex': True},
                        'history': {'query': {'simple': True,
                                              'complex': True}}},
-            'events': {'query': {'simple': False}}
         }
 
-        actual_capabilities = impl_mongodb.Connection.get_capabilities()
+        actual_capabilities = impl_mongodb_alarm.Connection.get_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)
 
     def test_storage_capabilities(self):
         expected_capabilities = {
             'storage': {'production_ready': True},
         }
-        actual_capabilities = impl_mongodb.Connection.\
-            get_storage_capabilities()
+        actual_capabilities = (impl_mongodb.Connection.
+                               get_storage_capabilities())
         self.assertEqual(expected_capabilities, actual_capabilities)

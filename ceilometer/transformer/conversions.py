@@ -15,7 +15,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import collections
 import re
 
 from ceilometer.openstack.common.gettextutils import _
@@ -27,32 +26,8 @@ from ceilometer import transformer
 LOG = log.getLogger(__name__)
 
 
-class Namespace(object):
-    """Encapsulates the namespace wrapping the evaluation of the
-       configured scale factor. This allows nested dicts to be
-       accessed in the attribute style, and missing attributes
-       to yield false when used in a boolean expression.
-    """
-    def __init__(self, seed):
-        self.__dict__ = collections.defaultdict(lambda: Namespace({}))
-        self.__dict__.update(seed)
-        for k, v in self.__dict__.iteritems():
-            if isinstance(v, dict):
-                self.__dict__[k] = Namespace(v)
-
-    def __getattr__(self, attr):
-        return self.__dict__[attr]
-
-    def __getitem__(self, key):
-        return self.__dict__[key]
-
-    def __nonzero__(self):
-        return len(self.__dict__) > 0
-
-
 class ScalingTransformer(transformer.TransformerBase):
-    """Transformer to apply a scaling conversion.
-    """
+    """Transformer to apply a scaling conversion."""
 
     def __init__(self, source=None, target=None, **kwargs):
         """Initialize transformer with configured parameters.
@@ -74,18 +49,18 @@ class ScalingTransformer(transformer.TransformerBase):
         super(ScalingTransformer, self).__init__(**kwargs)
 
     def _scale(self, s):
-        """Apply the scaling factor (either a straight multiplicative
-           factor or else a string to be eval'd).
+        """Apply the scaling factor.
+
+        Either a straight multiplicative factor or else a string to be eval'd.
         """
-        ns = Namespace(s.as_dict())
+        ns = transformer.Namespace(s.as_dict())
 
         scale = self.scale
         return ((eval(scale, {}, ns) if isinstance(scale, basestring)
                  else s.volume * scale) if scale else s.volume)
 
     def _map(self, s, attr):
-        """Apply the name or unit mapping if configured.
-        """
+        """Apply the name or unit mapping if configured."""
         mapped = None
         from_ = self.source.get('map_from')
         to_ = self.target.get('map_to')
@@ -98,8 +73,7 @@ class ScalingTransformer(transformer.TransformerBase):
         return mapped or self.target.get(attr, getattr(s, attr))
 
     def _convert(self, s, growth=1):
-        """Transform the appropriate sample fields.
-        """
+        """Transform the appropriate sample fields."""
         return sample.Sample(
             name=self._map(s, 'name'),
             unit=self._map(s, 'unit'),
@@ -122,15 +96,14 @@ class ScalingTransformer(transformer.TransformerBase):
 
 
 class RateOfChangeTransformer(ScalingTransformer):
-    """Transformer based on the rate of change of a sample volume,
-       for example taking the current and previous volumes of a
-       cumulative sample and producing a gauge value based on the
-       proportion of some maximum used.
+    """Transformer based on the rate of change of a sample volume.
+
+    For example taking the current and previous volumes of a cumulative sample
+    and producing a gauge value based on the proportion of some maximum used.
     """
 
     def __init__(self, **kwargs):
-        """Initialize transformer with configured parameters.
-        """
+        """Initialize transformer with configured parameters."""
         super(RateOfChangeTransformer, self).__init__(**kwargs)
         self.cache = {}
         self.scale = self.scale or '1'
@@ -167,8 +140,10 @@ class RateOfChangeTransformer(ScalingTransformer):
 
 
 class AggregatorTransformer(ScalingTransformer):
-    """Transformer that aggregate sample until a threshold or/and a
-    retention_time, and then flush them out in the wild.
+    """Transformer that aggregate sample.
+
+    Aggregation goes until a threshold or/and a retention_time, and then flush
+    them out in the wild.
 
     Example:
       To aggregate sample by resource_metadata and keep the
@@ -181,7 +156,6 @@ class AggregatorTransformer(ScalingTransformer):
 
         AggregatorTransformer(size=15, user_id='first',
                               resource_metadata='drop')
-
     """
 
     def __init__(self, size=1, retention_time=None,
@@ -189,8 +163,8 @@ class AggregatorTransformer(ScalingTransformer):
                  **kwargs):
         super(AggregatorTransformer, self).__init__(**kwargs)
         self.samples = {}
-        self.size = size
-        self.retention_time = retention_time
+        self.size = int(size) if size else None
+        self.retention_time = float(retention_time) if retention_time else None
         self.initial_timestamp = None
         self.aggregated_samples = 0
 
@@ -214,15 +188,19 @@ class AggregatorTransformer(ScalingTransformer):
             self.key_attributes.append(name)
 
     def _get_unique_key(self, s):
-        non_aggregated_keys = "-".join([getattr(s, field)
-                                        for field in self.key_attributes])
-        #NOTE(sileht): it assumes, a meter always have the same unit/type
+        # NOTE(arezmerita): in samples generated by ceilometer middleware,
+        # when accessing without authentication publicly readable/writable
+        # swift containers, the project_id and the user_id are missing.
+        # They will be replaced by <undefined> for unique key construction.
+        keys = ['<undefined>' if getattr(s, f) is None else getattr(s, f)
+                for f in self.key_attributes]
+        non_aggregated_keys = "-".join(keys)
+        # NOTE(sileht): it assumes, a meter always have the same unit/type
         return "%s-%s-%s" % (s.name, s.resource_id, non_aggregated_keys)
 
     def handle_sample(self, context, sample):
         if not self.initial_timestamp:
-            self.initial_timestamp = timeutils.parse_strtime(
-                sample.timestamp)
+            self.initial_timestamp = timeutils.parse_isotime(sample.timestamp)
 
         self.aggregated_samples += 1
         key = self._get_unique_key(sample)
@@ -239,9 +217,9 @@ class AggregatorTransformer(ScalingTransformer):
                             getattr(sample, field))
 
     def flush(self, context):
-        expired = self.retention_time and \
-            timeutils.is_older_than(self.initial_timestamp,
-                                    self.retention_time)
+        expired = (self.retention_time and
+                   timeutils.is_older_than(self.initial_timestamp,
+                                           self.retention_time))
         full = self.aggregated_samples >= self.size
         if full or expired:
             x = self.samples.values()

@@ -17,10 +17,10 @@
 # under the License.
 """Inspector for collecting data over SNMP"""
 
-import urlparse
+from pysnmp.entity.rfc3413.oneliner import cmdgen
+from six.moves.urllib import parse as urlparse
 
 from ceilometer.hardware.inspector import base
-from pysnmp.entity.rfc3413.oneliner import cmdgen
 
 
 class SNMPException(Exception):
@@ -51,29 +51,29 @@ def parse_snmp_return(ret):
 
 
 class SNMPInspector(base.Inspector):
-    #CPU OIDs
+    # CPU OIDs
     _cpu_1_min_load_oid = "1.3.6.1.4.1.2021.10.1.3.1"
     _cpu_5_min_load_oid = "1.3.6.1.4.1.2021.10.1.3.2"
     _cpu_15_min_load_oid = "1.3.6.1.4.1.2021.10.1.3.3"
-    #Memory OIDs
+    # Memory OIDs
     _memory_total_oid = "1.3.6.1.4.1.2021.4.5.0"
     _memory_used_oid = "1.3.6.1.4.1.2021.4.6.0"
-    #Disk OIDs
+    # Disk OIDs
     _disk_index_oid = "1.3.6.1.4.1.2021.9.1.1"
     _disk_path_oid = "1.3.6.1.4.1.2021.9.1.2"
     _disk_device_oid = "1.3.6.1.4.1.2021.9.1.3"
     _disk_size_oid = "1.3.6.1.4.1.2021.9.1.6"
     _disk_used_oid = "1.3.6.1.4.1.2021.9.1.8"
-    #Network Interface OIDs
+    # Network Interface OIDs
     _interface_index_oid = "1.3.6.1.2.1.2.2.1.1"
     _interface_name_oid = "1.3.6.1.2.1.2.2.1.2"
-    _interface_bandwidth_oid = "1.3.6.1.2.1.2.2.1.5"
+    _interface_speed_oid = "1.3.6.1.2.1.2.2.1.5"
     _interface_mac_oid = "1.3.6.1.2.1.2.2.1.6"
     _interface_ip_oid = "1.3.6.1.2.1.4.20.1.2"
     _interface_received_oid = "1.3.6.1.2.1.2.2.1.10"
     _interface_transmitted_oid = "1.3.6.1.2.1.2.2.1.16"
     _interface_error_oid = "1.3.6.1.2.1.2.2.1.20"
-    #Default port and security name
+    # Default port and security name
     _port = 161
     _security_name = 'public'
 
@@ -95,8 +95,8 @@ class SNMPInspector(base.Inspector):
         (error, data) = parse_snmp_return(ret)
         if error:
             raise SNMPException("An error occurred, oid %(oid)s, "
-                                "host %(host)s, %(err)s" % dict(oid=oid,
-                                host=host.hostname, err=data))
+                                "host %(host)s, %(err)s" %
+                                dict(oid=oid, host=host.hostname, err=data))
         else:
             return ret_func(data)
 
@@ -107,24 +107,24 @@ class SNMPInspector(base.Inspector):
         return self._get_or_walk_oid(oid, host, False)
 
     def inspect_cpu(self, host):
-        #get 1 minute load
-        cpu_1_min_load = \
-            str(self._get_value_from_oid(self._cpu_1_min_load_oid, host))
-        #get 5 minute load
-        cpu_5_min_load = \
-            str(self._get_value_from_oid(self._cpu_5_min_load_oid, host))
-        #get 15 minute load
-        cpu_15_min_load = \
-            str(self._get_value_from_oid(self._cpu_15_min_load_oid, host))
+        # get 1 minute load
+        cpu_1_min_load = (
+            str(self._get_value_from_oid(self._cpu_1_min_load_oid, host)))
+        # get 5 minute load
+        cpu_5_min_load = (
+            str(self._get_value_from_oid(self._cpu_5_min_load_oid, host)))
+        # get 15 minute load
+        cpu_15_min_load = (
+            str(self._get_value_from_oid(self._cpu_15_min_load_oid, host)))
 
         yield base.CPUStats(cpu_1_min=float(cpu_1_min_load),
                             cpu_5_min=float(cpu_5_min_load),
                             cpu_15_min=float(cpu_15_min_load))
 
     def inspect_memory(self, host):
-        #get total memory
+        # get total memory
         total = self._get_value_from_oid(self._memory_total_oid, host)
-        #get used memory
+        # get used memory
         used = self._get_value_from_oid(self._memory_used_oid, host)
 
         yield base.MemoryStats(total=int(total), used=int(used))
@@ -162,10 +162,10 @@ class SNMPInspector(base.Inspector):
                 mac_oid = "%s.%s" % (self._interface_mac_oid,
                                      str(value))
                 mac = self._get_value_from_oid(mac_oid, host)
-                bw_oid = "%s.%s" % (self._interface_bandwidth_oid,
-                                    str(value))
+                speed_oid = "%s.%s" % (self._interface_speed_oid,
+                                       str(value))
                 # bits/s to byte/s
-                bandwidth = self._get_value_from_oid(bw_oid, host) / 8
+                speed = self._get_value_from_oid(speed_oid, host) / 8
                 rx_oid = "%s.%s" % (self._interface_received_oid,
                                     str(value))
                 rx_bytes = self._get_value_from_oid(rx_oid, host)
@@ -179,9 +179,9 @@ class SNMPInspector(base.Inspector):
                 adapted_mac = mac.prettyPrint().replace('0x', '')
                 interface = base.Interface(name=str(name),
                                            mac=adapted_mac,
-                                           ip=str(ip))
-                stats = base.InterfaceStats(bandwidth=int(bandwidth),
-                                            rx_bytes=int(rx_bytes),
+                                           ip=str(ip),
+                                           speed=int(speed))
+                stats = base.InterfaceStats(rx_bytes=int(rx_bytes),
                                             tx_bytes=int(tx_bytes),
                                             error=int(error))
                 yield (interface, stats)

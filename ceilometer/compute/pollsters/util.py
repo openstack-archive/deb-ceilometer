@@ -35,8 +35,7 @@ INSTANCE_PROPERTIES = [
 
 
 def _get_metadata_from_object(instance):
-    """Return a metadata dictionary for the instance.
-    """
+    """Return a metadata dictionary for the instance."""
     metadata = {
         'display_name': instance.name,
         'name': getattr(instance, 'OS-EXT-SRV-ATTR:instance_name', u''),
@@ -69,8 +68,8 @@ def _get_metadata_from_object(instance):
     metadata['memory_mb'] = instance.flavor['ram']
     metadata['disk_gb'] = instance.flavor['disk']
     metadata['ephemeral_gb'] = instance.flavor['ephemeral']
-    metadata['root_gb'] = int(metadata['disk_gb']) - \
-        int(metadata['ephemeral_gb'])
+    metadata['root_gb'] = (int(metadata['disk_gb']) -
+                           int(metadata['ephemeral_gb']))
 
     return compute_util.add_reserved_user_metadata(instance.metadata, metadata)
 

@@ -25,8 +25,9 @@ from ceilometer import pipeline
 
 
 class ConfigHook(hooks.PecanHook):
-    """Attach the configuration object to the request
-    so controllers can get to it.
+    """Attach the configuration object to the request.
+
+    That allows controllers to get it.
     """
 
     def before(self, state):
@@ -35,17 +36,20 @@ class ConfigHook(hooks.PecanHook):
 
 class DBHook(hooks.PecanHook):
 
-    def __init__(self, storage_connection):
+    def __init__(self, storage_connection, alarm_storage_connection):
         self.storage_connection = storage_connection
+        self.alarm_storage_connection = alarm_storage_connection
 
     def before(self, state):
         state.request.storage_conn = self.storage_connection
+        state.request.alarm_storage_conn = self.alarm_storage_connection
 
 
 class PipelineHook(hooks.PecanHook):
-    '''Create and attach a pipeline to the request so that
-    new samples can be posted via the /v2/meters/ API.
-    '''
+    """Create and attach a pipeline to the request.
+
+    That allows new samples to be posted via the /v2/meters/ API.
+    """
 
     def __init__(self):
         # this is done here as the cfg options are not available

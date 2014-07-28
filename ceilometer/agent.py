@@ -19,8 +19,8 @@
 
 import collections
 import itertools
-import urlparse
 
+from six.moves.urllib import parse as urlparse
 from stevedore import extension
 
 from ceilometer.openstack.common import context
@@ -51,6 +51,7 @@ class Resources(object):
 
 class PollingTask(object):
     """Polling task for polling samples and inject into pipeline.
+
     A polling task can be invoked periodically or only once.
     """
 
@@ -69,8 +70,8 @@ class PollingTask(object):
 
     def add(self, pollster, pipelines):
         self.publish_context.add_pipelines(pipelines)
-        for pipeline in pipelines:
-            self.resources[pollster.name].extend(pipeline)
+        for pipe_line in pipelines:
+            self.resources[pollster.name].extend(pipe_line)
         self.pollsters.update([pollster])
 
     def poll_and_publish(self):
@@ -121,15 +122,15 @@ class AgentManager(os_service.Service):
 
     def setup_polling_tasks(self):
         polling_tasks = {}
-        for pipeline, pollster in itertools.product(
+        for pipe_line, pollster in itertools.product(
                 self.pipeline_manager.pipelines,
                 self.pollster_manager.extensions):
-            if pipeline.support_meter(pollster.name):
-                polling_task = polling_tasks.get(pipeline.get_interval())
+            if pipe_line.support_meter(pollster.name):
+                polling_task = polling_tasks.get(pipe_line.get_interval())
                 if not polling_task:
                     polling_task = self.create_polling_task()
-                    polling_tasks[pipeline.get_interval()] = polling_task
-                polling_task.add(pollster, [pipeline])
+                    polling_tasks[pipe_line.get_interval()] = polling_task
+                polling_task.add(pollster, [pipe_line])
 
         return polling_tasks
 

@@ -18,19 +18,16 @@
 """
 
 import datetime
-import logging
 
 import mock
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models
-from ceilometer.tests.api.v2 import FunctionalTest
+from ceilometer.tests.api import v2
 from ceilometer.tests import db as tests_db
 
-LOG = logging.getLogger(__name__)
 
-
-class TestComputeDurationByResource(FunctionalTest,
+class TestComputeDurationByResource(v2.FunctionalTest,
                                     tests_db.MixinTestsWithBackendScenarios):
 
     def setUp(self):
@@ -55,7 +52,7 @@ class TestComputeDurationByResource(FunctionalTest,
         def get_interval(event_filter, period, groupby, aggregate):
             self.assertIsNotNone(event_filter.start)
             self.assertIsNotNone(event_filter.end)
-            if (event_filter.start > end or event_filter.end < start):
+            if event_filter.start > end or event_filter.end < start:
                 return []
             duration_start = max(event_filter.start, start)
             duration_end = min(event_filter.end, end)

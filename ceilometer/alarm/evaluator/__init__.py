@@ -19,21 +19,24 @@
 import abc
 import croniter
 import datetime
-import pytz
 
 from ceilometerclient import client as ceiloclient
 from oslo.config import cfg
+import pytz
 import six
 
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import timeutils
 
+
 LOG = log.getLogger(__name__)
 
 UNKNOWN = 'insufficient data'
 OK = 'ok'
 ALARM = 'alarm'
+
+cfg.CONF.import_group('service_credentials', 'ceilometer.service')
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -83,8 +86,9 @@ class Evaluator(object):
 
     @classmethod
     def within_time_constraint(cls, alarm):
-        """Check whether the alarm is within at least one of its time
-        constraints. If there are none, then the answer is yes.
+        """Check whether the alarm is within at least one of its time limits.
+
+        If there are none, then the answer is yes.
         """
         if not alarm.time_constraints:
             return True
@@ -104,7 +108,9 @@ class Evaluator(object):
 
     @staticmethod
     def _is_exact_match(cron, ts):
-        """Handle edge case where if the timestamp is the same as the
+        """Handle edge in case when both parameters are equal.
+
+        Handle edge case where if the timestamp is the same as the
         cron point in time to the minute, croniter returns the previous
         start, not the current. We can check this by first going one
         step back and then one step forward and check if we are
@@ -116,8 +122,8 @@ class Evaluator(object):
 
     @abc.abstractmethod
     def evaluate(self, alarm):
-        '''interface definition
+        """Interface definition.
 
         evaluate an alarm
         alarm Alarm: an instance of the Alarm
-        '''
+        """

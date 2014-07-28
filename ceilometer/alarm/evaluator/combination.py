@@ -38,26 +38,27 @@ class CombinationEvaluator(evaluator.Evaluator):
         return alarm.state
 
     def _sufficient_states(self, alarm, states):
-        """Ensure there is sufficient data for evaluation,
+        """Check for the sufficiency of the data for evaluation.
+
+        Ensure that there is sufficient data for evaluation,
         transitioning to unknown otherwise.
         """
-        #note(sileht): alarm can be evaluated only with
-        #stable state of other alarm
+        # note(sileht): alarm can be evaluated only with
+        # stable state of other alarm
         alarms_missing_states = [alarm_id for alarm_id, state in states
                                  if not state or state == evaluator.UNKNOWN]
         sufficient = len(alarms_missing_states) == 0
         if not sufficient and alarm.state != evaluator.UNKNOWN:
-            reason = _('Alarms %(alarm_ids)s'
-                       ' are in unknown state') % \
-                {'alarm_ids': ",".join(alarms_missing_states)}
+            reason = (_('Alarms %(alarm_ids)s'
+                        ' are in unknown state') %
+                      {'alarm_ids': ",".join(alarms_missing_states)})
             reason_data = self._reason_data(alarms_missing_states)
             self._refresh(alarm, evaluator.UNKNOWN, reason, reason_data)
         return sufficient
 
     @staticmethod
     def _reason_data(alarm_ids):
-        """Create a reason data dictionary for this evaluator type.
-        """
+        """Create a reason data dictionary for this evaluator type."""
         return {'type': 'combination', 'alarm_ids': alarm_ids}
 
     @classmethod
@@ -80,8 +81,7 @@ class CombinationEvaluator(evaluator.Evaluator):
                  'alarm_ids': ",".join(alarms_to_report)}), reason_data
 
     def _transition(self, alarm, underlying_states):
-        """Transition alarm state if necessary.
-        """
+        """Transition alarm state if necessary."""
         op = alarm.rule['operator']
         if COMPARATORS[op](s == evaluator.ALARM
                            for __, s in underlying_states):

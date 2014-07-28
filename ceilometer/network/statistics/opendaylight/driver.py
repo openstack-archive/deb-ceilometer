@@ -15,7 +15,7 @@
 
 import six
 from six import moves
-from six.moves.urllib import parse as url_parse
+from six.moves.urllib import parse as urlparse
 
 from ceilometer.network.statistics import driver
 from ceilometer.network.statistics.opendaylight import client
@@ -51,33 +51,36 @@ class OpenDayLightDriver(driver.Driver):
 
     This driver uses resources in "pipeline.yaml".
     Resource requires below conditions:
+
     * resource is url
     * scheme is "opendaylight"
 
     This driver can be configured via query parameters.
     Supported parameters:
+
     * scheme:
-        The scheme of request url to OpenDaylight REST API endpoint.
-        (default http)
+      The scheme of request url to OpenDaylight REST API endpoint.
+      (default http)
     * auth:
-        Auth strategy of http.
-        This parameter can be set basic and digest.(default None)
+      Auth strategy of http.
+      This parameter can be set basic and digest.(default None)
     * user:
-        This is username that is used by auth.(default None)
+      This is username that is used by auth.(default None)
     * password:
-        This is password that is used by auth.(default None)
+      This is password that is used by auth.(default None)
     * container_name:
-        Name of container of OpenDaylight.(default "default")
-        This parameter allows multi vaues.
+      Name of container of OpenDaylight.(default "default")
+      This parameter allows multi vaues.
 
-    e.g.
-        opendaylight://127.0.0.1:8080/controller/nb/v2?container_name=default&
-            container_name=egg&auth=basic&user=admin&password=admin&scheme=http
+    e.g.::
 
-        In this case, the driver send request to below URL:
-            http://127.0.0.1:8080/controller/nb/v2/statistics/default/flow
-            and
-            http://127.0.0.1:8080/controller/nb/v2/statistics/egg/flow
+      opendaylight://127.0.0.1:8080/controller/nb/v2?container_name=default&
+      container_name=egg&auth=basic&user=admin&password=admin&scheme=http
+
+    In this case, the driver send request to below URLs:
+
+      http://127.0.0.1:8080/controller/nb/v2/statistics/default/flow
+      http://127.0.0.1:8080/controller/nb/v2/statistics/egg/flow
     """
     @staticmethod
     def _prepare_cache(endpoint, params, cache):
@@ -154,10 +157,10 @@ class OpenDayLightDriver(driver.Driver):
                     user_links.append(user_link)
 
                 # get link status to hosts
-                container_data['active_hosts'] = cs.host_tracker.\
-                    get_active_hosts(container_name)
-                container_data['inactive_hosts'] = cs.host_tracker.\
-                    get_inactive_hosts(container_name)
+                container_data['active_hosts'] = (
+                    cs.host_tracker.get_active_hosts(container_name))
+                container_data['inactive_hosts'] = (
+                    cs.host_tracker.get_inactive_hosts(container_name))
 
                 container_data['timestamp'] = timeutils.isotime()
 
@@ -184,13 +187,13 @@ class OpenDayLightDriver(driver.Driver):
             # OpenDaylight REST API has not api to getting meter.
             return None
 
-        parts = url_parse.ParseResult(params.get('scheme', ['http'])[0],
-                                      parse_url.netloc,
-                                      parse_url.path,
-                                      None,
-                                      None,
-                                      None)
-        endpoint = url_parse.urlunparse(parts)
+        parts = urlparse.ParseResult(params.get('scheme', ['http'])[0],
+                                     parse_url.netloc,
+                                     parse_url.path,
+                                     None,
+                                     None,
+                                     None)
+        endpoint = urlparse.urlunparse(parts)
 
         data = self._prepare_cache(endpoint, params, cache)
 

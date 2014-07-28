@@ -25,7 +25,7 @@ import testscenarios.testcase
 
 from ceilometer.central import manager
 from ceilometer.objectstore import swift
-from ceilometer.openstack.common.fixture.mockpatch import PatchObject
+from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer.openstack.common import test
 
 HEAD_ACCOUNTS = [('tenant-000', {'x-account-object-count': 12,
@@ -100,8 +100,8 @@ class TestSwiftPollster(testscenarios.testcase.WithScenarios,
 
     def test_iter_accounts_no_cache(self):
         cache = {}
-        with PatchObject(self.factory, '_get_account_info',
-                         return_value=[]):
+        with mockpatch.PatchObject(self.factory, '_get_account_info',
+                                   return_value=[]):
             data = list(self.pollster._iter_accounts(mock.Mock(), cache))
 
         self.assertTrue(self.pollster.CACHE_KEY_TENANT in cache)
@@ -118,8 +118,8 @@ class TestSwiftPollster(testscenarios.testcase.WithScenarios,
         )
 
         api_method = '%s_account' % self.pollster.METHOD
-        with PatchObject(swift_client, api_method, new=ksclient):
-            with PatchObject(self.factory, '_neaten_url'):
+        with mockpatch.PatchObject(swift_client, api_method, new=ksclient):
+            with mockpatch.PatchObject(self.factory, '_neaten_url'):
                 Tenant = collections.namedtuple('Tenant', 'id')
                 cache = {
                     self.pollster.CACHE_KEY_TENANT: [
@@ -131,41 +131,41 @@ class TestSwiftPollster(testscenarios.testcase.WithScenarios,
         self.assertEqual(self.ACCOUNTS[0][0], data[0][0])
 
     def test_neaten_url(self):
-        test_endpoint = 'http://127.0.0.1:8080'
+        test_endpoints = ['http://127.0.0.1:8080',
+                          'http://127.0.0.1:8080/swift']
         test_tenant_id = 'a7fd1695fa154486a647e44aa99a1b9b'
-        standard_url = test_endpoint + '/v1/' + 'AUTH_' + test_tenant_id
+        for test_endpoint in test_endpoints:
+            standard_url = test_endpoint + '/v1/AUTH_' + test_tenant_id
 
-        self.assertEqual(standard_url,
-                         swift._Base._neaten_url(test_endpoint,
-                                                 test_tenant_id))
-        self.assertEqual(standard_url,
-                         swift._Base._neaten_url(test_endpoint + '/',
-                                                 test_tenant_id))
-        self.assertEqual(standard_url,
-                         swift._Base._neaten_url(test_endpoint + '/v1',
-                                                 test_tenant_id))
-        self.assertEqual(standard_url,
-                         swift._Base._neaten_url(standard_url,
-                                                 test_tenant_id))
+            url = swift._Base._neaten_url(test_endpoint, test_tenant_id)
+            self.assertEqual(standard_url, url)
+            url = swift._Base._neaten_url(test_endpoint + '/', test_tenant_id)
+            self.assertEqual(standard_url, url)
+            url = swift._Base._neaten_url(test_endpoint + '/v1',
+                                          test_tenant_id)
+            self.assertEqual(standard_url, url)
+            url = swift._Base._neaten_url(standard_url, test_tenant_id)
+            self.assertEqual(standard_url, url)
 
     def test_metering(self):
-        with PatchObject(self.factory, '_iter_accounts',
-                         side_effect=self.fake_iter_accounts):
+        with mockpatch.PatchObject(self.factory, '_iter_accounts',
+                                   side_effect=self.fake_iter_accounts):
             samples = list(self.pollster.get_samples(self.manager, {}))
 
         self.assertEqual(2, len(samples))
 
     def test_get_meter_names(self):
-        with PatchObject(self.factory, '_iter_accounts',
-                         side_effect=self.fake_iter_accounts):
+        with mockpatch.PatchObject(self.factory, '_iter_accounts',
+                                   side_effect=self.fake_iter_accounts):
             samples = list(self.pollster.get_samples(self.manager, {}))
 
         self.assertEqual(set([samples[0].name]),
                          set([s.name for s in samples]))
 
     def test_endpoint_notfound(self):
-        with PatchObject(self.manager.keystone.service_catalog, 'url_for',
-                         side_effect=self.fake_ks_service_catalog_url_for):
+        with mockpatch.PatchObject(
+                self.manager.keystone.service_catalog, 'url_for',
+                side_effect=self.fake_ks_service_catalog_url_for):
             samples = list(self.pollster.get_samples(self.manager, {}))
 
         self.assertEqual(0, len(samples))

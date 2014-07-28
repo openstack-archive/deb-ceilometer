@@ -17,22 +17,25 @@
 #    under the License.
 """Test the methods related to complex query."""
 import datetime
+
 import fixtures
 import jsonschema
 import mock
 import wsme
 
+from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.api.controllers import v2 as api
 from ceilometer.openstack.common import test
-from ceilometer import storage as storage
+from ceilometer.storage import models
 
 
 class FakeComplexQuery(api.ValidatedComplexQuery):
     def __init__(self, db_model, additional_name_mapping=None, metadata=False):
         super(FakeComplexQuery, self).__init__(query=None,
                                                db_model=db_model,
-                                               additional_name_mapping=
-                                               additional_name_mapping or {},
+                                               additional_name_mapping=(
+                                                   additional_name_mapping or
+                                                   {}),
                                                metadata_allowed=metadata)
 
 
@@ -48,12 +51,12 @@ class TestComplexQuery(test.BaseTestCase):
         super(TestComplexQuery, self).setUp()
         self.useFixture(fixtures.MonkeyPatch(
             'pecan.response', mock.MagicMock()))
-        self.query = FakeComplexQuery(storage.models.Sample,
+        self.query = FakeComplexQuery(models.Sample,
                                       sample_name_mapping,
                                       True)
-        self.query_alarm = FakeComplexQuery(storage.models.Alarm)
+        self.query_alarm = FakeComplexQuery(alarm_models.Alarm)
         self.query_alarmchange = FakeComplexQuery(
-            storage.models.AlarmChange)
+            alarm_models.AlarmChange)
 
     def test_replace_isotime_utc(self):
         filter_expr = {"=": {"timestamp": "2013-12-05T19:38:29Z"}}
@@ -234,7 +237,7 @@ class TestComplexQuery(test.BaseTestCase):
 class TestFilterSyntaxValidation(test.BaseTestCase):
     def setUp(self):
         super(TestFilterSyntaxValidation, self).setUp()
-        self.query = FakeComplexQuery(storage.models.Sample,
+        self.query = FakeComplexQuery(models.Sample,
                                       sample_name_mapping,
                                       True)
 

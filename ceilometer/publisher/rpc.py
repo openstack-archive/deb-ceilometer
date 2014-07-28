@@ -20,11 +20,11 @@
 
 import itertools
 import operator
-import six.moves.urllib.parse as urlparse
 
 from oslo.config import cfg
 import oslo.messaging
 import oslo.messaging._drivers.common
+import six.moves.urllib.parse as urlparse
 
 from ceilometer import messaging
 from ceilometer.openstack.common.gettextutils import _
@@ -45,8 +45,7 @@ METER_PUBLISH_OPTS = [
 
 
 def register_opts(config):
-    """Register the options for publishing metering messages.
-    """
+    """Register the options for publishing metering messages."""
     config.register_opts(METER_PUBLISH_OPTS, group="publisher_rpc")
 
 
@@ -63,10 +62,10 @@ def oslo_messaging_is_rabbit():
 
 
 def override_backend_retry_config(value):
-    """Override the retry config option native to the configured
-       rpc backend (if such a native config option exists).
+    """Override the retry config option native to the configured rpc backend.
 
-       :param value: the value to override
+    It is done if such a native config option exists.
+    :param value: the value to override
     """
     # TODO(sileht): ultimately we should add to olso a more generic concept
     # of retry config (i.e. not specific to an individual AMQP provider)
@@ -106,7 +105,8 @@ class RPCPublisher(publisher.PublisherBase):
                      % self.policy)
             self.policy = 'default'
 
-        self.rpc_client = messaging.get_rpc_client(version='1.0')
+        transport = messaging.get_transport()
+        self.rpc_client = messaging.get_rpc_client(transport, version='1.0')
 
     def publish_samples(self, context, samples):
         """Publish samples on RPC.
@@ -132,8 +132,8 @@ class RPCPublisher(publisher.PublisherBase):
                     operator.itemgetter('counter_name')):
                 meter_list = list(meter_list)
                 topic_name = topic + '.' + meter_name
-                LOG.audit(_('Publishing %(m)d samples on %(n)s') % (
-                          {'m': len(meter_list), 'n': topic_name}))
+                LOG.debug('Publishing %(m)d samples on %(n)s',
+                          {'m': len(meter_list), 'n': topic_name})
                 self.local_queue.append((context, topic_name, meter_list))
 
         self.flush()
@@ -147,8 +147,8 @@ class RPCPublisher(publisher.PublisherBase):
         # something in the self.local_queue
         queue = self.local_queue
         self.local_queue = []
-        self.local_queue = self._process_queue(queue, self.policy) + \
-            self.local_queue
+        self.local_queue = (self._process_queue(queue, self.policy) +
+                            self.local_queue)
         if self.policy == 'queue':
             self._check_queue_length()
 
@@ -166,7 +166,7 @@ class RPCPublisher(publisher.PublisherBase):
         # if rabbit_max_retries <= 0:
         #   it returns only if the msg has been sent on the amqp queue
         # if rabbit_max_retries > 0:
-        #   it raises a exception if rabbitmq is unreachable
+        #   it raises an exception if rabbitmq is unreachable
         #
         # the default policy just respect the rabbitmq configuration
         # nothing special is done if rabbit_max_retries <= 0

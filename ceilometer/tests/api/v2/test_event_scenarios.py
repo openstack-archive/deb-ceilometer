@@ -18,13 +18,13 @@ import datetime
 
 from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models
-from ceilometer.tests.api.v2 import FunctionalTest
+from ceilometer.tests.api import v2
 from ceilometer.tests import db as tests_db
 
 headers = {"X-Roles": "admin"}
 
 
-class EventTestBase(FunctionalTest,
+class EventTestBase(v2.FunctionalTest,
                     tests_db.MixinTestsWithBackendScenarios):
 
     def setUp(self):
@@ -36,17 +36,16 @@ class EventTestBase(FunctionalTest,
         base = 0
         self.trait_time = datetime.datetime(2013, 12, 31, 5, 0)
         for event_type in ['Foo', 'Bar', 'Zoo']:
-            trait_models = \
-                [models.Trait(name, type, value)
-                    for name, type, value in [
-                        ('trait_A', models.Trait.TEXT_TYPE,
-                            "my_%s_text" % event_type),
-                        ('trait_B', models.Trait.INT_TYPE,
-                            base + 1),
-                        ('trait_C', models.Trait.FLOAT_TYPE,
-                            float(base) + 0.123456),
-                        ('trait_D', models.Trait.DATETIME_TYPE,
-                            self.trait_time)]]
+            trait_models = [models.Trait(name, type, value)
+                            for name, type, value in [
+                                ('trait_A', models.Trait.TEXT_TYPE,
+                                    "my_%s_text" % event_type),
+                                ('trait_B', models.Trait.INT_TYPE,
+                                    base + 1),
+                                ('trait_C', models.Trait.FLOAT_TYPE,
+                                    float(base) + 0.123456),
+                                ('trait_D', models.Trait.DATETIME_TYPE,
+                                    self.trait_time)]]
 
             # Message ID for test will be 'base'. So, message ID for the first
             # event will be '0', the second '100', and so on.
@@ -94,11 +93,20 @@ class TestTraitAPI(EventTestBase):
     def test_get_trait_data_for_event(self):
         path = (self.PATH % "Foo") + "/trait_A"
         data = self.get_json(path, headers=headers)
-
         self.assertEqual(1, len(data))
+        self.assertEqual("trait_A", data[0]['name'])
 
-        trait = data[0]
-        self.assertEqual("trait_A", trait['name'])
+        path = (self.PATH % "Foo") + "/trait_B"
+        data = self.get_json(path, headers=headers)
+        self.assertEqual(1, len(data))
+        self.assertEqual("trait_B", data[0]['name'])
+        self.assertEqual("1", data[0]['value'])
+
+        path = (self.PATH % "Foo") + "/trait_D"
+        data = self.get_json(path, headers=headers)
+        self.assertEqual(1, len(data))
+        self.assertEqual("trait_D", data[0]['name'])
+        self.assertEqual(self.trait_time.isoformat(), data[0]['value'])
 
     def test_get_trait_data_for_non_existent_event(self):
         path = (self.PATH % "NO_SUCH_EVENT") + "/trait_A"
