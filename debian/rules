@@ -38,7 +38,7 @@ ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 	testr init
 	set -e && \
 		TEMP_REZ=`mktemp -t` && \
-		bash -x ./setup-test-env.sh testr run --subunit | tee $$TEMP_REZ | subunit2pyunit || true ; \
+		PYTHONPATH=.:./ceilometer bash -x ./setup-test-env.sh testr run --subunit | tee $$TEMP_REZ | subunit2pyunit || true ; \
 		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats || true ; \
 		rm -f $$TEMP_REZ ;
 	testr slowest
