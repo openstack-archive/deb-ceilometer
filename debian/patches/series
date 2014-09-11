@@ -3,3 +3,4 @@ using-mongodb-by-default.patch
 0002_Opencontrail_pollster_according_the_API_changes.patch
 0003_Opencontrail_Handle_non-ascii_character_in_meter_name.patch
 0004_Opencontrail_transformer_Add_aggregator_transformer.patch
+disable-test_bin.py.patch

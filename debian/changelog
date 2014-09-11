@@ -1,3 +1,9 @@
+ceilometer (2014.1.2-3) unstable; urgency=medium
+
+  * Change the way to ignore test_bin.py file (Closes: #759967).
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 11 Sep 2014 14:06:37 +0000
+
 ceilometer (2014.1.2-2) unstable; urgency=medium
 
   * Added PYTHONPATH=. before launching the test suite.
