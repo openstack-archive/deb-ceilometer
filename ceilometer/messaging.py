@@ -17,9 +17,9 @@
 
 from oslo.config import cfg
 import oslo.messaging
+from oslo.serialization import jsonutils
 
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common import jsonutils
 
 DEFAULT_URL = "__default__"
 TRANSPORTS = {}
@@ -112,10 +112,12 @@ def get_rpc_client(transport, **kwargs):
                                     serializer=serializer)
 
 
-def get_notification_listener(transport, targets, endpoints):
+def get_notification_listener(transport, targets, endpoints,
+                              allow_requeue=False):
     """Return a configured oslo.messaging notification listener."""
     return oslo.messaging.get_notification_listener(
-        transport, targets, endpoints, executor='eventlet')
+        transport, targets, endpoints, executor='eventlet',
+        allow_requeue=allow_requeue)
 
 
 def get_notifier(transport, publisher_id):

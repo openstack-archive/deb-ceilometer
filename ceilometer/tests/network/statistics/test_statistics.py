@@ -15,14 +15,15 @@
 
 import datetime
 
+from oslo.utils import timeutils
+from oslotest import base
+
 from ceilometer.network import statistics
 from ceilometer.network.statistics import driver
-from ceilometer.openstack.common import test
-from ceilometer.openstack.common import timeutils
 from ceilometer import sample
 
 
-class TestBase(test.BaseTestCase):
+class TestBase(base.BaseTestCase):
 
     def test_subclass_ok(self):
 
@@ -37,19 +38,19 @@ class TestBase(test.BaseTestCase):
     def test_subclass_ng(self):
 
         class NgSubclass1(statistics._Base):
-            '''meter_name is lost.'''
+            """meter_name is lost."""
 
             meter_type = sample.TYPE_GAUGE
             meter_unit = 'B'
 
         class NgSubclass2(statistics._Base):
-            '''meter_type is lost.'''
+            """meter_type is lost."""
 
             meter_name = 'foo'
             meter_unit = 'B'
 
         class NgSubclass3(statistics._Base):
-            '''meter_unit is lost.'''
+            """meter_unit is lost."""
 
             meter_name = 'foo'
             meter_type = sample.TYPE_GAUGE
@@ -59,7 +60,7 @@ class TestBase(test.BaseTestCase):
         self.assertRaises(TypeError, NgSubclass3)
 
 
-class TestBaseGetSamples(test.BaseTestCase):
+class TestBaseGetSamples(base.BaseTestCase):
 
     def setUp(self):
         super(TestBaseGetSamples, self).setUp()

@@ -21,12 +21,12 @@ import logging
 import uuid
 
 import mock
+from oslo.config import fixture as fixture_config
+from oslo.utils import timeutils
 from six import moves
 
 from ceilometer.alarm.partition import coordination
 from ceilometer.alarm.storage import models
-from ceilometer.openstack.common.fixture import config
-from ceilometer.openstack.common import timeutils
 from ceilometer.tests import base as tests_base
 
 
@@ -51,7 +51,7 @@ class MockLoggingHandler(logging.Handler):
 class TestCoordinate(tests_base.BaseTestCase):
     def setUp(self):
         super(TestCoordinate, self).setUp()
-        self.CONF = self.useFixture(config.Config()).conf
+        self.CONF = self.useFixture(fixture_config.Config()).conf
         self.setup_messaging(self.CONF)
 
         self.test_interval = 120
@@ -151,14 +151,14 @@ class TestCoordinate(tests_base.BaseTestCase):
         younger = self._younger_by(offset)
         pid = uuid.uuid4()
         self.partition_coordinator.presence(pid, younger)
-        return (pid, younger)
+        return pid, younger
 
     def _check_assignments(self, others, alarm_ids, per_worker,
-                           expect_uneffected=[]):
+                           expect_uneffected=None):
         rpc = self.partition_coordinator.coordination_rpc
         calls = rpc.assign.call_args_list
         return self._check_distribution(others, alarm_ids, per_worker, calls,
-                                        expect_uneffected)
+                                        expect_uneffected or [])
 
     def _check_allocation(self, others, alarm_ids, per_worker):
         rpc = self.partition_coordinator.coordination_rpc
@@ -166,7 +166,8 @@ class TestCoordinate(tests_base.BaseTestCase):
         return self._check_distribution(others, alarm_ids, per_worker, calls)
 
     def _check_distribution(self, others, alarm_ids, per_worker, calls,
-                            expect_uneffected=[]):
+                            expect_uneffected=None):
+        expect_uneffected = expect_uneffected or []
         uneffected = [pid for pid, _ in others]
         uneffected.extend(expect_uneffected)
         remainder = list(alarm_ids)

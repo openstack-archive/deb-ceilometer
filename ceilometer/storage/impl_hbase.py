@@ -13,20 +13,17 @@
 """HBase storage backend
 """
 import datetime
-import hashlib
 import operator
 import os
 import time
 
 import happybase
+from oslo.utils import netutils
+from oslo.utils import timeutils
 from six.moves.urllib import parse as urlparse
 
-from ceilometer.alarm.storage import base as alarm_base
-from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import network_utils
-from ceilometer.openstack.common import timeutils
 from ceilometer.storage import base
 from ceilometer.storage.hbase import inmemory as hbase_inmemory
 from ceilometer.storage.hbase import utils as hbase_utils
@@ -47,10 +44,6 @@ AVAILABLE_CAPABILITIES = {
                              'metadata': True},
                    'aggregation': {'standard': True}},
     'events': {'query': {'simple': True}},
-    'alarms': {'query': {'simple': True,
-                         'complex': False},
-               'history': {'query': {'simple': True,
-                                     'complex': False}}},
 }
 
 
@@ -59,15 +52,15 @@ AVAILABLE_STORAGE_CAPABILITIES = {
 }
 
 
-class Connection(base.Connection, alarm_base.Connection):
+class Connection(base.Connection):
     """Put the data into a HBase database
 
     Collections:
 
     - meter (describes sample actually):
 
-      - row-key: consists of reversed timestamp, meter and an md5 of
-        user+resource+project for purposes of uniqueness
+      - row-key: consists of reversed timestamp, meter and a message signature
+        for purposes of uniqueness
       - Column Families:
 
         f: contains the following qualifiers:
@@ -116,21 +109,6 @@ class Connection(base.Connection, alarm_base.Connection):
               "%s+%s+%s!%s!%s" % (rts, source, counter_name, counter_type,
               counter_unit)
 
-    - alarm:
-
-      - row_key: uuid of alarm
-      - Column Families:
-
-        f: contains the raw incoming alarm data
-
-    - alarm_h:
-
-      - row_key: uuid of alarm + "_" + reversed timestamp
-      - Column Families:
-
-        f: raw incoming alarm_history data. Timestamp becomes now()
-          if not determined
-
     - events:
 
       - row_key: timestamp of event's generation + uuid of event
@@ -158,8 +136,6 @@ class Connection(base.Connection, alarm_base.Connection):
 
     RESOURCE_TABLE = "resource"
     METER_TABLE = "meter"
-    ALARM_TABLE = "alarm"
-    ALARM_HISTORY_TABLE = "alarm_h"
     EVENT_TABLE = "event"
 
     def __init__(self, url):
@@ -187,8 +163,6 @@ class Connection(base.Connection, alarm_base.Connection):
         with self.conn_pool.connection() as conn:
             conn.create_table(self.RESOURCE_TABLE, {'f': dict(max_versions=1)})
             conn.create_table(self.METER_TABLE, {'f': dict(max_versions=1)})
-            conn.create_table(self.ALARM_TABLE, {'f': dict()})
-            conn.create_table(self.ALARM_HISTORY_TABLE, {'f': dict()})
             conn.create_table(self.EVENT_TABLE, {'f': dict(max_versions=1)})
 
     def clear(self):
@@ -196,8 +170,6 @@ class Connection(base.Connection, alarm_base.Connection):
         with self.conn_pool.connection() as conn:
             for table in [self.RESOURCE_TABLE,
                           self.METER_TABLE,
-                          self.ALARM_TABLE,
-                          self.ALARM_HISTORY_TABLE,
                           self.EVENT_TABLE]:
                 try:
                     conn.disable_table(table)
@@ -233,7 +205,7 @@ class Connection(base.Connection, alarm_base.Connection):
           database name, so we are not looking for these in the url.
         """
         opts = {}
-        result = network_utils.urlsplit(url)
+        result = netutils.urlsplit(url)
         opts['table_prefix'] = urlparse.parse_qs(
             result.query).get('table_prefix', [None])[0]
         opts['dbtype'] = result.scheme
@@ -244,77 +216,6 @@ class Connection(base.Connection, alarm_base.Connection):
             port = 9090
         opts['port'] = port and int(port) or 9090
         return opts
-
-    def update_alarm(self, alarm):
-        """Create an alarm.
-
-        :param alarm: The alarm to create. It is Alarm object, so we need to
-          call as_dict()
-        """
-        _id = alarm.alarm_id
-        alarm_to_store = hbase_utils.serialize_entry(alarm.as_dict())
-        with self.conn_pool.connection() as conn:
-            alarm_table = conn.table(self.ALARM_TABLE)
-            alarm_table.put(_id, alarm_to_store)
-            stored_alarm = hbase_utils.deserialize_entry(
-                alarm_table.row(_id))[0]
-        return alarm_models.Alarm(**stored_alarm)
-
-    create_alarm = update_alarm
-
-    def delete_alarm(self, alarm_id):
-        with self.conn_pool.connection() as conn:
-            alarm_table = conn.table(self.ALARM_TABLE)
-            alarm_table.delete(alarm_id)
-
-    def get_alarms(self, name=None, user=None, state=None, meter=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None):
-
-        if pagination:
-            raise NotImplementedError('Pagination not implemented')
-        if meter:
-            raise NotImplementedError('Filter by meter not implemented')
-
-        q = hbase_utils.make_query(alarm_id=alarm_id, name=name,
-                                   enabled=enabled, user_id=user,
-                                   project_id=project, state=state)
-
-        with self.conn_pool.connection() as conn:
-            alarm_table = conn.table(self.ALARM_TABLE)
-            gen = alarm_table.scan(filter=q)
-            for ignored, data in gen:
-                stored_alarm = hbase_utils.deserialize_entry(data)[0]
-                yield alarm_models.Alarm(**stored_alarm)
-
-    def get_alarm_changes(self, alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
-        q = hbase_utils.make_query(alarm_id=alarm_id,
-                                   on_behalf_of=on_behalf_of, type=type,
-                                   user_id=user, project_id=project)
-        start_row, end_row = hbase_utils.make_timestamp_query(
-            hbase_utils.make_general_rowkey_scan,
-            start=start_timestamp, start_op=start_timestamp_op,
-            end=end_timestamp, end_op=end_timestamp_op, bounds_only=True,
-            some_id=alarm_id)
-        with self.conn_pool.connection() as conn:
-            alarm_history_table = conn.table(self.ALARM_HISTORY_TABLE)
-            gen = alarm_history_table.scan(filter=q, row_start=start_row,
-                                           row_stop=end_row)
-            for ignored, data in gen:
-                stored_entry = hbase_utils.deserialize_entry(data)[0]
-                yield alarm_models.AlarmChange(**stored_entry)
-
-    def record_alarm_change(self, alarm_change):
-        """Record alarm change event."""
-        alarm_change_dict = hbase_utils.serialize_entry(alarm_change)
-        ts = alarm_change.get('timestamp') or datetime.datetime.now()
-        rts = hbase_utils.timestamp(ts)
-        with self.conn_pool.connection() as conn:
-            alarm_history_table = conn.table(self.ALARM_HISTORY_TABLE)
-            alarm_history_table.put(alarm_change.get('alarm_id') + "_" +
-                                    str(rts), alarm_change_dict)
 
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
@@ -348,13 +249,10 @@ class Connection(base.Connection, alarm_base.Connection):
             ts = int(time.mktime(data['timestamp'].timetuple()) * 1000)
             resource_table.put(data['resource_id'], resource, ts)
 
-            # TODO(nprivalova): improve uniqueness
-            # Rowkey consists of reversed timestamp, meter and an md5 of
-            # user+resource+project for purposes of uniqueness
-            m = hashlib.md5()
-            m.update("%s%s%s" % (data['user_id'], data['resource_id'],
-                                 data['project_id']))
-            row = "%s_%d_%s" % (data['counter_name'], rts, m.hexdigest())
+            # Rowkey consists of reversed timestamp, meter and a
+            # message signature for purposes of uniqueness
+            row = "%s_%d_%s" % (data['counter_name'], rts,
+                                data['message_signature'])
             record = hbase_utils.serialize_entry(
                 data, **{'source': data['source'], 'rts': rts,
                          'message': data, 'recorded_at': timeutils.utcnow()})

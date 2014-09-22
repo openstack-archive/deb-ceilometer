@@ -23,13 +23,13 @@ import os
 import uuid
 import warnings
 
+from oslo.config import fixture as fixture_config
+from oslotest import mockpatch
 import six
 from six.moves.urllib import parse as urlparse
 import testscenarios.testcase
 from testtools import testcase
 
-from ceilometer.openstack.common.fixture import config
-import ceilometer.openstack.common.fixture.mockpatch as oslo_mock
 from ceilometer import storage
 from ceilometer.tests import base as test_base
 
@@ -116,6 +116,9 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
             raise testcase.TestSkipped(
                 'Test is not applicable for %s' % engine)
 
+        self.CONF = self.useFixture(fixture_config.Config()).conf
+        self.CONF([], project='ceilometer')
+
         self.db_manager = self._get_driver_manager(engine)(self.db_url)
         self.useFixture(self.db_manager)
 
@@ -125,11 +128,8 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         self.alarm_conn = self.db_manager.alarm_connection
         self.alarm_conn.upgrade()
 
-        self.useFixture(oslo_mock.Patch('ceilometer.storage.get_connection',
+        self.useFixture(mockpatch.Patch('ceilometer.storage.get_connection',
                                         side_effect=self._get_connection))
-
-        self.CONF = self.useFixture(config.Config()).conf
-        self.CONF([], project='ceilometer')
 
         # Set a default location for the pipeline config file so the
         # tests work even if ceilometer is not installed globally on

@@ -12,8 +12,8 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from oslotest import base
 
-from ceilometer.openstack.common import test
 from ceilometer.profiler import notifications
 from ceilometer import sample
 
@@ -39,11 +39,11 @@ NOTIFICATION = {
 }
 
 
-class ProfilerNotificationsTestCase(test.BaseTestCase):
+class ProfilerNotificationsTestCase(base.BaseTestCase):
 
     def test_process_notification(self):
         prof = notifications.ProfilerNotifications(None)
-        info = prof.process_notification(NOTIFICATION).next()
+        info = next(prof.process_notification(NOTIFICATION))
 
         self.assertEqual(NOTIFICATION["payload"]["name"], info.name)
         self.assertEqual(sample.TYPE_GAUGE, info.type)

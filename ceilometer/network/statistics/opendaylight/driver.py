@@ -12,7 +12,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+from oslo.utils import timeutils
 import six
 from six import moves
 from six.moves.urllib import parse as urlparse
@@ -21,7 +21,6 @@ from ceilometer.network.statistics import driver
 from ceilometer.network.statistics.opendaylight import client
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import utils
 
 
@@ -43,7 +42,7 @@ def _get_properties(properties, prefix='properties'):
 def _get_int_sample(key, statistic, resource_id, resource_meta):
     if key not in statistic:
         return None
-    return (int(statistic[key]), resource_id, resource_meta)
+    return int(statistic[key]), resource_id, resource_meta
 
 
 class OpenDayLightDriver(driver.Driver):
@@ -235,7 +234,7 @@ class OpenDayLightDriver(driver.Driver):
 
         resource_meta.update(_get_properties(statistic.get('properties')))
 
-        return (1, resource_id, resource_meta)
+        return 1, resource_id, resource_meta
 
     @staticmethod
     def _iter_port(extractor, data):
@@ -308,7 +307,7 @@ class OpenDayLightDriver(driver.Driver):
 
                 break
 
-        return (1, resource_id, resource_meta)
+        return 1, resource_id, resource_meta
 
     @staticmethod
     def _switch_port_receive_packets(statistic, resource_id,
@@ -393,7 +392,7 @@ class OpenDayLightDriver(driver.Driver):
 
     @staticmethod
     def _switch_table(statistic, resource_id, resource_meta):
-        return (1, resource_id, resource_meta)
+        return 1, resource_id, resource_meta
 
     @staticmethod
     def _switch_table_active_entries(statistic, resource_id,
@@ -428,7 +427,7 @@ class OpenDayLightDriver(driver.Driver):
 
     @staticmethod
     def _switch_flow(statistic, resource_id, resource_meta):
-        return (1, resource_id, resource_meta)
+        return 1, resource_id, resource_meta
 
     @staticmethod
     def _switch_flow_duration_seconds(statistic, resource_id,

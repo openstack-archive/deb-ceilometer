@@ -21,9 +21,9 @@ import datetime
 import inspect
 import math
 
+from oslo.utils import timeutils
+import six
 from six import moves
-
-from ceilometer.openstack.common import timeutils
 
 
 def iter_period(start, end, period):
@@ -108,7 +108,7 @@ class Model(object):
 
     def __init__(self, **kwds):
         self.fields = list(kwds)
-        for k, v in kwds.iteritems():
+        for k, v in six.iteritems(kwds):
             setattr(self, k, v)
 
     def as_dict(self):
@@ -134,8 +134,7 @@ class Model(object):
 class Connection(object):
     """Base class for storage system connections."""
 
-    """A dictionary representing the capabilities of this driver.
-    """
+    # A dictionary representing the capabilities of this driver.
     CAPABILITIES = {
         'meters': {'pagination': False,
                    'query': {'simple': False,

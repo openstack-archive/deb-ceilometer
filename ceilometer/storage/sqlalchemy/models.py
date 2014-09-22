@@ -19,6 +19,8 @@ SQLAlchemy models for Ceilometer data.
 
 import json
 
+from oslo.utils import timeutils
+import six
 from sqlalchemy import (Column, Integer, String, ForeignKey, Index,
                         UniqueConstraint, BigInteger, join)
 from sqlalchemy import Float, Boolean, Text, DateTime
@@ -29,7 +31,6 @@ from sqlalchemy.orm import column_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import TypeDecorator
 
-from ceilometer.openstack.common import timeutils
 from ceilometer.storage import models as api_models
 from ceilometer import utils
 
@@ -91,7 +92,7 @@ class CeilometerBase(object):
 
     def update(self, values):
         """Make the model object behave like a dict."""
-        for k, v in values.iteritems():
+        for k, v in six.iteritems(values):
             setattr(self, k, v)
 
 

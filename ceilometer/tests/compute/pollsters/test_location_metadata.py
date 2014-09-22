@@ -20,10 +20,11 @@
 """
 
 import mock
+from oslotest import base
+import six
 
 from ceilometer.compute import manager
 from ceilometer.compute.pollsters import util
-from ceilometer.openstack.common import test
 
 
 class FauxInstance(object):
@@ -42,7 +43,7 @@ class FauxInstance(object):
             return default
 
 
-class TestLocationMetadata(test.BaseTestCase):
+class TestLocationMetadata(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -81,7 +82,7 @@ class TestLocationMetadata(test.BaseTestCase):
 
     def test_metadata(self):
         md = util._get_metadata_from_object(self.instance)
-        for prop, value in self.INSTANCE_PROPERTIES.iteritems():
+        for prop, value in six.iteritems(self.INSTANCE_PROPERTIES):
             if prop not in ("metadata"):
                 # Special cases
                 if prop == 'name':

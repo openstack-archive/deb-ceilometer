@@ -16,11 +16,12 @@
 """Implementation of Inspector abstraction for VMware vSphere"""
 
 from oslo.config import cfg
+from oslo.utils import units
 from oslo.vmware import api
 
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer.compute.virt.vmware import vsphere_operations
-from ceilometer.openstack.common import units
+from ceilometer.openstack.common.gettextutils import _
 
 
 opt_group = cfg.OptGroup(name='vmware',
@@ -35,7 +36,8 @@ OPTS = [
                help='Username of VMware Vsphere'),
     cfg.StrOpt('host_password',
                default='',
-               help='Password of VMware Vsphere'),
+               help='Password of VMware Vsphere',
+               secret=True),
     cfg.IntOpt('api_retry_count',
                default=10,
                help='Number of times a VMware Vsphere API must be retried'),

@@ -19,6 +19,7 @@ import datetime
 from keystoneclient import exceptions
 from oslo.config import cfg
 import requests
+import six
 
 from ceilometer.central import plugin
 from ceilometer.openstack.common.gettextutils import _
@@ -45,7 +46,7 @@ class KwapiClient(object):
         request = requests.get(probes_url, headers=headers)
         message = request.json()
         probes = message['probes']
-        for key, value in probes.iteritems():
+        for key, value in six.iteritems(probes):
             probe_dict = value
             probe_dict['id'] = key
             yield probe_dict
@@ -81,7 +82,7 @@ class _Base(plugin.CentralPollster):
 
 class EnergyPollster(_Base):
     """Measures energy consumption."""
-    @plugin.check_keystone
+    @plugin.check_keystone('energy')
     def get_samples(self, manager, cache, resources=None):
         """Returns all samples."""
         for probe in self._iter_probes(manager.keystone, cache):
@@ -101,7 +102,7 @@ class EnergyPollster(_Base):
 
 class PowerPollster(_Base):
     """Measures power consumption."""
-    @plugin.check_keystone
+    @plugin.check_keystone('energy')
     def get_samples(self, manager, cache, resources=None):
         """Returns all samples."""
         for probe in self._iter_probes(manager.keystone, cache):

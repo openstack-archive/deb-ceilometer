@@ -17,12 +17,12 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from oslo.utils import timeutils
 
 from ceilometer.central import plugin
 from ceilometer import nova_client
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
@@ -39,6 +39,7 @@ class FloatingIPPollster(plugin.CentralPollster):
             cache['floating_ips'] = list(self._get_floating_ips())
         return iter(cache['floating_ips'])
 
+    @plugin.check_keystone('network')
     def get_samples(self, manager, cache, resources=None):
         for ip in self._iter_floating_ips(cache):
             LOG.info(_("FLOATING IP USAGE: %s") % ip.ip)

@@ -18,21 +18,23 @@
 
 """Utilities and helper functions."""
 
+import bisect
 import calendar
 import copy
 import datetime
 import decimal
+import hashlib
 import multiprocessing
+import struct
 
+from oslo.utils import timeutils
+from oslo.utils import units
 import six
-
-from ceilometer.openstack.common import timeutils
-from ceilometer.openstack.common import units
 
 
 def recursive_keypairs(d, separator=':'):
     """Generator that produces sequence of keypairs for nested dictionaries."""
-    for name, value in sorted(d.iteritems()):
+    for name, value in sorted(six.iteritems(d)):
         if isinstance(value, dict):
             for subname, subvalue in recursive_keypairs(value, separator):
                 yield ('%s%s%s' % (name, separator, subname), subvalue)
@@ -58,7 +60,7 @@ def recursive_keypairs(d, separator=':'):
 def restore_nesting(d, separator=':'):
     """Unwinds a flattened dict to restore nesting."""
     d = copy.copy(d) if any([separator in k for k in d.keys()]) else d
-    for k, v in d.items():
+    for k, v in d.copy().items():
         if separator in k:
             top, rem = k.split(separator, 1)
             nest = d[top] if isinstance(d.get(top), dict) else {}
@@ -107,7 +109,7 @@ def stringify_timestamps(data):
     """Stringify any datetimes in given dict."""
     isa_timestamp = lambda v: isinstance(v, datetime.datetime)
     return dict((k, v.isoformat() if isa_timestamp(v) else v)
-                for (k, v) in data.iteritems())
+                for (k, v) in six.iteritems(data))
 
 
 def dict_to_keyval(value, key_base=None):
@@ -118,7 +120,7 @@ def dict_to_keyval(value, key_base=None):
     """
     val_iter, key_func = None, None
     if isinstance(value, dict):
-        val_iter = value.iteritems()
+        val_iter = six.iteritems(value)
         key_func = lambda k: key_base + '.' + k if key_base else k
     elif isinstance(value, (tuple, list)):
         val_iter = enumerate(value)
@@ -155,7 +157,7 @@ def update_nested(original_dict, updates):
      Updates occur without replacing entire sub-dicts.
     """
     dict_to_update = copy.deepcopy(original_dict)
-    for key, value in updates.iteritems():
+    for key, value in six.iteritems(updates):
         if isinstance(value, dict):
             sub_dict = update_nested(dict_to_update.get(key, {}), value)
             dict_to_update[key] = sub_dict
@@ -181,3 +183,33 @@ def uniq(dupes, attrs):
             deduped.append(d)
             keys.append(key(d))
     return deduped
+
+
+class HashRing(object):
+
+    def __init__(self, nodes, replicas=100):
+        self._ring = dict()
+        self._sorted_keys = []
+
+        for node in nodes:
+            for r in six.moves.range(replicas):
+                hashed_key = self._hash('%s-%s' % (node, r))
+                self._ring[hashed_key] = node
+                self._sorted_keys.append(hashed_key)
+        self._sorted_keys.sort()
+
+    @staticmethod
+    def _hash(key):
+        return struct.unpack_from('>I',
+                                  hashlib.md5(str(key).encode()).digest())[0]
+
+    def _get_position_on_ring(self, key):
+        hashed_key = self._hash(key)
+        position = bisect.bisect(self._sorted_keys, hashed_key)
+        return position if position < len(self._sorted_keys) else 0
+
+    def get_node(self, key):
+        if not self._ring:
+            return None
+        pos = self._get_position_on_ring(key)
+        return self._ring[self._sorted_keys[pos]]

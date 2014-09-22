@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2013 eNovance <licensing@enovance.com>
+# Copyright 2013-2014 eNovance <licensing@enovance.com>
 #
 # Author: Julien Danjou <julien@danjou.info>
 #
@@ -18,14 +18,14 @@
 
 import mock
 import novaclient
+from oslo.config import fixture as fixture_config
+from oslotest import base
+from oslotest import mockpatch
 
 from ceilometer import nova_client
-from ceilometer.openstack.common.fixture import config
-from ceilometer.openstack.common.fixture import mockpatch
-from ceilometer.openstack.common import test
 
 
-class TestNovaClient(test.BaseTestCase):
+class TestNovaClient(base.BaseTestCase):
 
     def setUp(self):
         super(TestNovaClient, self).setUp()
@@ -38,7 +38,7 @@ class TestNovaClient(test.BaseTestCase):
         self.useFixture(mockpatch.PatchObject(
             self.nv.nova_client.images, 'get',
             side_effect=self.fake_images_get))
-        self.CONF = self.useFixture(config.Config()).conf
+        self.CONF = self.useFixture(fixture_config.Config()).conf
 
     def fake_flavors_get(self, *args, **kwargs):
         self._flavors_count += 1
@@ -95,6 +95,16 @@ class TestNovaClient(test.BaseTestCase):
         self.assertEqual('ubuntu-12.04-x86', instances[0].image['name'])
         self.assertEqual(11, instances[0].kernel_id)
         self.assertEqual(21, instances[0].ramdisk_id)
+
+    def test_instance_get_all(self):
+        with mock.patch.object(self.nv.nova_client.servers, 'list',
+                               side_effect=self.fake_servers_list):
+            instances = self.nv.instance_get_all()
+
+        self.assertEqual(2, len(instances))
+        self.assertEqual(42, instances[0].id)
+        self.assertEqual(1, instances[0].flavor['id'])
+        self.assertEqual(1, instances[0].image['id'])
 
     @staticmethod
     def fake_servers_list_unknown_flavor(*args, **kwargs):

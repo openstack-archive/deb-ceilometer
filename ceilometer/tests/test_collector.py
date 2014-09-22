@@ -19,19 +19,23 @@ import socket
 
 import mock
 import msgpack
+from oslo.config import fixture as fixture_config
 import oslo.messaging
+from oslo.utils import timeutils
+from oslotest import mockpatch
 from stevedore import extension
 
 from ceilometer import collector
 from ceilometer import dispatcher
 from ceilometer import messaging
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.fixture import config
-from ceilometer.openstack.common.fixture import mockpatch
-from ceilometer.openstack.common import timeutils
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer.tests import base as tests_base
+
+
+class FakeException(Exception):
+    pass
 
 
 class FakeConnection():
@@ -42,10 +46,8 @@ class FakeConnection():
 class TestCollector(tests_base.BaseTestCase):
     def setUp(self):
         super(TestCollector, self).setUp()
-        self.CONF = self.useFixture(config.Config()).conf
-        self.CONF.import_opt("connection",
-                             "ceilometer.openstack.common.db.options",
-                             group="database")
+        self.CONF = self.useFixture(fixture_config.Config()).conf
+        self.CONF.import_opt("connection", "oslo.db.options", group="database")
         self.CONF.set_override("connection", "log://", group='database')
         self.CONF.set_override('metering_secret', 'not-so-secret',
                                group='publisher')
@@ -200,7 +202,8 @@ class TestCollector(tests_base.BaseTestCase):
         """Check that only RPC is started if udp_address is empty."""
         self.CONF.set_override('udp_address', '', group='collector')
         self.srv.start()
-        self.assertEqual(1, rpc_start.call_count)
+        # two calls because two servers (notification and rpc)
+        self.assertEqual(2, rpc_start.call_count)
         self.assertEqual(0, udp_start.call_count)
 
     def test_udp_receive_valid_encoding(self):
@@ -228,3 +231,26 @@ class TestCollector(tests_base.BaseTestCase):
         self.srv.rpc_server.wait()
         mylog.info.assert_called_once_with(
             'metering data test for test_run_tasks: 1')
+
+    @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start')
+    @mock.patch.object(collector.CollectorService, 'start_udp')
+    def test_collector_requeue(self, udp_start, rpc_start):
+        self.CONF.set_override('requeue_sample_on_dispatcher_error', True,
+                               group='collector')
+        self.srv.start()
+        with mock.patch.object(self.srv.dispatcher_manager, 'map_method',
+                               side_effect=Exception('boom')):
+            ret = self.srv.sample({}, 'pub_id', 'event', {}, {})
+            self.assertEqual(oslo.messaging.NotificationResult.REQUEUE,
+                             ret)
+
+    @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start')
+    @mock.patch.object(collector.CollectorService, 'start_udp')
+    def test_collector_no_requeue(self, udp_start, rpc_start):
+        self.CONF.set_override('requeue_sample_on_dispatcher_error', False,
+                               group='collector')
+        self.srv.start()
+        with mock.patch.object(self.srv.dispatcher_manager, 'map_method',
+                               side_effect=FakeException('boom')):
+            self.assertRaises(FakeException, self.srv.sample, {}, 'pub_id',
+                              'event', {}, {})

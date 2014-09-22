@@ -7,6 +7,7 @@
 # Authors: Yunhong Jiang <yunhong.jiang@intel.com>
 #          Julien Danjou <julien@danjou.info>
 #          Eoghan Glynn <eglynn@redhat.com>
+#          Nejc Saje <nsaje@redhat.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -25,11 +26,11 @@ import copy
 import datetime
 
 import mock
+from oslo.config import fixture as fixture_config
+from oslotest import mockpatch
 import six
 from stevedore import extension
 
-from ceilometer.openstack.common.fixture import config
-from ceilometer.openstack.common.fixture import mockpatch
 from ceilometer import pipeline
 from ceilometer import plugin
 from ceilometer import publisher
@@ -158,6 +159,10 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         params = []
         resources = []
 
+        @property
+        def group_id(self):
+            return 'another_group'
+
     class DiscoveryException(TestDiscoveryException):
         params = []
 
@@ -169,7 +174,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             self.pipeline_cfg,
             self.transformer_manager)
 
-    def get_extention_list(self):
+    def get_extension_list(self):
         return [extension.Extension('test',
                                     None,
                                     None,
@@ -189,7 +194,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
 
     def create_pollster_manager(self):
         return extension.ExtensionManager.make_test_instance(
-            self.get_extention_list(),
+            self.get_extension_list(),
         )
 
     def create_discovery_manager(self):
@@ -222,6 +227,11 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         super(BaseAgentManagerTestCase, self).setUp()
         self.mgr = self.create_manager()
         self.mgr.pollster_manager = self.create_pollster_manager()
+        self.mgr.partition_coordinator = mock.MagicMock()
+        fake_subset = lambda _, x: x
+        p_coord = self.mgr.partition_coordinator
+        p_coord.extract_my_subset.side_effect = fake_subset
+        self.mgr.tg = mock.MagicMock()
         self.pipeline_cfg = [{
             'name': "test_pipeline",
             'interval': 60,
@@ -231,7 +241,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             'publishers': ["test"],
         }, ]
         self.setup_pipeline()
-        self.CONF = self.useFixture(config.Config()).conf
+        self.CONF = self.useFixture(fixture_config.Config()).conf
         self.CONF.set_override(
             'pipeline_cfg_file',
             self.path_get('etc/ceilometer/pipeline.yaml')
@@ -260,6 +270,29 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         self.Discovery.resources = []
         self.DiscoveryAnother.resources = []
         super(BaseAgentManagerTestCase, self).tearDown()
+
+    @mock.patch('ceilometer.pipeline.setup_pipeline')
+    def test_start(self, setup_pipeline):
+        self.mgr.join_partitioning_groups = mock.MagicMock()
+        self.mgr.setup_polling_tasks = mock.MagicMock()
+        self.CONF.set_override('heartbeat', 1.0, group='coordination')
+        self.mgr.start()
+        setup_pipeline.assert_called_once_with()
+        self.mgr.partition_coordinator.start.assert_called_once_with()
+        self.mgr.join_partitioning_groups.assert_called_once_with()
+        self.mgr.setup_polling_tasks.assert_called_once_with()
+        timer_call = mock.call(1.0, self.mgr.partition_coordinator.heartbeat)
+        self.assertEqual([timer_call], self.mgr.tg.add_timer.call_args_list)
+
+    def test_join_partitioning_groups(self):
+        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.join_partitioning_groups()
+        p_coord = self.mgr.partition_coordinator
+        expected = [mock.call(self.mgr._construct_group_id(g))
+                    for g in ['another_group', 'global']]
+        self.assertEqual(len(expected), len(p_coord.join_group.call_args_list))
+        for c in expected:
+            self.assertIn(c, p_coord.join_group.call_args_list)
 
     def test_setup_polling_tasks(self):
         polling_tasks = self.mgr.setup_polling_tasks()
@@ -487,3 +520,79 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             published = pipe_line.publishers[0].samples[0]
             self.assertEqual(amalgamated_resources,
                              set(published.resource_metadata['resources']))
+
+    def test_multiple_sources_different_discoverers(self):
+        self.Discovery.resources = ['discovered_1', 'discovered_2']
+        self.DiscoveryAnother.resources = ['discovered_3', 'discovered_4']
+        sources = [{'name': 'test_source_1',
+                    'interval': 60,
+                    'counters': ['test'],
+                    'discovery': ['testdiscovery'],
+                    'sinks': ['test_sink_1']},
+                   {'name': 'test_source_2',
+                    'interval': 60,
+                    'counters': ['testanother'],
+                    'discovery': ['testdiscoveryanother'],
+                    'sinks': ['test_sink_2']}]
+        sinks = [{'name': 'test_sink_1',
+                  'transformers': [],
+                  'publishers': ['test://']},
+                 {'name': 'test_sink_2',
+                  'transformers': [],
+                  'publishers': ['test://']}]
+        self.pipeline_cfg = {'sources': sources, 'sinks': sinks}
+        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.setup_pipeline()
+        polling_tasks = self.mgr.setup_polling_tasks()
+        self.assertEqual(1, len(polling_tasks))
+        self.assertTrue(60 in polling_tasks.keys())
+        self.mgr.interval_task(polling_tasks.get(60))
+        self.assertEqual(1, len(self.Pollster.samples))
+        self.assertEqual(['discovered_1', 'discovered_2'],
+                         self.Pollster.resources)
+        self.assertEqual(1, len(self.PollsterAnother.samples))
+        self.assertEqual(['discovered_3', 'discovered_4'],
+                         self.PollsterAnother.resources)
+
+    def test_multiple_sinks_same_discoverer(self):
+        self.Discovery.resources = ['discovered_1', 'discovered_2']
+        sources = [{'name': 'test_source_1',
+                    'interval': 60,
+                    'counters': ['test'],
+                    'discovery': ['testdiscovery'],
+                    'sinks': ['test_sink_1', 'test_sink_2']}]
+        sinks = [{'name': 'test_sink_1',
+                  'transformers': [],
+                  'publishers': ['test://']},
+                 {'name': 'test_sink_2',
+                  'transformers': [],
+                  'publishers': ['test://']}]
+        self.pipeline_cfg = {'sources': sources, 'sinks': sinks}
+        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.setup_pipeline()
+        polling_tasks = self.mgr.setup_polling_tasks()
+        self.assertEqual(1, len(polling_tasks))
+        self.assertTrue(60 in polling_tasks.keys())
+        self.mgr.interval_task(polling_tasks.get(60))
+        self.assertEqual(1, len(self.Pollster.samples))
+        self.assertEqual(['discovered_1', 'discovered_2'],
+                         self.Pollster.resources)
+
+    def test_discovery_partitioning(self):
+        self.mgr.discovery_manager = self.create_discovery_manager()
+        p_coord = self.mgr.partition_coordinator
+        self.pipeline_cfg[0]['discovery'] = ['testdiscovery',
+                                             'testdiscoveryanother',
+                                             'testdiscoverynonexistent',
+                                             'testdiscoveryexception']
+        self.setup_pipeline()
+        polling_tasks = self.mgr.setup_polling_tasks()
+        self.mgr.interval_task(polling_tasks.get(60))
+        expected = [mock.call(self.mgr._construct_group_id(d.obj.group_id),
+                              d.obj.resources)
+                    for d in self.mgr.discovery_manager
+                    if hasattr(d.obj, 'resources')]
+        self.assertEqual(len(expected),
+                         len(p_coord.extract_my_subset.call_args_list))
+        for c in expected:
+            self.assertIn(c, p_coord.extract_my_subset.call_args_list)

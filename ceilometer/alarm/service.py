@@ -21,15 +21,16 @@ import abc
 
 from ceilometerclient import client as ceiloclient
 from oslo.config import cfg
+from oslo.utils import netutils
 import six
 from stevedore import extension
 
-from ceilometer.alarm.partition import coordination
+from ceilometer.alarm.partition import coordination as alarm_coordination
 from ceilometer.alarm import rpc as rpc_alarm
+from ceilometer import coordination as coordination
 from ceilometer import messaging
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import network_utils
 from ceilometer.openstack.common import service as os_service
 
 
@@ -48,6 +49,8 @@ cfg.CONF.import_opt('notifier_rpc_topic', 'ceilometer.alarm.rpc',
                     group='alarm')
 cfg.CONF.import_opt('partition_rpc_topic', 'ceilometer.alarm.rpc',
                     group='alarm')
+cfg.CONF.import_opt('heartbeat', 'ceilometer.coordination',
+                    group='coordination')
 
 LOG = log.getLogger(__name__)
 
@@ -109,6 +112,46 @@ class AlarmService(object):
         pass
 
 
+@six.add_metaclass(abc.ABCMeta)
+class AlarmEvaluationService(AlarmService, os_service.Service):
+
+    PARTITIONING_GROUP_NAME = "alarm_evaluator"
+
+    def __init__(self):
+        super(AlarmEvaluationService, self).__init__()
+        self._load_evaluators()
+        self.api_client = None
+        self.partition_coordinator = coordination.PartitionCoordinator()
+
+    def start(self):
+        super(AlarmEvaluationService, self).start()
+        self.partition_coordinator.start()
+        self.partition_coordinator.join_group(self.PARTITIONING_GROUP_NAME)
+
+        # allow time for coordination if necessary
+        delay_start = self.partition_coordinator.is_active()
+
+        if self.evaluators:
+            interval = cfg.CONF.alarm.evaluation_interval
+            self.tg.add_timer(
+                interval,
+                self._evaluate_assigned_alarms,
+                initial_delay=interval if delay_start else None)
+        if self.partition_coordinator.is_active():
+            heartbeat_interval = min(cfg.CONF.coordination.heartbeat,
+                                     cfg.CONF.alarm.evaluation_interval / 4)
+            self.tg.add_timer(heartbeat_interval,
+                              self.partition_coordinator.heartbeat)
+        # Add a dummy thread to have wait() working
+        self.tg.add_timer(604800, lambda: None)
+
+    def _assigned_alarms(self):
+        all_alarms = self._client.alarms.list(q=[{'field': 'enabled',
+                                                  'value': True}])
+        return self.partition_coordinator.extract_my_subset(
+            self.PARTITIONING_GROUP_NAME, all_alarms)
+
+
 class SingletonAlarmService(AlarmService, os_service.Service):
 
     def __init__(self):
@@ -142,7 +185,7 @@ class PartitionedAlarmService(AlarmService, os_service.Service):
 
         self._load_evaluators()
         self.api_client = None
-        self.partition_coordinator = coordination.PartitionCoordinator()
+        self.partition_coordinator = alarm_coordination.PartitionCoordinator()
 
     def start(self):
         super(PartitionedAlarmService, self).start()
@@ -210,7 +253,7 @@ class AlarmNotifierService(os_service.Service):
     def _handle_action(self, action, alarm_id, previous,
                        current, reason, reason_data):
         try:
-            action = network_utils.urlsplit(action)
+            action = netutils.urlsplit(action)
         except Exception:
             LOG.error(
                 _("Unable to parse action %(action)s for alarm %(alarm_id)s"),

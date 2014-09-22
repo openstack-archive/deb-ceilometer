@@ -5,12 +5,11 @@ coverage>=3.6
 discover
 fixtures>=0.3.14
 httplib2>=0.7.5
-http://tarballs.openstack.org/swift/swift-master.tar.gz#egg=swift
 mock>=1.0
 mox>=0.5.3
 MySQL-python
 # Docs Requirements
-oslosphinx
+oslosphinx>=2.2.0.0a2
 oslotest
 pymongo>=2.5
 python-subunit>=0.0.18

@@ -26,8 +26,9 @@ import datetime
 import repr
 
 import mock
+from oslo.utils import timeutils
 
-from ceilometer.openstack.common import timeutils
+from ceilometer.alarm.storage import impl_sqlalchemy as impl_sqla_alarm
 from ceilometer.storage import impl_sqlalchemy
 from ceilometer.storage import models
 from ceilometer.storage.sqlalchemy import models as sql_models
@@ -153,7 +154,7 @@ class EventTest(tests_db.TestBase):
         m = [models.Event("1", "Foo", now, []),
              models.Event("2", "Zoo", now, [])]
 
-        with mock.patch.object(self.conn._conn, "_record_event") as mock_save:
+        with mock.patch.object(self.conn, "_record_event") as mock_save:
             mock_save.side_effect = MyException("Boom")
             problem_events = self.conn.record_events(m)
         self.assertEqual(2, len(problem_events))
@@ -226,14 +227,21 @@ class CapabilitiesTest(test_base.BaseTestCase):
                                                'stddev': True,
                                                'cardinality': True}}
                            },
-            'alarms': {'query': {'simple': True,
-                                 'complex': True},
-                       'history': {'query': {'simple': True,
-                                             'complex': True}}},
             'events': {'query': {'simple': True}}
         }
 
         actual_capabilities = impl_sqlalchemy.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_alarm_capabilities(self):
+        expected_capabilities = {
+            'alarms': {'query': {'simple': True,
+                                 'complex': True},
+                       'history': {'query': {'simple': True,
+                                             'complex': True}}},
+        }
+
+        actual_capabilities = impl_sqla_alarm.Connection.get_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)
 
     def test_storage_capabilities(self):

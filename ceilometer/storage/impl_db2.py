@@ -28,10 +28,11 @@ import sys
 
 import bson.code
 import bson.objectid
+from oslo.utils import timeutils
 import pymongo
+import six
 
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -266,7 +267,7 @@ class Connection(pymongo_base.Connection):
             q['resource_id'] = resource
         # Add resource_ prefix so it matches the field in the db
         q.update(dict(('resource_' + k, v)
-                      for (k, v) in metaquery.iteritems()))
+                      for (k, v) in six.iteritems(metaquery)))
 
         if start_timestamp or end_timestamp:
             # Look for resources matching the above criteria and with

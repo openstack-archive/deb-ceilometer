@@ -20,14 +20,14 @@
 # under the License.
 
 import mock
+from oslotest import base
 
 from ceilometer.central import manager
 from ceilometer.network import floatingip
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common import test
 
 
-class TestFloatingIPPollster(test.BaseTestCase):
+class TestFloatingIPPollster(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -35,6 +35,9 @@ class TestFloatingIPPollster(test.BaseTestCase):
         self.addCleanup(mock.patch.stopall)
         self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
+        self.manager.keystone = mock.Mock()
+        self.manager.keystone.service_catalog.get_endpoints = mock.Mock(
+            return_value={'network': mock.ANY})
         self.pollster = floatingip.FloatingIPPollster()
         fake_ips = self.fake_get_ips()
         patch_virt = mock.patch('ceilometer.nova_client.Client.'
@@ -88,7 +91,6 @@ class TestFloatingIPPollster(test.BaseTestCase):
         self.assertEqual(set(['ip.floating']), set([s.name for s in samples]))
 
     def test_get_samples_cached(self):
-        cache = {}
-        cache['floating_ips'] = self.fake_get_ips()[:2]
+        cache = {'floating_ips': self.fake_get_ips()[:2]}
         samples = list(self.pollster.get_samples(self.manager, cache))
         self.assertEqual(2, len(samples))

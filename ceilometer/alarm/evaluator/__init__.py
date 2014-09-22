@@ -22,12 +22,12 @@ import datetime
 
 from ceilometerclient import client as ceiloclient
 from oslo.config import cfg
+from oslo.utils import timeutils
 import pytz
 import six
 
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 
 
 LOG = log.getLogger(__name__)
@@ -93,7 +93,7 @@ class Evaluator(object):
         if not alarm.time_constraints:
             return True
 
-        now_utc = timeutils.utcnow()
+        now_utc = timeutils.utcnow().replace(tzinfo=pytz.utc)
         for tc in alarm.time_constraints:
             tz = pytz.timezone(tc['timezone']) if tc['timezone'] else None
             now_tz = now_utc.astimezone(tz) if tz else now_utc

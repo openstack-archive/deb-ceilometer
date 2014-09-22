@@ -18,12 +18,13 @@ import datetime
 
 from keystoneclient import exceptions
 import mock
+from oslotest import base
+from oslotest import mockpatch
+import six
 
 from ceilometer.central import manager
 from ceilometer.energy import kwapi
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.fixture import mockpatch
-from ceilometer.openstack.common import test
 
 
 PROBE_DICT = {
@@ -54,7 +55,7 @@ class TestManager(manager.AgentManager):
         self.keystone = mock.Mock()
 
 
-class TestKwapi(test.BaseTestCase):
+class TestKwapi(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -75,7 +76,7 @@ class TestKwapi(test.BaseTestCase):
         self.assertEqual(0, len(samples))
 
 
-class TestEnergyPollster(test.BaseTestCase):
+class TestEnergyPollster(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -88,7 +89,7 @@ class TestEnergyPollster(test.BaseTestCase):
     @staticmethod
     def fake_iter_probes(ksclient, cache):
         probes = PROBE_DICT['probes']
-        for key, value in probes.iteritems():
+        for key, value in six.iteritems(probes):
             probe_dict = value
             probe_dict['id'] = key
             yield probe_dict
@@ -113,7 +114,7 @@ class TestEnergyPollster(test.BaseTestCase):
             #             power_samples)))
 
 
-class TestEnergyPollsterCache(test.BaseTestCase):
+class TestEnergyPollsterCache(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -135,7 +136,7 @@ class TestEnergyPollsterCache(test.BaseTestCase):
         self.assertEqual(1, len(samples))
 
 
-class TestPowerPollster(test.BaseTestCase):
+class TestPowerPollster(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -148,7 +149,7 @@ class TestPowerPollster(test.BaseTestCase):
     @staticmethod
     def fake_iter_probes(ksclient, cache):
         probes = PROBE_DICT['probes']
-        for key, value in probes.iteritems():
+        for key, value in six.iteritems(probes):
             probe_dict = value
             probe_dict['id'] = key
             yield probe_dict
@@ -170,7 +171,7 @@ class TestPowerPollster(test.BaseTestCase):
             self.assertEqual(probe['w'], sample.volume)
 
 
-class TestPowerPollsterCache(test.BaseTestCase):
+class TestPowerPollsterCache(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):

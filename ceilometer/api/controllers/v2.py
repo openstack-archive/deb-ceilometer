@@ -37,6 +37,8 @@ import pytz
 import uuid
 
 from oslo.config import cfg
+from oslo.utils import strutils
+from oslo.utils import timeutils
 import pecan
 from pecan import rest
 import six
@@ -50,12 +52,9 @@ from ceilometer import messaging
 from ceilometer.openstack.common import context
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import strutils
-from ceilometer.openstack.common import timeutils
 from ceilometer import sample
 from ceilometer import storage
 from ceilometer import utils
-
 
 LOG = log.getLogger(__name__)
 
@@ -65,13 +64,22 @@ ALARM_API_OPTS = [
                 default=True,
                 help='Record alarm change events.'
                 ),
+    cfg.IntOpt('user_alarm_quota',
+               default=None,
+               help='Maximum number of alarms defined for a user.'
+               ),
+    cfg.IntOpt('project_alarm_quota',
+               default=None,
+               help='Maximum number of alarms defined for a project.'
+               ),
 ]
 
 cfg.CONF.register_opts(ALARM_API_OPTS, group='alarm')
 
 state_kind = ["ok", "alarm", "insufficient data"]
 state_kind_enum = wtypes.Enum(str, *state_kind)
-operation_kind = wtypes.Enum(str, 'lt', 'le', 'eq', 'ne', 'ge', 'gt')
+operation_kind = ('lt', 'le', 'eq', 'ne', 'ge', 'gt')
+operation_kind_enum = wtypes.Enum(str, *operation_kind)
 
 
 class ClientSideError(wsme.exc.ClientSideError):
@@ -86,6 +94,54 @@ class EntityNotFound(ClientSideError):
             _("%(entity)s %(id)s Not Found") % {'entity': entity,
                                                 'id': id},
             status_code=404)
+
+
+class AlarmNotFound(ClientSideError):
+    def __init__(self, alarm, auth_project):
+        if not auth_project:
+            msg = _('Alarm %s not found') % alarm
+        else:
+            msg = _('Alarm %(alarm_id)s not found in project %'
+                    '(project)s') % {
+                        'alarm_id': alarm, 'project': auth_project}
+        super(AlarmNotFound, self).__init__(msg, status_code=404)
+
+
+class OverQuota(ClientSideError):
+    def __init__(self, data):
+        d = {
+            'u': data.user_id,
+            'p': data.project_id
+        }
+        super(OverQuota, self).__init__(
+            _("Alarm quota exceeded for user %(u)s on project %(p)s") % d,
+            status_code=403)
+
+
+def is_over_quota(conn, project_id, user_id):
+    """Returns False if an alarm is within the set quotas, True otherwise.
+
+    :param conn: a backend connection object
+    :param project_id: the ID of the project setting the alarm
+    :param user_id: the ID of the user setting the alarm
+    """
+
+    over_quota = False
+
+    # Start by checking for user quota
+    user_alarm_quota = cfg.CONF.alarm.user_alarm_quota
+    if user_alarm_quota is not None:
+        user_alarms = list(conn.get_alarms(user=user_id))
+        over_quota = len(user_alarms) >= user_alarm_quota
+
+    # If the user quota isn't reached, we check for the project quota
+    if not over_quota:
+        project_alarm_quota = cfg.CONF.alarm.project_alarm_quota
+        if project_alarm_quota is not None:
+            project_alarms = list(conn.get_alarms(project=project_id))
+            over_quota = len(project_alarms) >= project_alarm_quota
+
+    return over_quota
 
 
 class AdvEnum(wtypes.wsproperty):
@@ -189,7 +245,7 @@ class Query(_Base):
 
     # op = wsme.wsattr(operation_kind, default='eq')
     # this ^ doesn't seem to work.
-    op = wsme.wsproperty(operation_kind, get_op, set_op)
+    op = wsme.wsproperty(operation_kind_enum, get_op, set_op)
     "The comparison operator. Defaults to 'eq'."
 
     value = wtypes.text
@@ -400,7 +456,7 @@ def _validate_query(query, db_func, internal_keys=None,
                                                 '%s' % i.field)
             else:
                 msg = ("unrecognized field in query: %s, "
-                       "valid keys: %s") % (query, valid_keys)
+                       "valid keys: %s") % (query, sorted(valid_keys))
                 raise wsme.exc.UnknownArgument(key, msg)
 
 
@@ -661,7 +717,7 @@ class OldSample(_Base):
             counter_volume = float(counter_volume)
         resource_metadata = _flatten_metadata(resource_metadata)
         # this is to make it easier for clients to pass a timestamp in
-        if timestamp and isinstance(timestamp, basestring):
+        if timestamp and isinstance(timestamp, six.string_types):
             timestamp = timeutils.parse_isotime(timestamp)
 
         super(OldSample, self).__init__(counter_volume=counter_volume,
@@ -1767,7 +1823,7 @@ class Alarm(_Base):
                 alarms = list(pecan.request.alarm_storage_conn.get_alarms(
                     alarm_id=id, project=project))
                 if not alarms:
-                    raise EntityNotFound(_('Alarm'), id)
+                    raise AlarmNotFound(id, project)
 
         tc_names = [tc.name for tc in alarm.time_constraints]
         if len(tc_names) > len(set(tc_names)):
@@ -1881,7 +1937,7 @@ class AlarmController(rest.RestController):
         alarms = list(self.conn.get_alarms(alarm_id=self._id,
                                            project=auth_project))
         if not alarms:
-            raise EntityNotFound(_('Alarm'), self._id)
+            raise AlarmNotFound(alarm=self._id, auth_project=auth_project)
         return alarms[0]
 
     def _record_change(self, data, now, on_behalf_of=None, type=None):
@@ -2095,6 +2151,10 @@ class AlarmsController(rest.RestController):
         _set_ownership('user', user_limit, 'X-User-Id')
         _set_ownership('project', project_limit, 'X-Project-Id')
 
+        # Check if there's room for one more alarm
+        if is_over_quota(conn, data.project_id, data.user_id):
+            raise OverQuota(data)
+
         data.timestamp = now
         data.state_timestamp = now
 
@@ -2261,16 +2321,17 @@ def _event_query_to_event_filter(q):
     traits_filter = []
 
     for i in q:
-        # FIXME(herndon): Support for operators other than
-        # 'eq' will come later.
-        if i.op != 'eq':
-            error = _("operator %s not supported") % i.op
+        if not i.op:
+            i.op = 'eq'
+        elif i.op not in operation_kind:
+            error = _("operator {} is incorrect").format(i.op)
             raise ClientSideError(error)
         if i.field in evt_model_filter:
             evt_model_filter[i.field] = i.value
         else:
             traits_filter.append({"key": i.field,
-                                  i.type: i._get_value_as_type()})
+                                  i.type: i._get_value_as_type(),
+                                  "op": i.op})
     return storage.EventFilter(traits_filter=traits_filter, **evt_model_filter)
 
 

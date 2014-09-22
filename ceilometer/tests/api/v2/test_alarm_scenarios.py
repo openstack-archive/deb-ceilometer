@@ -16,8 +16,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-'''Tests alarm operation
-'''
+"""Tests alarm operation."""
 
 import datetime
 import json as jsonutils
@@ -25,6 +24,7 @@ import uuid
 
 import mock
 import oslo.messaging.conffixture
+import six
 from six import moves
 
 from ceilometer.alarm.storage import models
@@ -234,7 +234,7 @@ class TestAlarms(v2.FunctionalTest,
     def test_get_not_existing_alarm(self):
         resp = self.get_json('/alarms/alarm-id-3', expect_errors=True)
         self.assertEqual(404, resp.status_code)
-        self.assertEqual("Alarm alarm-id-3 Not Found",
+        self.assertEqual('Alarm alarm-id-3 not found',
                          jsonutils.loads(resp.body)['error_message']
                          ['faultstring'])
 
@@ -386,7 +386,7 @@ class TestAlarms(v2.FunctionalTest,
                 'combination_rule': {}
             }
         }
-        for field, json in jsons.iteritems():
+        for field, json in six.iteritems(jsons):
             resp = self.post_json('/alarms', params=json, expect_errors=True,
                                   status=400, headers=self.auth_headers)
             self.assertEqual("Invalid input for field/attribute %s."
@@ -965,7 +965,7 @@ class TestAlarms(v2.FunctionalTest,
                 'period': 180,
             }
         }
-        for aspect, id in identifiers.iteritems():
+        for aspect, id in six.iteritems(identifiers):
             json['%s_id' % aspect] = id
         return json
 
@@ -1088,7 +1088,9 @@ class TestAlarms(v2.FunctionalTest,
                               'X-Project-Id': str(uuid.uuid4())}
         resp = self.post_json('/alarms', params=json, status=404,
                               headers=an_other_user_auth)
-        self.assertEqual("Alarm a Not Found",
+        self.assertEqual("Alarm a not found in project "
+                         "%s" %
+                         an_other_user_auth['X-Project-Id'],
                          jsonutils.loads(resp.body)['error_message']
                          ['faultstring'])
 
@@ -1121,7 +1123,8 @@ class TestAlarms(v2.FunctionalTest,
         headers['X-Roles'] = 'admin'
         resp = self.post_json('/alarms', params=json, status=404,
                               headers=headers)
-        self.assertEqual("Alarm a Not Found",
+        self.assertEqual("Alarm a not found in project "
+                         "aprojectidthatisnotmine",
                          jsonutils.loads(resp.body)['error_message']
                          ['faultstring'])
 
@@ -1294,12 +1297,12 @@ class TestAlarms(v2.FunctionalTest,
                          alarms[0].rule.get('alarm_ids'))
 
     def _test_post_alarm_combination_rule_less_than_two_alarms(self,
-                                                               alarm_ids=[]):
+                                                               alarm_ids=None):
         json_body = {
             'name': 'one_alarm_in_combination_rule',
             'type': 'combination',
             'combination_rule': {
-                'alarm_ids': alarm_ids
+                'alarm_ids': alarm_ids or []
             }
         }
 
@@ -1511,12 +1514,12 @@ class TestAlarms(v2.FunctionalTest,
         self.assertEqual(msg, resp.json['error_message']['faultstring'])
 
     def _test_put_alarm_combination_rule_less_than_two_alarms(self,
-                                                              alarm_ids=[]):
+                                                              alarm_ids=None):
         json_body = {
             'name': 'name4',
             'type': 'combination',
             'combination_rule': {
-                'alarm_ids': alarm_ids
+                'alarm_ids': alarm_ids or []
             }
         }
 
@@ -1640,13 +1643,13 @@ class TestAlarms(v2.FunctionalTest,
                     status=204)
 
     def _assert_is_subset(self, expected, actual):
-        for k, v in expected.iteritems():
+        for k, v in six.iteritems(expected):
             self.assertEqual(v, actual.get(k), 'mismatched field: %s' % k)
         self.assertIsNotNone(actual['event_id'])
 
     def _assert_in_json(self, expected, actual):
         actual = jsonutils.dumps(jsonutils.loads(actual), sort_keys=True)
-        for k, v in expected.iteritems():
+        for k, v in six.iteritems(expected):
             fragment = jsonutils.dumps({k: v}, sort_keys=True)[1:-1]
             self.assertTrue(fragment in actual,
                             '%s not in %s' % (fragment, actual))
@@ -1905,11 +1908,11 @@ class TestAlarms(v2.FunctionalTest,
         resp = self._get_alarm_history(alarm, query=query,
                                        expect_errors=True, status=400)
         self.assertEqual('Unknown argument: "alarm_id": unrecognized'
-                         ' field in query: [<Query u\'alarm_id\' eq'
-                         ' u\'b\' Unset>], valid keys: set('
-                         '[\'start_timestamp\', \'end_timestamp_op\','
-                         ' \'project\', \'user\', \'start_timestamp_op\''
-                         ', \'type\', \'end_timestamp\'])',
+                         " field in query: [<Query u'alarm_id' eq"
+                         " u'b' Unset>], valid keys: ['end_timestamp',"
+                         " 'end_timestamp_op', 'project',"
+                         " 'start_timestamp', 'start_timestamp_op',"
+                         " 'type', 'user']",
                          resp.json['error_message']['faultstring'])
 
     def test_get_alarm_history_constrained_by_not_supported_rule(self):
@@ -1918,11 +1921,11 @@ class TestAlarms(v2.FunctionalTest,
         resp = self._get_alarm_history(alarm, query=query,
                                        expect_errors=True, status=400)
         self.assertEqual('Unknown argument: "abcd": unrecognized'
-                         ' field in query: [<Query u\'abcd\' eq'
-                         ' u\'abcd\' Unset>], valid keys: set('
-                         '[\'start_timestamp\', \'end_timestamp_op\','
-                         ' \'project\', \'user\', \'start_timestamp_op\''
-                         ', \'type\', \'end_timestamp\'])',
+                         " field in query: [<Query u'abcd' eq"
+                         " u'abcd' Unset>], valid keys: ['end_timestamp',"
+                         " 'end_timestamp_op', 'project',"
+                         " 'start_timestamp', 'start_timestamp_op',"
+                         " 'type', 'user']",
                          resp.json['error_message']['faultstring'])
 
     def test_get_nonexistent_alarm_history(self):
@@ -1998,3 +2001,118 @@ class TestAlarms(v2.FunctionalTest,
         self.assertTrue(set(['alarm_id', 'detail', 'event_id', 'on_behalf_of',
                              'project_id', 'timestamp', 'type',
                              'user_id']).issubset(payload.keys()))
+
+
+class TestAlarmsQuotas(v2.FunctionalTest,
+                       tests_db.MixinTestsWithBackendScenarios):
+
+    def setUp(self):
+        super(TestAlarmsQuotas, self).setUp()
+
+        self.auth_headers = {'X-User-Id': str(uuid.uuid4()),
+                             'X-Project-Id': str(uuid.uuid4())}
+
+    def _test_alarm_quota(self):
+        alarm = {
+            'name': 'alarm',
+            'type': 'threshold',
+            'user_id': self.auth_headers['X-User-Id'],
+            'project_id': self.auth_headers['X-Project-Id'],
+            'threshold_rule': {
+                'meter_name': 'testmeter',
+                'query': [],
+                'comparison_operator': 'le',
+                'statistic': 'max',
+                'threshold': 42.0,
+                'period': 60,
+                'evaluation_periods': 1,
+            }
+        }
+
+        resp = self.post_json('/alarms', params=alarm,
+                              headers=self.auth_headers)
+        self.assertEqual(201, resp.status_code)
+        alarms = self.get_json('/alarms')
+        self.assertEqual(1, len(alarms))
+
+        alarm['name'] = 'another_user_alarm'
+        resp = self.post_json('/alarms', params=alarm,
+                              expect_errors=True,
+                              headers=self.auth_headers)
+        self.assertEqual(403, resp.status_code)
+        faultstring = 'Alarm quota exceeded for user'
+        self.assertIn(faultstring,
+                      resp.json['error_message']['faultstring'])
+
+        alarms = self.get_json('/alarms')
+        self.assertEqual(1, len(alarms))
+
+    def test_alarms_quotas(self):
+        self.CONF.set_override('user_alarm_quota', 1, group='alarm')
+        self.CONF.set_override('project_alarm_quota', 1, group='alarm')
+        self._test_alarm_quota()
+
+    def test_project_alarms_quotas(self):
+        self.CONF.set_override('project_alarm_quota', 1, group='alarm')
+        self._test_alarm_quota()
+
+    def test_user_alarms_quotas(self):
+        self.CONF.set_override('user_alarm_quota', 1, group='alarm')
+        self._test_alarm_quota()
+
+    def test_larger_limit_project_alarms_quotas(self):
+        self.CONF.set_override('user_alarm_quota', 1, group='alarm')
+        self.CONF.set_override('project_alarm_quota', 2, group='alarm')
+        self._test_alarm_quota()
+
+    def test_larger_limit_user_alarms_quotas(self):
+        self.CONF.set_override('user_alarm_quota', 2, group='alarm')
+        self.CONF.set_override('project_alarm_quota', 1, group='alarm')
+        self._test_alarm_quota()
+
+    def test_larger_limit_user_alarm_quotas_multitenant_user(self):
+        self.CONF.set_override('user_alarm_quota', 2, group='alarm')
+        self.CONF.set_override('project_alarm_quota', 1, group='alarm')
+
+        def _test(field, value):
+            query = [{
+                'field': field,
+                'op': 'eq',
+                'value': value
+            }]
+            alarms = self.get_json('/alarms', q=query)
+            self.assertEqual(1, len(alarms))
+
+        alarm = {
+            'name': 'alarm',
+            'type': 'threshold',
+            'user_id': self.auth_headers['X-User-Id'],
+            'project_id': self.auth_headers['X-Project-Id'],
+            'threshold_rule': {
+                'meter_name': 'testmeter',
+                'query': [],
+                'comparison_operator': 'le',
+                'statistic': 'max',
+                'threshold': 42.0,
+                'period': 60,
+                'evaluation_periods': 1,
+            }
+        }
+
+        resp = self.post_json('/alarms', params=alarm,
+                              headers=self.auth_headers)
+
+        self.assertEqual(201, resp.status_code)
+        _test('project_id', self.auth_headers['X-Project-Id'])
+
+        self.auth_headers['X-Project-Id'] = str(uuid.uuid4())
+        alarm['name'] = 'another_user_alarm'
+        alarm['project_id'] = self.auth_headers['X-Project-Id']
+        resp = self.post_json('/alarms', params=alarm,
+                              headers=self.auth_headers)
+
+        self.assertEqual(201, resp.status_code)
+        _test('project_id', self.auth_headers['X-Project-Id'])
+
+        alarms = self.get_json('/alarms')
+        self.assertEqual(2, len(alarms))

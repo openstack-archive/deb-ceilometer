@@ -17,15 +17,15 @@
 """class for tests in ceilometer/alarm/evaluator/__init__.py
 """
 import datetime
+
 import mock
-import pytz
+from oslo.utils import timeutils
+from oslotest import base
 
 from ceilometer.alarm import evaluator
-from ceilometer.openstack.common import test
-from ceilometer.openstack.common import timeutils
 
 
-class TestEvaluatorBaseClass(test.BaseTestCase):
+class TestEvaluatorBaseClass(base.BaseTestCase):
     def setUp(self):
         super(TestEvaluatorBaseClass, self).setUp()
         self.called = False
@@ -122,6 +122,9 @@ class TestEvaluatorBaseClass(test.BaseTestCase):
     @mock.patch.object(timeutils, 'utcnow')
     def test_base_time_constraints_timezone(self, mock_utcnow):
         alarm = mock.MagicMock()
+        cls = evaluator.Evaluator
+        mock_utcnow.return_value = datetime.datetime(2014, 1, 1, 11, 0, 0)
+
         alarm.time_constraints = [
             {'name': 'test',
              'description': 'test',
@@ -129,13 +132,13 @@ class TestEvaluatorBaseClass(test.BaseTestCase):
              'duration': 10800,  # 3 hours
              'timezone': 'Europe/Ljubljana'}
         ]
-        cls = evaluator.Evaluator
-        dt_eu = datetime.datetime(2014, 1, 1, 12, 0, 0,
-                                  tzinfo=pytz.timezone('Europe/Ljubljana'))
-        dt_us = datetime.datetime(2014, 1, 1, 12, 0, 0,
-                                  tzinfo=pytz.timezone('US/Eastern'))
-        mock_utcnow.return_value = dt_eu.astimezone(pytz.UTC)
         self.assertTrue(cls.within_time_constraint(alarm))
 
-        mock_utcnow.return_value = dt_us.astimezone(pytz.UTC)
+        alarm.time_constraints = [
+            {'name': 'test2',
+             'description': 'test2',
+             'start': '0 11 * * *',  # daily at 11:00
+             'duration': 10800,  # 3 hours
+             'timezone': 'US/Eastern'}
+        ]
         self.assertFalse(cls.within_time_constraint(alarm))

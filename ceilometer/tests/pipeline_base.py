@@ -19,14 +19,15 @@
 
 import abc
 import datetime
+import traceback
 
 import mock
+from oslo.utils import timeutils
+from oslotest import base
+from oslotest import mockpatch
 import six
 from stevedore import extension
 
-from ceilometer.openstack.common.fixture import mockpatch
-from ceilometer.openstack.common import test
-from ceilometer.openstack.common import timeutils
 from ceilometer import pipeline
 from ceilometer import publisher
 from ceilometer.publisher import test as test_publisher
@@ -38,7 +39,7 @@ from ceilometer.transformer import conversions
 
 
 @six.add_metaclass(abc.ABCMeta)
-class BasePipelineTestCase(test.BaseTestCase):
+class BasePipelineTestCase(base.BaseTestCase):
     def fake_tem_init(self):
         """Fake a transformerManager for pipeline.
 
@@ -146,6 +147,15 @@ class BasePipelineTestCase(test.BaseTestCase):
         self.transformer_manager = transformer.TransformerExtensionManager()
 
         self._setup_pipeline_cfg()
+
+        self._reraise_exception = True
+        self.useFixture(mockpatch.Patch(
+            'ceilometer.pipeline.LOG.exception',
+            side_effect=self._handle_reraise_exception))
+
+    def _handle_reraise_exception(self, msg):
+        if self._reraise_exception:
+            raise Exception(traceback.format_exc())
 
     @abc.abstractmethod
     def _setup_pipeline_cfg(self):
@@ -423,6 +433,7 @@ class BasePipelineTestCase(test.BaseTestCase):
                          getattr(self.TransformerClass.samples[1], "name"))
 
     def test_multiple_pipeline_exception(self):
+        self._reraise_exception = False
         self._break_pipeline_cfg()
         pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
                                                     self.transformer_manager)
@@ -595,6 +606,7 @@ class BasePipelineTestCase(test.BaseTestCase):
                          getattr(publisher.samples[0], 'name'))
 
     def test_multiple_publisher_isolation(self):
+        self._reraise_exception = False
         self._set_pipeline_cfg('publishers', ['except://', 'new://'])
         pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
                                                     self.transformer_manager)
@@ -1207,6 +1219,42 @@ class BasePipelineTestCase(test.BaseTestCase):
         self.assertEqual(expected_length, len(publisher.samples))
         return sorted(publisher.samples, key=lambda s: s.volume)
 
+    def test_aggregator_meter_type(self):
+        volumes = [1.0, 2.0, 3.0]
+        transformer_cfg = [
+            {
+                'name': 'aggregator',
+                'parameters': {'size': len(volumes) * len(sample.TYPES)}
+            },
+        ]
+        self._set_pipeline_cfg('transformers', transformer_cfg)
+        self._set_pipeline_cfg('counters',
+                               ['testgauge', 'testcumulative', 'testdelta'])
+        counters = []
+        for sample_type in sample.TYPES:
+            for volume in volumes:
+                counters.append(sample.Sample(
+                    name='test' + sample_type,
+                    type=sample_type,
+                    volume=volume,
+                    unit='B',
+                    user_id='test_user',
+                    project_id='test_proj',
+                    resource_id='test_resource',
+                    timestamp=timeutils.utcnow().isoformat(),
+                    resource_metadata={'version': '1.0'}
+                ))
+
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        pipe = pipeline_manager.pipelines[0]
+
+        pipe.publish_samples(None, counters)
+        pipe.flush(None)
+        publisher = pipeline_manager.pipelines[0].publishers[0]
+        actual = sorted(s.volume for s in publisher.samples)
+        self.assertEqual([2.0, 3.0, 6.0], actual)
+
     def test_aggregator_input_validation(self):
         aggregator = conversions.AggregatorTransformer("1", "15", None,
                                                        None, None)
@@ -1717,3 +1765,21 @@ class BasePipelineTestCase(test.BaseTestCase):
         pipe.flush(None)
         self.assertEqual(2, len(publisher.samples))
         self.assertEqual(2050.0, publisher.samples[1].volume)
+
+    def test_aggregator_timed_flush_no_matching_samples(self):
+        timeutils.set_time_override()
+        transformer_cfg = [
+            {
+                'name': 'aggregator',
+                'parameters': {'size': 900, 'retention_time': 60},
+            },
+        ]
+        self._set_pipeline_cfg('transformers', transformer_cfg)
+        self._set_pipeline_cfg('counters', ['unrelated-sample'])
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        timeutils.advance_time_seconds(200)
+        pipe = pipeline_manager.pipelines[0]
+        pipe.flush(None)
+        publisher = pipeline_manager.pipelines[0].publishers[0]
+        self.assertEqual(0, len(publisher.samples))

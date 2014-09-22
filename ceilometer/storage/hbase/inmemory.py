@@ -131,21 +131,24 @@ class MTable(object):
         r = {}
         for row in rows:
             data = rows[row]
-
             if op == '=':
                 if column in data and data[column] == value:
+                    r[row] = data
+            elif op == '<':
+                if column in data and data[column] < value:
                     r[row] = data
             elif op == '<=':
                 if column in data and data[column] <= value:
                     r[row] = data
+            elif op == '>':
+                if column in data and data[column] > value:
+                    r[row] = data
             elif op == '>=':
                 if column in data and data[column] >= value:
                     r[row] = data
-            else:
-                raise NotImplementedError("In-memory "
-                                          "SingleColumnValueFilter "
-                                          "doesn't support the %s operation "
-                                          "yet" % op)
+            elif op == '!=':
+                if column in data and data[column] != value:
+                    r[row] = data
         return r
 
     @staticmethod
@@ -218,7 +221,9 @@ class MTable(object):
             for key in data:
                 if ((op == '=' and key.startswith(column)) or
                         (op == '>=' and key >= column) or
-                        (op == '<=' and key <= column)):
+                        (op == '<=' and key <= column) or
+                        (op == '>' and key > column) or
+                        (op == '<' and key < column)):
                     r_data[key] = data[key]
                 else:
                     raise NotImplementedError("In-memory QualifierFilter "

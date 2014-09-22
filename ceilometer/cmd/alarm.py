@@ -15,20 +15,26 @@
 # under the License.
 
 from oslo.config import cfg
+from stevedore import driver
 
 from ceilometer.alarm import service as alarm_service
-from ceilometer.openstack.common import importutils
+from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 from ceilometer import service
 
 
 OPTS = [
-    cfg.StrOpt('evaluation_service',
-               default='ceilometer.alarm.service.SingletonAlarmService',
-               help='Class to launch as alarm evaluation service.'),
+    cfg.StrOpt('evaluation_service', default='default',
+               help='Driver to use for alarm evaluation service. DEPRECATED: '
+                    '"singleton" and "partitioned" alarm evaluator '
+                    'services will be removed in Kilo in favour of the '
+                    'default alarm evaluation service using tooz for '
+                    'partitioning.'),
 ]
 
 cfg.CONF.register_opts(OPTS, group='alarm')
+
+LOG = log.getLogger(__name__)
 
 
 def notifier():
@@ -38,5 +44,10 @@ def notifier():
 
 def evaluator():
     service.prepare_service()
-    eval_service = importutils.import_object(cfg.CONF.alarm.evaluation_service)
-    os_service.launch(eval_service).wait()
+    eval_service_mgr = driver.DriverManager(
+        "ceilometer.alarm.evaluator_service",
+        cfg.CONF.alarm.evaluation_service,
+        invoke_on_load=True)
+    LOG.debug("Alarm evaluator loaded: %s" %
+              eval_service_mgr.driver.__class__.__name__)
+    os_service.launch(eval_service_mgr.driver).wait()

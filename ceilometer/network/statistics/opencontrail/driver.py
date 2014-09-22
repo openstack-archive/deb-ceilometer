@@ -13,13 +13,12 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+from oslo.utils import timeutils
 from six.moves.urllib import parse as urlparse
 
 from ceilometer.network.statistics import driver
 from ceilometer.network.statistics.opencontrail import client
 from ceilometer import neutron_client
-from ceilometer.openstack.common import timeutils
 
 
 class OpencontrailDriver(driver.Driver):
@@ -137,16 +136,16 @@ class OpencontrailDriver(driver.Driver):
 
     @staticmethod
     def _switch_port_receive_packets(statistic, resource_id, resource_meta):
-        return (int(statistic['in_pkts']), resource_id, resource_meta)
+        return int(statistic['in_pkts']), resource_id, resource_meta
 
     @staticmethod
     def _switch_port_transmit_packets(statistic, resource_id, resource_meta):
-        return (int(statistic['out_pkts']), resource_id, resource_meta)
+        return int(statistic['out_pkts']), resource_id, resource_meta
 
     @staticmethod
     def _switch_port_receive_bytes(statistic, resource_id, resource_meta):
-        return (int(statistic['in_bytes']), resource_id, resource_meta)
+        return int(statistic['in_bytes']), resource_id, resource_meta
 
     @staticmethod
     def _switch_port_transmit_bytes(statistic, resource_id, resource_meta):
-        return (int(statistic['out_bytes']), resource_id, resource_meta)
+        return int(statistic['out_bytes']), resource_id, resource_meta

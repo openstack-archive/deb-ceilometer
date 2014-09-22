@@ -17,11 +17,11 @@
 """Converters for producing compute CPU sample messages from notification
 events.
 """
+from oslo.utils import timeutils
 
 from ceilometer.compute import notifications
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
@@ -39,15 +39,14 @@ class ComputeMetricsNotificationBase(notifications.ComputeNotificationBase):
         try:
             for metric in message['payload']['metrics']:
                 if name == metric['name']:
-                    info = {}
-                    info['payload'] = metric
-                    info['event_type'] = message['event_type']
-                    info['publisher_id'] = message['publisher_id']
-                    info['resource_id'] = '%s_%s' % (
-                        message['payload']['host'],
-                        message['payload']['nodename'])
-                    info['timestamp'] = str(timeutils.parse_strtime(
-                        metric['timestamp']))
+                    info = {'payload': metric,
+                            'event_type': message['event_type'],
+                            'publisher_id': message['publisher_id'],
+                            'resource_id': '%s_%s' % (
+                                message['payload']['host'],
+                                message['payload']['nodename']),
+                            'timestamp': str(timeutils.parse_strtime(
+                                metric['timestamp']))}
                     return info
         except Exception as err:
             LOG.warning(_('An error occurred while building %(m)s '

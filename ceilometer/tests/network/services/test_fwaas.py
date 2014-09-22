@@ -16,16 +16,17 @@
 # under the License.
 
 import mock
+from oslotest import base
+from oslotest import mockpatch
 
 from ceilometer.central import manager
 from ceilometer.network.services import discovery
 from ceilometer.network.services import fwaas
+from ceilometer import neutron_client as cli
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.fixture import mockpatch
-from ceilometer.openstack.common import test
 
 
-class _BaseTestFWPollster(test.BaseTestCase):
+class _BaseTestFWPollster(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
     def setUp(self):
@@ -33,6 +34,9 @@ class _BaseTestFWPollster(test.BaseTestCase):
         self.addCleanup(mock.patch.stopall)
         self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
+        cli.Client.keystone = mock.Mock()
+        cli.Client.keystone.service_catalog.get_endpoints = mock.Mock(
+            return_value={'network': mock.ANY})
 
 
 class TestFirewallPollster(_BaseTestFWPollster):

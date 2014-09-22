@@ -15,11 +15,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import collections
 import re
+
+from oslo.utils import timeutils
+import six
 
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import sample
 from ceilometer import transformer
 
@@ -56,7 +59,7 @@ class ScalingTransformer(transformer.TransformerBase):
         ns = transformer.Namespace(s.as_dict())
 
         scale = self.scale
-        return ((eval(scale, {}, ns) if isinstance(scale, basestring)
+        return ((eval(scale, {}, ns) if isinstance(scale, six.string_types)
                  else s.volume * scale) if scale else s.volume)
 
     def _map(self, s, attr):
@@ -89,7 +92,7 @@ class ScalingTransformer(transformer.TransformerBase):
     def handle_sample(self, context, s):
         """Handle a sample, converting if necessary."""
         LOG.debug(_('handling sample %s'), (s,))
-        if (self.source.get('unit', s.unit) == s.unit):
+        if self.source.get('unit', s.unit) == s.unit:
             s = self._convert(s)
             LOG.debug(_('converted to: %s'), (s,))
         return s
@@ -140,10 +143,10 @@ class RateOfChangeTransformer(ScalingTransformer):
 
 
 class AggregatorTransformer(ScalingTransformer):
-    """Transformer that aggregate sample.
+    """Transformer that aggregates samples.
 
-    Aggregation goes until a threshold or/and a retention_time, and then flush
-    them out in the wild.
+    Aggregation goes until a threshold or/and a retention_time, and then
+    flushes them out into the wild.
 
     Example:
       To aggregate sample by resource_metadata and keep the
@@ -163,6 +166,7 @@ class AggregatorTransformer(ScalingTransformer):
                  **kwargs):
         super(AggregatorTransformer, self).__init__(**kwargs)
         self.samples = {}
+        self.counts = collections.defaultdict(int)
         self.size = int(size) if size else None
         self.retention_time = float(retention_time) if retention_time else None
         self.initial_timestamp = None
@@ -198,32 +202,45 @@ class AggregatorTransformer(ScalingTransformer):
         # NOTE(sileht): it assumes, a meter always have the same unit/type
         return "%s-%s-%s" % (s.name, s.resource_id, non_aggregated_keys)
 
-    def handle_sample(self, context, sample):
+    def handle_sample(self, context, sample_):
         if not self.initial_timestamp:
-            self.initial_timestamp = timeutils.parse_isotime(sample.timestamp)
+            self.initial_timestamp = timeutils.parse_isotime(sample_.timestamp)
 
         self.aggregated_samples += 1
-        key = self._get_unique_key(sample)
+        key = self._get_unique_key(sample_)
+        self.counts[key] += 1
         if key not in self.samples:
-            self.samples[key] = self._convert(sample)
+            self.samples[key] = self._convert(sample_)
             if self.merged_attribute_policy[
                     'resource_metadata'] == 'drop':
                 self.samples[key].resource_metadata = {}
         else:
-            self.samples[key].volume += self._scale(sample)
+            if sample_.type == sample.TYPE_CUMULATIVE:
+                self.samples[key].volume = self._scale(sample_)
+            else:
+                self.samples[key].volume += self._scale(sample_)
             for field in self.merged_attribute_policy:
                 if self.merged_attribute_policy[field] == 'last':
                     setattr(self.samples[key], field,
-                            getattr(sample, field))
+                            getattr(sample_, field))
 
     def flush(self, context):
+        if not self.initial_timestamp:
+            return []
+
         expired = (self.retention_time and
                    timeutils.is_older_than(self.initial_timestamp,
                                            self.retention_time))
         full = self.aggregated_samples >= self.size
         if full or expired:
             x = self.samples.values()
-            self.samples = {}
+            # gauge aggregates need to be averages
+            for s in x:
+                if s.type == sample.TYPE_GAUGE:
+                    key = self._get_unique_key(s)
+                    s.volume /= self.counts[key]
+            self.samples.clear()
+            self.counts.clear()
             self.aggregated_samples = 0
             self.initial_timestamp = None
             return x

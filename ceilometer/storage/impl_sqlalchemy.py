@@ -20,42 +20,29 @@ from __future__ import absolute_import
 import datetime
 import operator
 import os
-import types
 
 from oslo.config import cfg
+from oslo.db import exception as dbexc
+from oslo.db.sqlalchemy import migration
+from oslo.db.sqlalchemy import session as db_session
+from oslo.utils import timeutils
+import six
 from sqlalchemy import and_
-from sqlalchemy import asc
-from sqlalchemy import desc
 from sqlalchemy import distinct
 from sqlalchemy import func
-from sqlalchemy import not_
-from sqlalchemy import or_
 from sqlalchemy.orm import aliased
 
-from ceilometer.alarm.storage import base as alarm_base
-from ceilometer.alarm.storage import models as alarm_api_models
-from ceilometer.openstack.common.db import exception as dbexc
-from ceilometer.openstack.common.db.sqlalchemy import migration
-import ceilometer.openstack.common.db.sqlalchemy.session as sqlalchemy_session
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models as api_models
 from ceilometer.storage.sqlalchemy import models
+from ceilometer.storage.sqlalchemy import utils as sql_utils
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
 
-
-META_TYPE_MAP = {bool: models.MetaBool,
-                 str: models.MetaText,
-                 unicode: models.MetaText,
-                 types.NoneType: models.MetaText,
-                 int: models.MetaBigInt,
-                 long: models.MetaBigInt,
-                 float: models.MetaFloat}
 
 STANDARD_AGGREGATES = dict(
     avg=func.avg(models.Sample.volume).label('avg'),
@@ -103,10 +90,6 @@ AVAILABLE_CAPABILITIES = {
                                        'stddev': True,
                                        'cardinality': True}}
                    },
-    'alarms': {'query': {'simple': True,
-                         'complex': True},
-               'history': {'query': {'simple': True,
-                                     'complex': True}}},
     'events': {'query': {'simple': True}},
 }
 
@@ -123,10 +106,10 @@ def apply_metaquery_filter(session, query, metaquery):
     :param query: Query instance
     :param metaquery: dict with metadata to match on.
     """
-    for k, value in metaquery.iteritems():
+    for k, value in six.iteritems(metaquery):
         key = k[9:]  # strip out 'metadata.' prefix
         try:
-            _model = META_TYPE_MAP[type(value)]
+            _model = sql_utils.META_TYPE_MAP[type(value)]
         except KeyError:
             raise NotImplementedError('Query on %(key)s is of %(value)s '
                                       'type and is not supported' %
@@ -221,18 +204,16 @@ class Connection(base.Connection):
               }
     """
     CAPABILITIES = utils.update_nested(base.Connection.CAPABILITIES,
-                                       utils.update_nested(
-                                           alarm_base.Connection.CAPABILITIES,
-                                           AVAILABLE_CAPABILITIES))
+                                       AVAILABLE_CAPABILITIES)
     STORAGE_CAPABILITIES = utils.update_nested(
         base.Connection.STORAGE_CAPABILITIES,
         AVAILABLE_STORAGE_CAPABILITIES,
     )
 
     def __init__(self, url):
-        self._engine_facade = sqlalchemy_session.EngineFacade.from_config(
+        self._engine_facade = db_session.EngineFacade(
             url,
-            cfg.CONF  # TODO(Alexei_987) Remove access to global CONF object
+            **dict(cfg.CONF.database.items())
         )
 
     def upgrade(self):
@@ -297,7 +278,7 @@ class Connection(base.Connection):
                 if isinstance(rmetadata, dict):
                     for key, v in utils.dict_to_keyval(rmetadata):
                         try:
-                            _model = META_TYPE_MAP[type(v)]
+                            _model = sql_utils.META_TYPE_MAP[type(v)]
                         except KeyError:
                             LOG.warn(_("Unknown metadata type. Key (%s) will "
                                        "not be queryable."), key)
@@ -327,7 +308,7 @@ class Connection(base.Connection):
                  .delete())
 
             rows = sample_q.delete()
-            # remove Meter defintions with no matching samples
+            # remove Meter definitions with no matching samples
             (session.query(models.Meter)
              .filter(~models.Meter.samples.any())
              .delete(synchronize_session='fetch'))
@@ -353,51 +334,36 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError('Pagination not implemented')
 
-        metaquery = metaquery or {}
-
-        def _apply_filters(query):
-            # TODO(gordc) this should be merged with make_query_from_filter
-            for column, value in [(models.Sample.resource_id, resource),
-                                  (models.Sample.user_id, user),
-                                  (models.Sample.project_id, project),
-                                  (models.Sample.source_id, source)]:
-                if value:
-                    query = query.filter(column == value)
-            if metaquery:
-                query = apply_metaquery_filter(session, query, metaquery)
-            if start_timestamp:
-                if start_timestamp_op == 'gt':
-                    query = query.filter(
-                        models.Sample.timestamp > start_timestamp)
-                else:
-                    query = query.filter(
-                        models.Sample.timestamp >= start_timestamp)
-            if end_timestamp:
-                if end_timestamp_op == 'le':
-                    query = query.filter(
-                        models.Sample.timestamp <= end_timestamp)
-                else:
-                    query = query.filter(
-                        models.Sample.timestamp < end_timestamp)
-            return query
+        s_filter = storage.SampleFilter(user=user,
+                                        project=project,
+                                        source=source,
+                                        start=start_timestamp,
+                                        start_timestamp_op=start_timestamp_op,
+                                        end=end_timestamp,
+                                        end_timestamp_op=end_timestamp_op,
+                                        metaquery=metaquery,
+                                        resource=resource)
 
         session = self._engine_facade.get_session()
         # get list of resource_ids
         res_q = session.query(distinct(models.Sample.resource_id))
-        res_q = _apply_filters(res_q)
+        res_q = make_query_from_filter(session, res_q, s_filter,
+                                       require_meter=False)
 
         for res_id in res_q.all():
             # get latest Sample
             max_q = (session.query(models.Sample)
                      .filter(models.Sample.resource_id == res_id[0]))
-            max_q = _apply_filters(max_q)
+            max_q = make_query_from_filter(session, max_q, s_filter,
+                                           require_meter=False)
             max_q = max_q.order_by(models.Sample.timestamp.desc(),
                                    models.Sample.id.desc()).limit(1)
 
             # get the min timestamp value.
             min_q = (session.query(models.Sample.timestamp)
                      .filter(models.Sample.resource_id == res_id[0]))
-            min_q = _apply_filters(min_q)
+            min_q = make_query_from_filter(session, min_q, s_filter,
+                                           require_meter=False)
             min_q = min_q.order_by(models.Sample.timestamp.asc()).limit(1)
 
             sample = max_q.first()
@@ -427,19 +393,11 @@ class Connection(base.Connection):
         if pagination:
             raise NotImplementedError('Pagination not implemented')
 
-        metaquery = metaquery or {}
-
-        def _apply_filters(query):
-            # TODO(gordc) this should be merged with make_query_from_filter
-            for column, value in [(models.Sample.resource_id, resource),
-                                  (models.Sample.user_id, user),
-                                  (models.Sample.project_id, project),
-                                  (models.Sample.source_id, source)]:
-                if value:
-                    query = query.filter(column == value)
-            if metaquery:
-                query = apply_metaquery_filter(session, query, metaquery)
-            return query
+        s_filter = storage.SampleFilter(user=user,
+                                        project=project,
+                                        source=source,
+                                        metaquery=metaquery,
+                                        resource=resource)
 
         session = self._engine_facade.get_session()
 
@@ -460,7 +418,8 @@ class Connection(base.Connection):
         query_sample = (session.query(models.MeterSample).
                         join(sample_subq, models.MeterSample.id ==
                         sample_subq.c.id))
-        query_sample = _apply_filters(query_sample)
+        query_sample = make_query_from_filter(session, query_sample, s_filter,
+                                              require_meter=False)
 
         for sample in query_sample.all():
             yield api_models.Meter(
@@ -509,34 +468,24 @@ class Connection(base.Connection):
         query = session.query(table)
         query = make_query_from_filter(session, query, sample_filter,
                                        require_meter=False)
-        transformer = QueryTransformer(table, query)
+        transformer = sql_utils.QueryTransformer(table, query)
         transformer.apply_options(None,
                                   limit)
         return self._retrieve_samples(transformer.get_query())
 
-    def _retrieve_data(self, filter_expr, orderby, limit, table):
+    def query_samples(self, filter_expr=None, orderby=None, limit=None):
         if limit == 0:
             return []
 
         session = self._engine_facade.get_session()
-        query = session.query(table)
-        transformer = QueryTransformer(table, query)
+        query = session.query(models.MeterSample)
+        transformer = sql_utils.QueryTransformer(models.MeterSample, query)
         if filter_expr is not None:
             transformer.apply_filter(filter_expr)
 
         transformer.apply_options(orderby,
                                   limit)
-
-        retrieve = {models.MeterSample: self._retrieve_samples,
-                    models.Alarm: self._retrieve_alarms,
-                    models.AlarmChange: self._retrieve_alarm_history}
-        return retrieve[table](transformer.get_query())
-
-    def query_samples(self, filter_expr=None, orderby=None, limit=None):
-        return self._retrieve_data(filter_expr,
-                                   orderby,
-                                   limit,
-                                   models.MeterSample)
+        return self._retrieve_samples(transformer.get_query())
 
     @staticmethod
     def _get_aggregate_functions(aggregate):
@@ -678,197 +627,6 @@ class Connection(base.Connection):
                         aggregate=aggregate
                     )
 
-    @staticmethod
-    def _row_to_alarm_model(row):
-        return alarm_api_models.Alarm(alarm_id=row.alarm_id,
-                                      enabled=row.enabled,
-                                      type=row.type,
-                                      name=row.name,
-                                      description=row.description,
-                                      timestamp=row.timestamp,
-                                      user_id=row.user_id,
-                                      project_id=row.project_id,
-                                      state=row.state,
-                                      state_timestamp=row.state_timestamp,
-                                      ok_actions=row.ok_actions,
-                                      alarm_actions=row.alarm_actions,
-                                      insufficient_data_actions=(
-                                          row.insufficient_data_actions),
-                                      rule=row.rule,
-                                      time_constraints=row.time_constraints,
-                                      repeat_actions=row.repeat_actions)
-
-    def _retrieve_alarms(self, query):
-        return (self._row_to_alarm_model(x) for x in query.all())
-
-    def get_alarms(self, name=None, user=None, state=None, meter=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None):
-        """Yields a lists of alarms that match filters
-
-        :param user: Optional ID for user that owns the resource.
-        :param state: Optional string for alarm state.
-        :param meter: Optional string for alarms associated with meter.
-        :param project: Optional ID for project that owns the resource.
-        :param enabled: Optional boolean to list disable alarm.
-        :param alarm_id: Optional alarm_id to return one alarm.
-        :param pagination: Optional pagination query.
-        """
-
-        if pagination:
-            raise NotImplementedError('Pagination not implemented')
-
-        session = self._engine_facade.get_session()
-        query = session.query(models.Alarm)
-        if name is not None:
-            query = query.filter(models.Alarm.name == name)
-        if enabled is not None:
-            query = query.filter(models.Alarm.enabled == enabled)
-        if user is not None:
-            query = query.filter(models.Alarm.user_id == user)
-        if project is not None:
-            query = query.filter(models.Alarm.project_id == project)
-        if alarm_id is not None:
-            query = query.filter(models.Alarm.alarm_id == alarm_id)
-        if state is not None:
-            query = query.filter(models.Alarm.state == state)
-
-        alarms = self._retrieve_alarms(query)
-
-        # TODO(cmart): improve this by using sqlalchemy.func factory
-        if meter is not None:
-            alarms = filter(lambda row:
-                            row.rule.get('meter_name', None) == meter,
-                            alarms)
-
-        return alarms
-
-    def create_alarm(self, alarm):
-        """Create an alarm.
-
-        :param alarm: The alarm to create.
-        """
-        session = self._engine_facade.get_session()
-        with session.begin():
-            alarm_row = models.Alarm(alarm_id=alarm.alarm_id)
-            alarm_row.update(alarm.as_dict())
-            session.add(alarm_row)
-
-        return self._row_to_alarm_model(alarm_row)
-
-    def update_alarm(self, alarm):
-        """Update an alarm.
-
-        :param alarm: the new Alarm to update
-        """
-        session = self._engine_facade.get_session()
-        with session.begin():
-            alarm_row = session.merge(models.Alarm(alarm_id=alarm.alarm_id))
-            alarm_row.update(alarm.as_dict())
-
-        return self._row_to_alarm_model(alarm_row)
-
-    def delete_alarm(self, alarm_id):
-        """Delete an alarm
-
-        :param alarm_id: ID of the alarm to delete
-        """
-        session = self._engine_facade.get_session()
-        with session.begin():
-            session.query(models.Alarm).filter(
-                models.Alarm.alarm_id == alarm_id).delete()
-
-    @staticmethod
-    def _row_to_alarm_change_model(row):
-        return alarm_api_models.AlarmChange(event_id=row.event_id,
-                                            alarm_id=row.alarm_id,
-                                            type=row.type,
-                                            detail=row.detail,
-                                            user_id=row.user_id,
-                                            project_id=row.project_id,
-                                            on_behalf_of=row.on_behalf_of,
-                                            timestamp=row.timestamp)
-
-    def query_alarms(self, filter_expr=None, orderby=None, limit=None):
-        """Yields a lists of alarms that match filter."""
-        return self._retrieve_data(filter_expr, orderby, limit, models.Alarm)
-
-    def _retrieve_alarm_history(self, query):
-        return (self._row_to_alarm_change_model(x) for x in query.all())
-
-    def query_alarm_history(self, filter_expr=None, orderby=None, limit=None):
-        """Return an iterable of model.AlarmChange objects."""
-        return self._retrieve_data(filter_expr,
-                                   orderby,
-                                   limit,
-                                   models.AlarmChange)
-
-    def get_alarm_changes(self, alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
-        """Yields list of AlarmChanges describing alarm history
-
-        Changes are always sorted in reverse order of occurrence, given
-        the importance of currency.
-
-        Segregation for non-administrative users is done on the basis
-        of the on_behalf_of parameter. This allows such users to have
-        visibility on both the changes initiated by themselves directly
-        (generally creation, rule changes, or deletion) and also on those
-        changes initiated on their behalf by the alarming service (state
-        transitions after alarm thresholds are crossed).
-
-        :param alarm_id: ID of alarm to return changes for
-        :param on_behalf_of: ID of tenant to scope changes query (None for
-                             administrative user, indicating all projects)
-        :param user: Optional ID of user to return changes for
-        :param project: Optional ID of project to return changes for
-        :project type: Optional change type
-        :param start_timestamp: Optional modified timestamp start range
-        :param start_timestamp_op: Optional timestamp start range operation
-        :param end_timestamp: Optional modified timestamp end range
-        :param end_timestamp_op: Optional timestamp end range operation
-        """
-        session = self._engine_facade.get_session()
-        query = session.query(models.AlarmChange)
-        query = query.filter(models.AlarmChange.alarm_id == alarm_id)
-
-        if on_behalf_of is not None:
-            query = query.filter(
-                models.AlarmChange.on_behalf_of == on_behalf_of)
-        if user is not None:
-            query = query.filter(models.AlarmChange.user_id == user)
-        if project is not None:
-            query = query.filter(models.AlarmChange.project_id == project)
-        if type is not None:
-            query = query.filter(models.AlarmChange.type == type)
-        if start_timestamp:
-            if start_timestamp_op == 'gt':
-                query = query.filter(
-                    models.AlarmChange.timestamp > start_timestamp)
-            else:
-                query = query.filter(
-                    models.AlarmChange.timestamp >= start_timestamp)
-        if end_timestamp:
-            if end_timestamp_op == 'le':
-                query = query.filter(
-                    models.AlarmChange.timestamp <= end_timestamp)
-            else:
-                query = query.filter(
-                    models.AlarmChange.timestamp < end_timestamp)
-
-        query = query.order_by(desc(models.AlarmChange.timestamp))
-        return self._retrieve_alarm_history(query)
-
-    def record_alarm_change(self, alarm_change):
-        """Record alarm change event."""
-        session = self._engine_facade.get_session()
-        with session.begin():
-            alarm_change_row = models.AlarmChange(
-                event_id=alarm_change['event_id'])
-            alarm_change_row.update(alarm_change)
-            session.add(alarm_change_row)
-
     def _get_or_create_trait_type(self, trait_type, data_type, session=None):
         """Find if this trait already exists in the database.
 
@@ -934,7 +692,7 @@ class Connection(base.Connection):
 
         # Note: we don't flush here, explicitly (unless a new trait or event
         # does it). Otherwise, just wait until all the Events are staged.
-        return (event, new_traits)
+        return event, new_traits
 
     def record_events(self, event_models):
         """Write the events to SQL database via sqlalchemy.
@@ -1012,19 +770,14 @@ class Connection(base.Connection):
                     # Build a sub query that joins Trait to TraitType
                     # where the trait name matches
                     trait_name = trait_filter.pop('key')
+                    op = trait_filter.pop('op', 'eq')
                     conditions = [models.Trait.trait_type_id ==
                                   models.TraitType.id,
                                   models.TraitType.desc == trait_name]
 
-                    for key, value in trait_filter.iteritems():
-                        if key == 'string':
-                            conditions.append(models.Trait.t_string == value)
-                        elif key == 'integer':
-                            conditions.append(models.Trait.t_int == value)
-                        elif key == 'datetime':
-                            conditions.append(models.Trait.t_datetime == value)
-                        elif key == 'float':
-                            conditions.append(models.Trait.t_float == value)
+                    for key, value in six.iteritems(trait_filter):
+                        sql_utils.trait_op_condition(conditions,
+                                                     key, value, op)
 
                     trait_query = (session.query(models.Trait.event_id).
                                    join(models.TraitType,
@@ -1143,91 +896,3 @@ class Connection(base.Connection):
                 yield api_models.Trait(name=type.desc,
                                        dtype=type.data_type,
                                        value=trait.get_value())
-
-
-class QueryTransformer(object):
-    operators = {"=": operator.eq,
-                 "<": operator.lt,
-                 ">": operator.gt,
-                 "<=": operator.le,
-                 "=<": operator.le,
-                 ">=": operator.ge,
-                 "=>": operator.ge,
-                 "!=": operator.ne,
-                 "in": lambda field_name, values: field_name.in_(values)}
-
-    complex_operators = {"or": or_,
-                         "and": and_,
-                         "not": not_}
-
-    ordering_functions = {"asc": asc,
-                          "desc": desc}
-
-    def __init__(self, table, query):
-        self.table = table
-        self.query = query
-
-    def _handle_complex_op(self, complex_op, nodes):
-        op = self.complex_operators[complex_op]
-        if op == not_:
-            nodes = [nodes]
-        element_list = []
-        for node in nodes:
-            element = self._transform(node)
-            element_list.append(element)
-        return op(*element_list)
-
-    def _handle_simple_op(self, simple_op, nodes):
-        op = self.operators[simple_op]
-        field_name = nodes.keys()[0]
-        value = nodes.values()[0]
-        if field_name.startswith('resource_metadata.'):
-            return self._handle_metadata(op, field_name, value)
-        else:
-            return op(getattr(self.table, field_name), value)
-
-    def _handle_metadata(self, op, field_name, value):
-        if op == self.operators["in"]:
-            raise NotImplementedError('Metadata query with in '
-                                      'operator is not implemented')
-
-        field_name = field_name[len('resource_metadata.'):]
-        meta_table = META_TYPE_MAP[type(value)]
-        meta_alias = aliased(meta_table)
-        on_clause = and_(self.table.id == meta_alias.id,
-                         meta_alias.meta_key == field_name)
-        # outer join is needed to support metaquery
-        # with or operator on non existent metadata field
-        # see: test_query_non_existing_metadata_with_result
-        # test case.
-        self.query = self.query.outerjoin(meta_alias, on_clause)
-        return op(meta_alias.value, value)
-
-    def _transform(self, sub_tree):
-        operator = sub_tree.keys()[0]
-        nodes = sub_tree.values()[0]
-        if operator in self.complex_operators:
-            return self._handle_complex_op(operator, nodes)
-        else:
-            return self._handle_simple_op(operator, nodes)
-
-    def apply_filter(self, expression_tree):
-        condition = self._transform(expression_tree)
-        self.query = self.query.filter(condition)
-
-    def apply_options(self, orderby, limit):
-        self._apply_order_by(orderby)
-        if limit is not None:
-            self.query = self.query.limit(limit)
-
-    def _apply_order_by(self, orderby):
-        if orderby is not None:
-            for field in orderby:
-                ordering_function = self.ordering_functions[field.values()[0]]
-                self.query = self.query.order_by(ordering_function(
-                    getattr(self.table, field.keys()[0])))
-        else:
-            self.query = self.query.order_by(desc(self.table.timestamp))
-
-    def get_query(self):
-        return self.query

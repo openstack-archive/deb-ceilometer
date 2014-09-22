@@ -31,6 +31,7 @@ If you use sql alchemy, its specific parameters will need to be set.
 ===============================  ====================================  ==============================================================
 Parameter                        Default                               Note
 ===============================  ====================================  ==============================================================
+api_paste_config                 api_paste.ini                         Configuration file for WSGI definition of the API
 nova_control_exchange            nova                                  Exchange name for Nova notifications
 glance_control_exchange          glance                                Exchange name for Glance notifications
 cinder_control_exchange          cinder                                Exchange name for Cinder notifications
@@ -43,6 +44,12 @@ database_connection              mongodb://localhost:27017/ceilometer  Database 
 metering_api_port                8777                                  The port for the ceilometer API server
 reseller_prefix                  AUTH\_                                Prefix used by swift for reseller token
 nova_http_log_debug              False                                 Log request/response parameters between nova and ceilometer
+glance_page_size                 0                                     Number of items to request in each paginated Glance API
+                                                                       request (parameter used by glancecelient). If this is less
+                                                                       than or equal to 0, page size is not specified (default value
+                                                                       in glanceclient is used). It is better to check and set
+                                                                       appropriate value in line with each environment when calling
+                                                                       glanceclient, than to define higher default value.
 ===============================  ====================================  ==============================================================
 
 Service polling authentication
@@ -167,6 +174,14 @@ To find out more about supported storage backends please take a look on the
 Event Conversion
 ================
 
+[notification] configuration section switches on events storing.
+
+==================================  ======================================  ==============================================================
+Parameter                           Default                                 Note
+==================================  ======================================  ==============================================================
+store_events                        False                                   Boolean variable that switch on/off events storing
+==================================  ======================================  ==============================================================
+
 The following options in the [event] configuration section affect the extraction of Event data from notifications.
 
 ==================================  ======================================  ==============================================================
@@ -177,6 +192,34 @@ drop_unmatched_notifications        False                                   If s
                                                                             (Notifications will *only* be dropped if this is True)
 definitions_cfg_file                event_definitions.yaml                  Name of event definitions config file (yaml format)
 ==================================  ======================================  ==============================================================
+
+Alarming
+========
+
+The following options in the [alarm] configuration section affect the configuration of alarm services
+
+======================  ==============  ====================================================================================
+Parameter               Default         Note
+======================  ==============  ====================================================================================
+evaluation_service      singleton       Driver to use for alarm evaluation service:
+                                          * singleton:   All alarms are evaluated by one alarm evaluation service instance
+                                          * partitioned: All alarms are dispatched across all alarm evaluation service
+                                            instances to be evaluate
+======================  ==============  ====================================================================================
+
+
+Collector
+=========
+
+The following options in the [collector] configuration section affect the collector service
+
+=====================================  ======================================  ==============================================================
+Parameter                              Default                                 Note
+=====================================  ======================================  ==============================================================
+requeue_sample_on_dispatcher_error     False                                   Requeue the sample on the collector sample queue when the
+                                                                               collector fails to dispatch it. This option is only valid if
+                                                                               the sample comes from the notifier publisher
+=====================================  ======================================  ==============================================================
 
 
 
@@ -280,6 +323,7 @@ configuration file by running ``tox -e genconfig``.
 
 .. _`backward compatibility issue`: https://bitbucket.org/hpk42/tox/issue/150/posargs-configerror
 
+.. _Pipeline-Configuration:
 
 Pipelines
 =========
@@ -290,6 +334,8 @@ data.
 
 A source is a producer of samples, in effect a set of pollsters and/or
 notification handlers emitting samples for a set of matching meters.
+See :doc:`contributing/plugins` and :ref:`plugins-and-containers` for
+details on how to write and plug in your plugins.
 
 Each source configuration encapsulates meter name matching, polling
 interval determination, optional resource enumeration or discovery,
@@ -310,6 +356,7 @@ The chains end with one or more publishers. This component makes it possible
 to persist the data into storage through the message bus or to send it to one
 or more external consumers. One chain can contain multiple publishers, see the
 :ref:`multi-publisher` section.
+
 
 Pipeline configuration
 ----------------------
@@ -336,6 +383,10 @@ The chain definition looks like the following::
         transformers: 'definition of transformers'
         publishers:
           - 'list of publishers'
+
+The *name* parameter of a source is unrelated to anything else;
+nothing references a source by name, and a source's name does not have
+to match anything.
 
 The *interval* parameter in the sources section should be defined in seconds. It
 determines the cadence of sample injection into the pipeline, where samples are
@@ -368,6 +419,11 @@ The above definition methods can be used in the following combinations:
     pipeline. Wildcard and included meters cannot co-exist in the same
     pipeline definition section.
 
+A given polling plugin is invoked according to each source section
+whose *meters* parameter matches the plugin's meter name.  That is,
+the matching source sections are combined by union, not intersection,
+of the prescribed time series.
+
 The optional *resources* section of a pipeline source allows a static
 list of resource URLs to be to be configured. An amalgamated list of all
 statically configured resources for a set of pipeline sources with a
@@ -386,6 +442,40 @@ setup.cfg.
 The default configuration can be found in `pipeline.yaml`_.
 
 .. _pipeline.yaml: https://git.openstack.org/cgit/openstack/ceilometer/tree/etc/ceilometer/pipeline.yaml
+
+.. _publishers:
+
+Publishers
+++++++++++
+
+The definition of publishers looks like::
+
+    publishers:
+        - udp://10.0.0.2:1234
+        - rpc://?per_meter_topic=1
+        - notifier://?policy=drop&max_queue_length=512
+
+The udp publisher is configurable like this: *udp://<host>:<port>/*
+
+The rpc publisher is configurable like this:
+*rpc://?option1=value1&option2=value2*
+
+Same thing for the notifier publisher:
+*notifier://?option1=value1&option2=value2*
+
+For rpc and notifier the options are:
+
+- *per_meter_topic=1* to publish the samples on additional
+  *<metering_topic>.<sample_name>* topic queue besides the *<metering_topic>*
+  queue
+- *policy=(default|drop|queue)* to configure the behavior when the publisher
+  fails to send the samples, where the predefined values mean the following:
+
+  - *default*, wait and block until the samples have been sent
+  - *drop*, drop the samples which are failed to be sent
+  - *queue*, create an in-memory queue and retry to send the samples on the
+    queue on the next samples publishing (the queue length can be configured
+    with *max_queue_length=1024*, 1024 is the default)
 
 .. _transformers:
 
@@ -522,3 +612,44 @@ and then flushes them all down the pipeline at once.
       parameters:
           size: 15
 
+Multi meter arithmetic transformer
+++++++++++++++++++++++++++++++++++
+
+This transformer enables us to perform arithmetic calculations
+over one or more meters and/or their metadata, for example:
+
+    memory_util = 100 * memory.usage / memory .
+
+A new sample is created with the properties described in the 'target'
+section of the transformer's configuration. The sample's volume is the result
+of the provided expression. The calculation is performed on samples from the
+same resource.
+
+.. note::
+    The calculation is limited to meters with the same interval.
+
+Example configuration::
+
+    transformers:
+    - name: "arithmetic"
+      parameters:
+        target:
+          name: "memory_util"
+          unit: "%"
+          type: "gauge"
+          expr: "100 * $(memory.usage) / $(memory)"
+
+To demonstrate the use of metadata, here is the implementation of
+a silly metric that shows average CPU time per core::
+
+    transformers:
+    - name: "arithmetic"
+      parameters:
+        target:
+          name: "avg_cpu_per_core"
+          unit: "ns"
+          type: "cumulative"
+          expr: "$(cpu) / ($(cpu).resource_metadata.cpu_number or 1)"
+
+Expression evaluation gracefully handles NaNs and exceptions. In such
+a case it does not create a new sample but only logs a warning.

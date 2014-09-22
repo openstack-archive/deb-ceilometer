@@ -18,9 +18,10 @@
 """
 
 import abc
+
+from oslo.utils import timeutils
 import six
 
-from ceilometer.openstack.common import timeutils
 from ceilometer import plugin
 
 
@@ -28,8 +29,8 @@ from ceilometer import plugin
 class ComputePollster(plugin.PollsterBase):
     """Base class for plugins.
 
-     It supports the polling API on the compute node.
-     """
+    It supports the polling API on the compute node.
+    """
 
     @abc.abstractmethod
     def get_samples(self, manager, cache, resources):
