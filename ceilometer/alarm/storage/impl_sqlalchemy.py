@@ -20,10 +20,10 @@ from __future__ import absolute_import
 import os
 
 from oslo.config import cfg
-from oslo.db.sqlalchemy import migration
 from oslo.db.sqlalchemy import session as db_session
 from sqlalchemy import desc
 
+import ceilometer
 from ceilometer.alarm.storage import base
 from ceilometer.alarm.storage import models as alarm_api_models
 from ceilometer.openstack.common import log
@@ -87,6 +87,8 @@ class Connection(base.Connection):
         )
 
     def upgrade(self):
+        # NOTE(gordc): to minimise memory, only import migration when needed
+        from oslo.db.sqlalchemy import migration
         path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                             '..', '..', 'storage', 'sqlalchemy',
                             'migrate_repo')
@@ -153,7 +155,7 @@ class Connection(base.Connection):
         """
 
         if pagination:
-            raise NotImplementedError('Pagination not implemented')
+            raise ceilometer.NotImplementedError('Pagination not implemented')
 
         session = self._engine_facade.get_session()
         query = session.query(models.Alarm)

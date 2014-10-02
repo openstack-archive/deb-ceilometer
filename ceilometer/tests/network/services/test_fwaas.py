@@ -20,9 +20,9 @@ from oslotest import base
 from oslotest import mockpatch
 
 from ceilometer.central import manager
+from ceilometer.central import plugin
 from ceilometer.network.services import discovery
 from ceilometer.network.services import fwaas
-from ceilometer import neutron_client as cli
 from ceilometer.openstack.common import context
 
 
@@ -34,8 +34,8 @@ class _BaseTestFWPollster(base.BaseTestCase):
         self.addCleanup(mock.patch.stopall)
         self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
-        cli.Client.keystone = mock.Mock()
-        cli.Client.keystone.service_catalog.get_endpoints = mock.Mock(
+        plugin._get_keystone = mock.Mock()
+        plugin._get_keystone.service_catalog.get_endpoints = mock.MagicMock(
             return_value={'network': mock.ANY})
 
 
@@ -106,7 +106,7 @@ class TestFirewallPollster(_BaseTestFWPollster):
                          set([s.name for s in samples]))
 
     def test_vpn_discovery(self):
-        discovered_fws = discovery.FirewallDiscovery().discover()
+        discovered_fws = discovery.FirewallDiscovery().discover(self.manager)
         self.assertEqual(3, len(discovered_fws))
 
         for vpn in self.fake_get_fw_service():
@@ -165,6 +165,7 @@ class TestIPSecConnectionsPollster(_BaseTestFWPollster):
                          set([s.name for s in samples]))
 
     def test_fw_policy_discovery(self):
-        discovered_policy = discovery.FirewallPolicyDiscovery().discover()
+        discovered_policy = discovery.FirewallPolicyDiscovery().discover(
+            self.manager)
         self.assertEqual(1, len(discovered_policy))
         self.assertEqual(self.fake_get_fw_policy(), discovered_policy)

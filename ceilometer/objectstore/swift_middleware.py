@@ -40,17 +40,15 @@ before "proxy-server" and add the following filter in the file:
 """
 
 from __future__ import absolute_import
+import logging
 
 from oslo.utils import timeutils
+import six
 
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common import log
 from ceilometer import pipeline
 from ceilometer import sample
 from ceilometer import service
-
-
-LOG = log.getLogger(__name__)
 
 
 class InputProxy(object):
@@ -94,6 +92,9 @@ class CeilometerMiddleware(object):
                                      "metadata_headers",
                                      "").split(",") if h.strip()]
 
+        self.logger = logging.getLogger('ceilometer')
+        self.logger.setLevel(getattr(logging,
+                                     conf.get('log_level', 'WARN').upper()))
         service.prepare_service([])
 
         self.pipeline_manager = pipeline.setup_pipeline()
@@ -132,7 +133,7 @@ class CeilometerMiddleware(object):
                                         input_proxy.bytes_received,
                                         bytes_sent)
                 except Exception:
-                    LOG.exception('Failed to publish samples')
+                    self.logger.exception('Failed to publish samples')
 
         try:
             iterable = self.app(env, my_start_response)
@@ -145,8 +146,14 @@ class CeilometerMiddleware(object):
     def publish_sample(self, env, bytes_received, bytes_sent):
         path = env['PATH_INFO']
         method = env['REQUEST_METHOD']
-        headers = dict((header.strip('HTTP_'), env[header]) for header
-                       in env if header.startswith('HTTP_'))
+        headers = {}
+        for header in env:
+            if header.startswith('HTTP_') and env[header]:
+                key = header.strip('HTTP_')
+                if isinstance(env[header], six.text_type):
+                    headers[key] = env[header].encode('utf-8')
+                else:
+                    headers[key] = str(env[header])
 
         try:
             container = obj = None

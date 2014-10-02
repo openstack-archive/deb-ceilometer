@@ -16,7 +16,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+import ceilometer
 from ceilometer.compute import plugin
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
@@ -31,13 +31,13 @@ class CPUPollster(plugin.ComputePollster):
 
     def get_samples(self, manager, cache, resources):
         for instance in resources:
-            LOG.info(_('checking instance %s'), instance.id)
+            LOG.debug(_('checking instance %s'), instance.id)
             instance_name = util.instance_name(instance)
             try:
                 cpu_info = manager.inspector.inspect_cpus(instance_name)
-                LOG.info(_("CPUTIME USAGE: %(instance)s %(time)d"),
-                         {'instance': instance.__dict__,
-                          'time': cpu_info.time})
+                LOG.debug(_("CPUTIME USAGE: %(instance)s %(time)d"),
+                          {'instance': instance.__dict__,
+                           'time': cpu_info.time})
                 cpu_num = {'cpu_number': cpu_info.number}
                 yield util.make_sample_from_instance(
                     instance,
@@ -50,7 +50,7 @@ class CPUPollster(plugin.ComputePollster):
             except virt_inspector.InstanceNotFoundException as err:
                 # Instance was deleted while getting samples. Ignore it.
                 LOG.debug(_('Exception while getting samples %s'), err)
-            except NotImplementedError:
+            except ceilometer.NotImplementedError:
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('Obtaining CPU time is not implemented for %s'
                             ), manager.inspector.__class__.__name__)
@@ -81,7 +81,7 @@ class CPUUtilPollster(plugin.ComputePollster):
             except virt_inspector.InstanceNotFoundException as err:
                 # Instance was deleted while getting samples. Ignore it.
                 LOG.debug(_('Exception while getting samples %s'), err)
-            except NotImplementedError:
+            except ceilometer.NotImplementedError:
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('Obtaining CPU Util is not implemented for %s'),
                           manager.inspector.__class__.__name__)

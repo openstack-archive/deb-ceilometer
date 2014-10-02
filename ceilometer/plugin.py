@@ -128,8 +128,23 @@ class NotificationBase(PluginBase):
 class PollsterBase(PluginBase):
     """Base class for plugins that support the polling API."""
 
+    @abc.abstractproperty
+    def default_discovery(self):
+        """Default discovery to use for this pollster.
+
+        There are three ways a pollster can get a list of resources to poll,
+        listed here in ascending order of precedence:
+        1. from the per-agent discovery,
+        2. from the per-pollster discovery (defined here)
+        3. from the per-pipeline configured discovery and/or per-pipeline
+        configured static resources.
+
+        If a pollster should only get resources from #1 or #3, this property
+        should be set to None.
+        """
+
     @abc.abstractmethod
-    def get_samples(self, manager, cache, resources=None):
+    def get_samples(self, manager, cache, resources):
         """Return a sequence of Counter instances from polling the resources.
 
         :param manager: The service manager class invoking the plugin.
@@ -137,9 +152,10 @@ class PollsterBase(PluginBase):
                       between themselves when recomputing it would be
                       expensive (e.g., asking another service for a
                       list of objects).
-        :param resources: A list of the endpoints the pollster will get data
+        :param resources: A list of resources the pollster will get data
                           from. It's up to the specific pollster to decide
-                          how to use it.
+                          how to use it. It is usually supplied by a discovery,
+                          see ``default_discovery`` for more information.
 
         """
 
@@ -147,9 +163,20 @@ class PollsterBase(PluginBase):
 @six.add_metaclass(abc.ABCMeta)
 class DiscoveryBase(object):
     @abc.abstractmethod
-    def discover(self, param=None):
+    def discover(self, manager, param=None):
         """Discover resources to monitor.
 
+        The most fine-grained discovery should be preferred, so the work is
+        the most evenly distributed among multiple agents (if they exist).
+
+        For example:
+        if the pollster can separately poll individual resources, it should
+        have its own discovery implementation to discover those resources. If
+        it can only poll per-tenant, then the `TenantDiscovery` should be
+        used. If even that is not possible, use `EndpointDiscovery` (see
+        their respective docstrings).
+
+        :param manager: The service manager class invoking the plugin.
         :param param: an optional parameter to guide the discovery
         """
 

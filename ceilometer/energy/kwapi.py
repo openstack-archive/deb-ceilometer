@@ -26,7 +26,16 @@ from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
+
 LOG = log.getLogger(__name__)
+
+service_types_opts = [
+    cfg.StrOpt('kwapi',
+               default='energy',
+               help='Kwapi service type.'),
+]
+
+cfg.CONF.register_opts(service_types_opts, group='service_types')
 
 
 class KwapiClient(object):
@@ -55,25 +64,27 @@ class KwapiClient(object):
 class _Base(plugin.CentralPollster):
     """Base class for the Kwapi pollster, derived from CentralPollster."""
 
+    @property
+    def default_discovery(self):
+        return 'endpoint:%s' % cfg.CONF.service_types.kwapi
+
     @staticmethod
-    def get_kwapi_client(ksclient):
+    def get_kwapi_client(ksclient, endpoint):
         """Returns a KwapiClient configured with the proper url and token."""
-        endpoint = ksclient.service_catalog.url_for(
-            service_type='energy',
-            endpoint_type=cfg.CONF.service_credentials.os_endpoint_type)
         return KwapiClient(endpoint, ksclient.auth_token)
 
     CACHE_KEY_PROBE = 'kwapi.probes'
 
-    def _iter_probes(self, ksclient, cache):
+    def _iter_probes(self, ksclient, cache, endpoint):
         """Iterate over all probes."""
-        if self.CACHE_KEY_PROBE not in cache:
-            cache[self.CACHE_KEY_PROBE] = self._get_probes(ksclient)
-        return iter(cache[self.CACHE_KEY_PROBE])
+        key = '%s-%s' % (endpoint, self.CACHE_KEY_PROBE)
+        if key not in cache:
+            cache[key] = self._get_probes(ksclient, endpoint)
+        return iter(cache[key])
 
-    def _get_probes(self, ksclient):
+    def _get_probes(self, ksclient, endpoint):
         try:
-            client = self.get_kwapi_client(ksclient)
+            client = self.get_kwapi_client(ksclient, endpoint)
         except exceptions.EndpointNotFound:
             LOG.debug(_("Kwapi endpoint not found"))
             return []
@@ -82,39 +93,39 @@ class _Base(plugin.CentralPollster):
 
 class EnergyPollster(_Base):
     """Measures energy consumption."""
-    @plugin.check_keystone('energy')
-    def get_samples(self, manager, cache, resources=None):
+    def get_samples(self, manager, cache, resources):
         """Returns all samples."""
-        for probe in self._iter_probes(manager.keystone, cache):
-            yield sample.Sample(
-                name='energy',
-                type=sample.TYPE_CUMULATIVE,
-                unit='kWh',
-                volume=probe['kwh'],
-                user_id=None,
-                project_id=None,
-                resource_id=probe['id'],
-                timestamp=datetime.datetime.fromtimestamp(
-                    probe['timestamp']).isoformat(),
-                resource_metadata={}
-            )
+        for endpoint in resources:
+            for probe in self._iter_probes(manager.keystone, cache, endpoint):
+                yield sample.Sample(
+                    name='energy',
+                    type=sample.TYPE_CUMULATIVE,
+                    unit='kWh',
+                    volume=probe['kwh'],
+                    user_id=None,
+                    project_id=None,
+                    resource_id=probe['id'],
+                    timestamp=datetime.datetime.fromtimestamp(
+                        probe['timestamp']).isoformat(),
+                    resource_metadata={}
+                )
 
 
 class PowerPollster(_Base):
     """Measures power consumption."""
-    @plugin.check_keystone('energy')
-    def get_samples(self, manager, cache, resources=None):
+    def get_samples(self, manager, cache, resources):
         """Returns all samples."""
-        for probe in self._iter_probes(manager.keystone, cache):
-            yield sample.Sample(
-                name='power',
-                type=sample.TYPE_GAUGE,
-                unit='W',
-                volume=probe['w'],
-                user_id=None,
-                project_id=None,
-                resource_id=probe['id'],
-                timestamp=datetime.datetime.fromtimestamp(
-                    probe['timestamp']).isoformat(),
-                resource_metadata={}
-            )
+        for endpoint in resources:
+            for probe in self._iter_probes(manager.keystone, cache, endpoint):
+                yield sample.Sample(
+                    name='power',
+                    type=sample.TYPE_GAUGE,
+                    unit='W',
+                    volume=probe['w'],
+                    user_id=None,
+                    project_id=None,
+                    resource_id=probe['id'],
+                    timestamp=datetime.datetime.fromtimestamp(
+                        probe['timestamp']).isoformat(),
+                    resource_metadata={}
+                )

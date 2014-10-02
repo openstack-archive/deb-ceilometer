@@ -22,6 +22,7 @@ from oslo.utils import netutils
 from oslo.utils import timeutils
 from six.moves.urllib import parse as urlparse
 
+import ceilometer
 from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.storage import base
@@ -160,10 +161,10 @@ class Connection(base.Connection):
             self.conn_pool = self._get_connection_pool(opts)
 
     def upgrade(self):
+        tables = [self.RESOURCE_TABLE, self.METER_TABLE, self.EVENT_TABLE]
+        column_families = {'f': dict(max_versions=1)}
         with self.conn_pool.connection() as conn:
-            conn.create_table(self.RESOURCE_TABLE, {'f': dict(max_versions=1)})
-            conn.create_table(self.METER_TABLE, {'f': dict(max_versions=1)})
-            conn.create_table(self.EVENT_TABLE, {'f': dict(max_versions=1)})
+            hbase_utils.create_tables(conn, tables, column_families)
 
     def clear(self):
         LOG.debug(_('Dropping HBase schema...'))
@@ -276,7 +277,7 @@ class Connection(base.Connection):
         :param pagination: Optional pagination query.
         """
         if pagination:
-            raise NotImplementedError('Pagination not implemented')
+            raise ceilometer.NotImplementedError('Pagination not implemented')
 
         q = hbase_utils.make_query(metaquery=metaquery, user_id=user,
                                    project_id=project,
@@ -330,7 +331,8 @@ class Connection(base.Connection):
         metaquery = metaquery or {}
 
         if pagination:
-            raise NotImplementedError(_('Pagination not implemented'))
+            raise ceilometer.NotImplementedError(
+                _('Pagination not implemented'))
         with self.conn_pool.connection() as conn:
             resource_table = conn.table(self.RESOURCE_TABLE)
             q = hbase_utils.make_query(metaquery=metaquery, user_id=user,
@@ -380,7 +382,7 @@ class Connection(base.Connection):
                                        (sample_filter, require_meter=False))
             LOG.debug(_("Query Meter Table: %s") % q)
             gen = meter_table.scan(filter=q, row_start=start, row_stop=stop,
-                                   limit=limit)
+                                   limit=limit, columns=columns)
             for ignored, meter in gen:
                 d_meter = hbase_utils.deserialize_entry(meter)[0]
                 d_meter['message']['recorded_at'] = d_meter['recorded_at']
@@ -423,10 +425,11 @@ class Connection(base.Connection):
           because of all the Thrift traffic it is going to create.
         """
         if groupby:
-            raise NotImplementedError("Group by not implemented.")
+            raise ceilometer.NotImplementedError("Group by not implemented.")
 
         if aggregate:
-            raise NotImplementedError('Selectable aggregates not implemented')
+            raise ceilometer.NotImplementedError(
+                'Selectable aggregates not implemented')
 
         with self.conn_pool.connection() as conn:
             meter_table = conn.table(self.METER_TABLE)

@@ -194,6 +194,32 @@ snapshot.size             Gauge       GB        snap ID   notification  Size of 
 
 Make sure Cinder is properly configured first: see :ref:`installing_manually`.
 
+Identity (Keystone)
+===================
+
+================================  ==========  ===============  ==========  ============  ===========================================
+Name                              Type        Unit             Resource    Origin        Note
+================================  ==========  ===============  ==========  ============  ===========================================
+identity.authenticate.success     Delta       user             user ID     notification  User successfully authenticates
+identity.authenticate.pending     Delta       user             user ID     notification  User pending authentication
+identity.authenticate.failure     Delta       user             user ID     notification  User failed authentication
+identity.user.created             Delta       user             user ID     notification  A user is created
+identity.user.deleted             Delta       user             user ID     notification  A user is deleted
+identity.user.updated             Delta       user             user ID     notification  A user is updated
+identity.group.created            Delta       group            group ID    notification  A group is created
+identity.group.deleted            Delta       group            group ID    notification  A group is deleted
+identity.group.updated            Delta       group            group ID    notification  A group is updated
+identity.role.created             Delta       role             role ID     notification  A role is created
+identity.role.deleted             Delta       role             role ID     notification  A role is deleted
+identity.role.updated             Delta       role             role ID     notification  A role is updated
+identity.project.created          Delta       project          project ID  notification  A project is created
+identity.project.deleted          Delta       project          project ID  notification  A project is deleted
+identity.project.updated          Delta       project          project ID  notification  A project is updated
+identity.trust.created            Delta       trust            trust ID    notification  A trust is created
+identity.trust.deleted            Delta       trust            trust ID    notification  A trust is deleted
+================================  ==========  ===============  ==========  ============  ===========================================
+
+
 Object Storage (Swift)
 ======================
 
@@ -229,6 +255,19 @@ stack.suspend                    Delta       stack       stack ID     notificati
 ===============================  ==========  ==========  ===========  ============  ==========================================
 
 To enable Heat notifications configure Heat as described in :ref:`installing_manually`.
+
+Data Processing (Sahara)
+========================
+
+===============================  ==========  ==========  ===========  ============  =================================================
+Name                             Type        Unit        Resource     Origin        Note
+===============================  ==========  ==========  ===========  ============  =================================================
+cluster.create                   Delta       cluster     cluster ID   notification  Creation requests for a cluster successful
+cluster.update                   Delta       cluster     cluster ID   notification  Updating status requests for a cluster successful
+cluster.delete                   Delta       cluster     cluster ID   notification  Deletion requests for a cluster successful
+===============================  ==========  ==========  ===========  ============  =================================================
+
+To enable Sahara notifications configure Sahara as described in :ref:`installing_manually`.
 
 Energy (Kwapi)
 ==============
@@ -329,6 +368,21 @@ hardware.ipmi.current          Gauge       W       current sensor  notification 
 hardware.ipmi.voltage          Gauge       V       voltage sensor  notification  Sensor Voltage Reading
 =============================  ==========  ======  ==============  ============  ==========================
 
+There is another way to retrieve IPMI data, by deploying the Ceilometer IPMI
+agent on each IPMI-capable node in order to poll local sensor data. To avoid
+duplication of metering data and unnecessary load on the IPMI interface, the
+IPMI agent should not be deployed if the node is managed by Ironic and the
+'conductor.send_sensor_data' option is set to true in the Ironic configuration.
+
+IPMI agent also retrieve following Node Manager meter besides original IPMI
+sensor data:
+
+===============================  ==========  ======  ==============  ============  ==========================
+Meter                            Type        Unit    Resource        Origin        Note
+===============================  ==========  ======  ==============  ============  ==========================
+hardware.ipmi.node.power         Gauge       W       host ID         pollster      System Current Power
+hardware.ipmi.node.temperature   Gauge       C       host ID         pollster      System Current Temperature
+===============================  ==========  ======  ==============  ============  ==========================
 
 Dynamically retrieving the Meters via ceilometer client
 =======================================================

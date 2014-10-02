@@ -112,7 +112,6 @@ class AlarmService(object):
         pass
 
 
-@six.add_metaclass(abc.ABCMeta)
 class AlarmEvaluationService(AlarmService, os_service.Service):
 
     PARTITIONING_GROUP_NAME = "alarm_evaluator"
@@ -232,13 +231,15 @@ class AlarmNotifierService(os_service.Service):
 
     EXTENSIONS_NAMESPACE = "ceilometer.alarm.notifier"
 
+    notifiers = extension.ExtensionManager(EXTENSIONS_NAMESPACE,
+                                           invoke_on_load=True)
+    notifiers_schemas = notifiers.map(lambda x: x.name)
+
     def __init__(self):
         super(AlarmNotifierService, self).__init__()
         transport = messaging.get_transport()
         self.rpc_server = messaging.get_rpc_server(
             transport, cfg.CONF.alarm.notifier_rpc_topic, self)
-        self.notifiers = extension.ExtensionManager(self.EXTENSIONS_NAMESPACE,
-                                                    invoke_on_load=True)
 
     def start(self):
         super(AlarmNotifierService, self).start()

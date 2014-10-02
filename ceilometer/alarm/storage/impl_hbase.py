@@ -19,6 +19,7 @@ import happybase
 from oslo.utils import netutils
 from six.moves.urllib import parse as urlparse
 
+import ceilometer
 from ceilometer.alarm.storage import base
 from ceilometer.alarm.storage import models
 from ceilometer.openstack.common.gettextutils import _
@@ -97,9 +98,10 @@ class Connection(base.Connection):
             self.conn_pool = self._get_connection_pool(opts)
 
     def upgrade(self):
+        tables = [self.ALARM_HISTORY_TABLE, self.ALARM_TABLE]
+        column_families = {'f': dict()}
         with self.conn_pool.connection() as conn:
-            conn.create_table(self.ALARM_TABLE, {'f': dict()})
-            conn.create_table(self.ALARM_HISTORY_TABLE, {'f': dict()})
+            hbase_utils.create_tables(conn, tables, column_families)
 
     def clear(self):
         LOG.debug(_('Dropping HBase schema...'))
@@ -178,9 +180,10 @@ class Connection(base.Connection):
                    project=None, enabled=None, alarm_id=None, pagination=None):
 
         if pagination:
-            raise NotImplementedError('Pagination not implemented')
+            raise ceilometer.NotImplementedError('Pagination not implemented')
         if meter:
-            raise NotImplementedError('Filter by meter not implemented')
+            raise ceilometer.NotImplementedError(
+                'Filter by meter not implemented')
 
         q = hbase_utils.make_query(alarm_id=alarm_id, name=name,
                                    enabled=enabled, user_id=user,

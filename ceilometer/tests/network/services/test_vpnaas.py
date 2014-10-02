@@ -20,9 +20,9 @@ from oslotest import base
 from oslotest import mockpatch
 
 from ceilometer.central import manager
+from ceilometer.central import plugin
 from ceilometer.network.services import discovery
 from ceilometer.network.services import vpnaas
-from ceilometer import neutron_client as cli
 from ceilometer.openstack.common import context
 
 
@@ -34,8 +34,8 @@ class _BaseTestVPNPollster(base.BaseTestCase):
         self.addCleanup(mock.patch.stopall)
         self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
-        cli.Client.keystone = mock.Mock()
-        cli.Client.keystone.service_catalog.get_endpoints = mock.Mock(
+        plugin._get_keystone = mock.Mock()
+        plugin._get_keystone.service_catalog.get_endpoints = mock.MagicMock(
             return_value={'network': mock.ANY})
 
 
@@ -110,7 +110,8 @@ class TestVPNServicesPollster(_BaseTestVPNPollster):
                          set([s.name for s in samples]))
 
     def test_vpn_discovery(self):
-        discovered_vpns = discovery.VPNServicesDiscovery().discover()
+        discovered_vpns = discovery.VPNServicesDiscovery().discover(
+            self.manager)
         self.assertEqual(3, len(discovered_vpns))
 
         for vpn in self.fake_get_vpn_service():
@@ -170,6 +171,7 @@ class TestIPSecConnectionsPollster(_BaseTestVPNPollster):
                          set([s.name for s in samples]))
 
     def test_conns_discovery(self):
-        discovered_conns = discovery.IPSecConnectionsDiscovery().discover()
+        discovered_conns = discovery.IPSecConnectionsDiscovery().discover(
+            self.manager)
         self.assertEqual(1, len(discovered_conns))
         self.assertEqual(self.fake_get_ipsec_connections(), discovered_conns)

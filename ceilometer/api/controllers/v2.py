@@ -37,6 +37,7 @@ import pytz
 import uuid
 
 from oslo.config import cfg
+from oslo.utils import netutils
 from oslo.utils import strutils
 from oslo.utils import timeutils
 import pecan
@@ -46,6 +47,8 @@ import wsme
 from wsme import types as wtypes
 import wsmeext.pecan as wsme_pecan
 
+import ceilometer
+from ceilometer.alarm import service as alarm_service
 from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.api import acl
 from ceilometer import messaging
@@ -590,8 +593,8 @@ def _get_query_timestamps(args=None):
     query_end: Final timestamp to use for query
     end_timestamp: end_timestamp parameter from request
     search_offset: search_offset parameter from request
-
     """
+
     if args is None:
         return {'query_start': None,
                 'query_end': None,
@@ -600,23 +603,25 @@ def _get_query_timestamps(args=None):
                 'search_offset': 0}
     search_offset = int(args.get('search_offset', 0))
 
+    def _parse_timestamp(timestamp):
+        if not timestamp:
+            return None
+        try:
+            iso_timestamp = timeutils.parse_isotime(timestamp)
+            iso_timestamp = iso_timestamp.replace(tzinfo=None)
+        except ValueError:
+            raise wsme.exc.InvalidInput('timestamp', timestamp,
+                                        'invalid timestamp format')
+        return iso_timestamp
+
     start_timestamp = args.get('start_timestamp')
-    if start_timestamp:
-        start_timestamp = timeutils.parse_isotime(start_timestamp)
-        start_timestamp = start_timestamp.replace(tzinfo=None)
-        query_start = (start_timestamp -
-                       datetime.timedelta(minutes=search_offset))
-    else:
-        query_start = None
-
     end_timestamp = args.get('end_timestamp')
-    if end_timestamp:
-        end_timestamp = timeutils.parse_isotime(end_timestamp)
-        end_timestamp = end_timestamp.replace(tzinfo=None)
-        query_end = end_timestamp + datetime.timedelta(minutes=search_offset)
-    else:
-        query_end = None
-
+    start_timestamp = _parse_timestamp(start_timestamp)
+    end_timestamp = _parse_timestamp(end_timestamp)
+    query_start = start_timestamp - datetime.timedelta(
+        minutes=search_offset) if start_timestamp else None
+    query_end = end_timestamp + datetime.timedelta(
+        minutes=search_offset) if end_timestamp else None
     return {'query_start': query_start,
             'query_end': query_end,
             'start_timestamp': start_timestamp,
@@ -1325,8 +1330,12 @@ class ValidatedComplexQuery(object):
         if self.original_query.filter is wtypes.Unset:
             self.filter_expr = None
         else:
-            self.filter_expr = json.loads(self.original_query.filter)
-            self._validate_filter(self.filter_expr)
+            try:
+                self.filter_expr = json.loads(self.original_query.filter)
+                self._validate_filter(self.filter_expr)
+            except (ValueError, jsonschema.exceptions.ValidationError) as e:
+                raise ClientSideError(_("Filter expression not valid: %s") %
+                                      e.message)
             self._replace_isotime_with_datetime(self.filter_expr)
             self._convert_operator_to_lower_case(self.filter_expr)
             self._normalize_field_names_for_db_model(self.filter_expr)
@@ -1336,8 +1345,12 @@ class ValidatedComplexQuery(object):
         if self.original_query.orderby is wtypes.Unset:
             self.orderby = None
         else:
-            self.orderby = json.loads(self.original_query.orderby)
-            self._validate_orderby(self.orderby)
+            try:
+                self.orderby = json.loads(self.original_query.orderby)
+                self._validate_orderby(self.orderby)
+            except (ValueError, jsonschema.exceptions.ValidationError) as e:
+                raise ClientSideError(_("Order-by expression not valid: %s") %
+                                      e.message)
             self._convert_orderby_to_lower_case(self.orderby)
             self._normalize_field_names_in_orderby(self.orderby)
 
@@ -1807,6 +1820,7 @@ class Alarm(_Base):
     def validate(alarm):
 
         Alarm.check_rule(alarm)
+        Alarm.check_alarm_actions(alarm)
         if alarm.threshold_rule:
             # ensure an implicit constraint on project_id is added to
             # the query if not already present
@@ -1844,6 +1858,25 @@ class Alarm(_Base):
             error = _("threshold_rule and combination_rule "
                       "cannot be set at the same time")
             raise ClientSideError(error)
+
+    @staticmethod
+    def check_alarm_actions(alarm):
+        actions_schema = alarm_service.AlarmNotifierService.notifiers_schemas
+        for state in state_kind:
+            actions_name = state.replace(" ", "_") + '_actions'
+            actions = getattr(alarm, actions_name)
+            if not actions:
+                continue
+
+            for action in actions:
+                try:
+                    url = netutils.urlsplit(action)
+                except Exception:
+                    error = _("Unable to parse action %s") % action
+                    raise ClientSideError(error)
+                if url.scheme not in actions_schema:
+                    error = _("Unsupported action %s") % action
+                    raise ClientSideError(error)
 
     @classmethod
     def sample(cls):
@@ -1960,7 +1993,7 @@ class AlarmController(rest.RestController):
 
         try:
             self.conn.record_alarm_change(payload)
-        except NotImplementedError:
+        except ceilometer.NotImplementedError:
             pass
 
         # Revert to the pre-json'ed details ...
@@ -2116,7 +2149,7 @@ class AlarmsController(rest.RestController):
 
         try:
             conn.record_alarm_change(payload)
-        except NotImplementedError:
+        except ceilometer.NotImplementedError:
             pass
 
         # Revert to the pre-json'ed details ...
@@ -2305,7 +2338,11 @@ def requires_admin(func):
         usr_limit, proj_limit = acl.get_limited_to(pecan.request.headers)
         # If User and Project are None, you have full access.
         if usr_limit and proj_limit:
-            raise ProjectNotAuthorized(proj_limit)
+            # since this decorator get's called out of wsme context
+            # raising exception results internal error so call abort
+            # for handling the error
+            ex = ProjectNotAuthorized(proj_limit)
+            pecan.core.abort(status_code=ex.code, detail=ex.msg)
         return func(*args, **kwargs)
 
     return wrapped
@@ -2453,7 +2490,7 @@ class QuerySamplesController(rest.RestController):
 
 
 class QueryAlarmHistoryController(rest.RestController):
-    """Provides complex query possibilites for alarm history."""
+    """Provides complex query possibilities for alarm history."""
     @wsme_pecan.wsexpose([AlarmChange], body=ComplexQuery)
     def post(self, body):
         """Define query for retrieving AlarmChange data.

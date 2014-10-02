@@ -44,3 +44,11 @@ class MemoryTotalPollster(_Base):
 
 class MemoryUsedPollster(_Base):
     IDENTIFIER = 'memory.used'
+
+
+class MemorySwapTotalPollster(_Base):
+    IDENTIFIER = 'memory.swap.total'
+
+
+class MemorySwapAvailPollster(_Base):
+    IDENTIFIER = 'memory.swap.avail'

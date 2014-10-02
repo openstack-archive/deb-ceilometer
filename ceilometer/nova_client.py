@@ -21,12 +21,22 @@ from oslo.config import cfg
 
 from ceilometer.openstack.common import log
 
+
 nova_opts = [
     cfg.BoolOpt('nova_http_log_debug',
                 default=False,
                 help='Allow novaclient\'s debug log output.'),
 ]
+
+service_types_opts = [
+    cfg.StrOpt('nova',
+               default='compute',
+               help='Nova service type.'),
+]
+
 cfg.CONF.register_opts(nova_opts)
+cfg.CONF.register_opts(service_types_opts, group='service_types')
+
 cfg.CONF.import_group('service_credentials', 'ceilometer.service')
 
 LOG = log.getLogger(__name__)
@@ -48,7 +58,7 @@ def logged(func):
 class Client(object):
     """A client which gets information via python-novaclient."""
 
-    def __init__(self):
+    def __init__(self, bypass_url=None, auth_token=None):
         """Initialize a nova client object."""
         conf = cfg.CONF.service_credentials
         tenant = conf.os_tenant_id or conf.os_tenant_name
@@ -57,8 +67,11 @@ class Client(object):
             api_key=conf.os_password,
             project_id=tenant,
             auth_url=conf.os_auth_url,
+            auth_token=auth_token,
             region_name=conf.os_region_name,
             endpoint_type=conf.os_endpoint_type,
+            service_type=cfg.CONF.service_types.nova,
+            bypass_url=bypass_url,
             cacert=conf.os_cacert,
             insecure=conf.insecure,
             http_log_debug=cfg.CONF.nova_http_log_debug,
