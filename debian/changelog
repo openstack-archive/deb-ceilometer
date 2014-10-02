@@ -1,6 +1,7 @@
 ceilometer (2014.2~rc1-1) experimental; urgency=medium
 
-  * Bumped oslo.messaging depends version.
+  * New upstream release.
+  * Updated (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 24 Sep 2014 09:39:11 +0800
 
