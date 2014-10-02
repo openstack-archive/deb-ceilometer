@@ -16,7 +16,7 @@ override_dh_clean:
 	rm -f debian/ceilometer-common.config debian/ceilometer-common.postinst debian/ceilometer-api.config debian/ceilometer-api.postinst
 
 override_dh_install:
-	dh_install
+	dh_install --fail-missing
 
 	# Manage ceilometer.conf
 	mkdir -p $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common
