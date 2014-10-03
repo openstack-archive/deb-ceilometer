@@ -5,6 +5,7 @@ ceilometer (2014.1.3-1) unstable; urgency=medium
 
   [ Thomas Goirand ]
   * New upstream release.
+  * Rebased patches.
 
  -- Thomas Goirand <zigo@debian.org>  Fri, 03 Oct 2014 20:36:59 +0800
 

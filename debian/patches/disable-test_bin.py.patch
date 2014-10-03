@@ -2,9 +2,9 @@ Description: Remove test_bin.py which does FTBFS
 Author: Mehdi Abaakouk <sileht@sileht.net>
 Origin: upstream
 Bug-Debian: https://bugs.debian.org/759967
-Last-Update: 2014-09-11
+Last-Update: 2014-10-03
 
---- a/ceilometer/tests/test_bin.py	2014-08-31 19:35:30.000000000 +0000
+--- a/ceilometer/tests/test_bin.py	2014-10-03 15:07:03.000000000 +0000
 +++ /dev/null	2014-08-23 22:43:19.410837823 +0000
 @@ -1,154 +0,0 @@
 -#!/usr/bin/env python
