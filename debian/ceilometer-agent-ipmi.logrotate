@@ -1,0 +1,8 @@
+/var/log/ceilometer/ceilometer-agent-ipmi.log {
+    daily
+    missingok
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+}

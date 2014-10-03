@@ -1,5 +1,7 @@
 /usr/bin/ceilometer-dbsync
 /usr/bin/ceilometer-expirer
+/usr/bin/ceilometer-rootwrap
+/usr/bin/ceilometer-send-sample
 etc/ceilometer/pipeline.yaml	/etc/ceilometer
 etc/ceilometer/policy.json	/etc/ceilometer
 tools/show_data.py usr/share/doc/ceilometer

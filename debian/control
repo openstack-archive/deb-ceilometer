@@ -6,7 +6,7 @@ Uploaders: Julien Danjou <acid@debian.org>,
            Thomas Goirand <zigo@debian.org>,
            Mehdi Abaakouk <sileht@sileht.net>
 Build-Depends: debhelper (>= 9),
-               openstack-pkg-tools (>= 9~),
+               openstack-pkg-tools (>= 13~),
                po-debconf,
                python-all (>= 2.6.6-3~),
                python-pbr (>= 0.6),
@@ -278,3 +278,20 @@ Description: OpenStack efficient metering counters system - alarm notifier
  overall system.
  .
  This package contains the notification agent daemon.
+
+Package: ceilometer-agent-ipmi
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends}
+Description: OpenStack efficient metering counters system - IPMI agent
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, across
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the IPMI agent daemon.
