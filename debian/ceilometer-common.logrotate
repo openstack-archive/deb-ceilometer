@@ -1,4 +1,4 @@
-/var/log/ceilometer/ceilometer-agent-ipmi.log {
+/var/log/ceilometer/*.log {
     daily
     missingok
     compress
