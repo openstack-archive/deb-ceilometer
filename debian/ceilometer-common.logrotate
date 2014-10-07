@@ -1,4 +1,4 @@
-/var/log/ceilometer/ceilometer-api.log {
+/var/log/ceilometer/*.log {
     daily
     missingok
     compress

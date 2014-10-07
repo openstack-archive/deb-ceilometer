@@ -1,0 +1,20 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          ceilometer-collector
+# Required-Start:    $network $local_fs $remote_fs $syslog
+# Required-Stop:     $remote_fs
+# Should-Start:      mongodb rabbitmq-server
+# Should-Stop:       mongodb rabbitmq-server
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: ceilometer collector
+# Description:       ceilometer collector
+### END INIT INFO
+
+# Author: Thomas Goirand <zigo@debian.org>
+# License: Apache-2
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="Ceilometer Collector"
+PROJECT_NAME=ceilometer
+NAME=${PROJECT_NAME}-collector

@@ -7,7 +7,7 @@ include /usr/share/openstack-pkg-tools/pkgos.make
 export OSLO_PACKAGE_VERSION=$(VERSION)
 
 %:
-	dh $@  --with python2
+	dh $@  --with python2,systemd
 
 override_dh_clean:
 	dh_clean
@@ -31,6 +31,7 @@ override_dh_auto_clean:
 	rm -rf debian/*.upstart
 	rm -rf debian/ceilometer-common.postinst
 	find . -iname '*.pyc' -delete
+	rm debian/*.init debian/*.service debian/*.upstart
 
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
