@@ -1,18 +1,13 @@
-ceilometer (2014.2~rc1-3) UNRELEASED; urgency=medium
-
-  * Mangling upstream rc and beta versions in watch file.
-
- -- Thomas Goirand <zigo@debian.org>  Sun, 05 Oct 2014 14:19:53 +0800
-
 ceilometer (2014.2~rc1-2) experimental; urgency=medium
 
+  * Mangling upstream rc and beta versions in watch file.
   * Added missing binaries.
   * Now packaging ceilometer-agent-ipmi.
   * Using templated init, upstart and systemd scripts from
     openstack-pkg-tools >= 13.
   * Fixed upstream files gone in debian/copyright.
 
- -- Thomas Goirand <zigo@debian.org>  Fri, 03 Oct 2014 00:30:58 +0800
+ -- Thomas Goirand <zigo@debian.org>  Tue, 07 Oct 2014 00:49:22 +0000
 
 ceilometer (2014.2~rc1-1) experimental; urgency=medium
 
