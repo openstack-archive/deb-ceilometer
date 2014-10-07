@@ -31,7 +31,7 @@ override_dh_auto_clean:
 	rm -rf debian/*.upstart
 	rm -rf debian/ceilometer-common.postinst
 	find . -iname '*.pyc' -delete
-	rm debian/*.init debian/*.service debian/*.upstart
+	rm -f debian/*.init debian/*.service debian/*.upstart
 
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
