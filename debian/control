@@ -256,7 +256,7 @@ Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
          ${python:Depends}
-Description: OpenStack efficient metering counters system - alarm notifier
+Description: OpenStack efficient metering counters system - agent notification
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
  all current and future OpenStack components. The delivery of counters must be
