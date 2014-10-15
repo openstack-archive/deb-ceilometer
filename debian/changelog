@@ -1,5 +1,6 @@
-ceilometer (2014.2~rc1-5) experimental; urgency=medium
+ceilometer (2014.2~rc3-1) experimental; urgency=medium
 
+  * New upstream release.
   * Added missing configuration files in ceilometer-common.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 15 Oct 2014 14:02:53 +0800
