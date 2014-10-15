@@ -2,6 +2,7 @@ ceilometer (2014.2~rc3-1) experimental; urgency=medium
 
   * New upstream release.
   * Added missing configuration files in ceilometer-common.
+  * Removed Add_oslo.db_to_config_generator.patch applied upstream.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 15 Oct 2014 14:02:53 +0800
 
