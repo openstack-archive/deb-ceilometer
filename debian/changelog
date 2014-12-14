@@ -2,6 +2,8 @@ ceilometer (2014.2.1-1) experimental; urgency=medium
 
   * New upstream release.
   * Using auth_protocol=http by default.
+  * Now build-depends on openstack-pkg-tools (>= 20~) to make sure the
+    systemd issues are fixed.
 
  -- Thomas Goirand <zigo@debian.org>  Sun, 14 Dec 2014 16:04:27 +0800
 
