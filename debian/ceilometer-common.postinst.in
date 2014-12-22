@@ -44,6 +44,9 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 	pkgos_write_new_conf ceilometer ceilometer.conf
 	pkgos_rabbit_write_conf /etc/ceilometer/ceilometer.conf DEFAULT ceilometer
 	pkgos_write_admin_creds /etc/ceilometer/ceilometer.conf keystone_authtoken ceilometer
+	for i in agent-central alarm-evaluator alarm-notifier api collector ; do
+		rm /etc/logrotate.d/ceilometer-$i
+	done
 	ceilometer-dbsync || true
 fi
 
