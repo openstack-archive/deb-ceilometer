@@ -10,23 +10,19 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""HBase storage backend
-"""
+
 import datetime
 import operator
-import os
 import time
 
-import happybase
-from oslo.utils import netutils
 from oslo.utils import timeutils
-from six.moves.urllib import parse as urlparse
 
 import ceilometer
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer.storage import base
-from ceilometer.storage.hbase import inmemory as hbase_inmemory
+from ceilometer.storage.hbase import base as hbase_base
+from ceilometer.storage.hbase import migration as hbase_migration
 from ceilometer.storage.hbase import utils as hbase_utils
 from ceilometer.storage import models
 from ceilometer import utils
@@ -44,7 +40,6 @@ AVAILABLE_CAPABILITIES = {
     'statistics': {'query': {'simple': True,
                              'metadata': True},
                    'aggregation': {'standard': True}},
-    'events': {'query': {'simple': True}},
 }
 
 
@@ -53,8 +48,8 @@ AVAILABLE_STORAGE_CAPABILITIES = {
 }
 
 
-class Connection(base.Connection):
-    """Put the data into a HBase database
+class Connection(hbase_base.Connection, base.Connection):
+    """Put the metering data into a HBase database
 
     Collections:
 
@@ -103,28 +98,12 @@ class Connection(base.Connection):
              f:r_metadata.display_name or f:r_metadata.tag
 
           - sources for all corresponding meters with prefix 's'
-          - all meters for this resource in format:
+          - all meters with prefix 'm' for this resource in format:
 
             .. code-block:: python
 
-              "%s+%s+%s!%s!%s" % (rts, source, counter_name, counter_type,
+              "%s:%s:%s:%s:%s" % (rts, source, counter_name, counter_type,
               counter_unit)
-
-    - events:
-
-      - row_key: timestamp of event's generation + uuid of event
-        in format: "%s+%s" % (ts, Event.message_id)
-      - Column Families:
-
-        f: contains the following qualifiers:
-
-          - event_type: description of event's type
-          - timestamp: time stamp of event generation
-          - all traits for this event in format:
-
-            .. code-block:: python
-
-              "%s+%s" % (trait_name, trait_type)
     """
 
     CAPABILITIES = utils.update_nested(base.Connection.CAPABILITIES,
@@ -137,41 +116,22 @@ class Connection(base.Connection):
 
     RESOURCE_TABLE = "resource"
     METER_TABLE = "meter"
-    EVENT_TABLE = "event"
 
     def __init__(self, url):
-        """Hbase Connection Initialization."""
-        opts = self._parse_connection_url(url)
-
-        if opts['host'] == '__test__':
-            url = os.environ.get('CEILOMETER_TEST_HBASE_URL')
-            if url:
-                # Reparse URL, but from the env variable now
-                opts = self._parse_connection_url(url)
-                self.conn_pool = self._get_connection_pool(opts)
-            else:
-                # This is a in-memory usage for unit tests
-                if Connection._memory_instance is None:
-                    LOG.debug(_('Creating a new in-memory HBase '
-                              'Connection object'))
-                    Connection._memory_instance = (hbase_inmemory.
-                                                   MConnectionPool())
-                self.conn_pool = Connection._memory_instance
-        else:
-            self.conn_pool = self._get_connection_pool(opts)
+        super(Connection, self).__init__(url)
 
     def upgrade(self):
-        tables = [self.RESOURCE_TABLE, self.METER_TABLE, self.EVENT_TABLE]
+        tables = [self.RESOURCE_TABLE, self.METER_TABLE]
         column_families = {'f': dict(max_versions=1)}
         with self.conn_pool.connection() as conn:
             hbase_utils.create_tables(conn, tables, column_families)
+            hbase_migration.migrate_tables(conn, tables)
 
     def clear(self):
         LOG.debug(_('Dropping HBase schema...'))
         with self.conn_pool.connection() as conn:
             for table in [self.RESOURCE_TABLE,
-                          self.METER_TABLE,
-                          self.EVENT_TABLE]:
+                          self.METER_TABLE]:
                 try:
                     conn.disable_table(table)
                 except Exception:
@@ -180,43 +140,6 @@ class Connection(base.Connection):
                     conn.delete_table(table)
                 except Exception:
                     LOG.debug(_('Cannot delete table but ignoring error'))
-
-    @staticmethod
-    def _get_connection_pool(conf):
-        """Return a connection pool to the database.
-
-        .. note::
-
-          The tests use a subclass to override this and return an
-          in-memory connection pool.
-        """
-        LOG.debug(_('connecting to HBase on %(host)s:%(port)s') % (
-                  {'host': conf['host'], 'port': conf['port']}))
-        return happybase.ConnectionPool(size=100, host=conf['host'],
-                                        port=conf['port'],
-                                        table_prefix=conf['table_prefix'])
-
-    @staticmethod
-    def _parse_connection_url(url):
-        """Parse connection parameters from a database url.
-
-        .. note::
-
-          HBase Thrift does not support authentication and there is no
-          database name, so we are not looking for these in the url.
-        """
-        opts = {}
-        result = netutils.urlsplit(url)
-        opts['table_prefix'] = urlparse.parse_qs(
-            result.query).get('table_prefix', [None])[0]
-        opts['dbtype'] = result.scheme
-        if ':' in result.netloc:
-            opts['host'], port = result.netloc.split(':')
-        else:
-            opts['host'] = result.netloc
-            port = 9090
-        opts['port'] = port and int(port) or 9090
-        return opts
 
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
@@ -231,9 +154,9 @@ class Connection(base.Connection):
             resource_metadata = data.get('resource_metadata', {})
             # Determine the name of new meter
             rts = hbase_utils.timestamp(data['timestamp'])
-            new_meter = hbase_utils.format_meter_reference(
-                data['counter_name'], data['counter_type'],
-                data['counter_unit'], rts, data['source'])
+            new_meter = hbase_utils.prepare_key(
+                rts, data['source'], data['counter_name'],
+                data['counter_type'], data['counter_unit'])
 
             # TODO(nprivalova): try not to store resource_id
             resource = hbase_utils.serialize_entry(**{
@@ -248,12 +171,13 @@ class Connection(base.Connection):
             # automatically 'on the top'. It is needed to keep metadata
             # up-to-date: metadata from newest samples is considered as actual.
             ts = int(time.mktime(data['timestamp'].timetuple()) * 1000)
-            resource_table.put(data['resource_id'], resource, ts)
+            resource_table.put(hbase_utils.encode_unicode(data['resource_id']),
+                               resource, ts)
 
             # Rowkey consists of reversed timestamp, meter and a
             # message signature for purposes of uniqueness
-            row = "%s_%d_%s" % (data['counter_name'], rts,
-                                data['message_signature'])
+            row = hbase_utils.prepare_key(data['counter_name'], rts,
+                                          data['message_signature'])
             record = hbase_utils.serialize_entry(
                 data, **{'source': data['source'], 'rts': rts,
                          'message': data, 'recorded_at': timeutils.utcnow()})
@@ -293,12 +217,13 @@ class Connection(base.Connection):
             for resource_id, data in resource_table.scan(filter=q):
                 f_res, sources, meters, md = hbase_utils.deserialize_entry(
                     data)
+                resource_id = hbase_utils.encode_unicode(resource_id)
                 # Unfortunately happybase doesn't keep ordered result from
                 # HBase. So that's why it's needed to find min and max
                 # manually
                 first_ts = min(meters, key=operator.itemgetter(1))[1]
                 last_ts = max(meters, key=operator.itemgetter(1))[1]
-                source = meters[0][0].split('+')[1]
+                source = meters[0][0][1]
                 # If we use QualifierFilter then HBase returnes only
                 # qualifiers filtered by. It will not return the whole entry.
                 # That's why if we need to ask additional qualifiers manually.
@@ -350,10 +275,9 @@ class Connection(base.Connection):
                 flatten_result, s, meters, md = hbase_utils.deserialize_entry(
                     data)
                 for m in meters:
-                    _m_rts, m_source, m_raw = m[0].split("+")
-                    name, type, unit = m_raw.split('!')
+                    _m_rts, m_source, name, m_type, unit = m[0]
                     meter_dict = {'name': name,
-                                  'type': type,
+                                  'type': m_type,
                                   'unit': unit,
                                   'resource_id': flatten_result['resource_id'],
                                   'project_id': flatten_result['project_id'],
@@ -362,8 +286,8 @@ class Connection(base.Connection):
                     if frozen_meter in result:
                         continue
                     result.add(frozen_meter)
-                    meter_dict.update({'source':
-                                       m_source if m_source else None})
+                    meter_dict.update({'source': m_source
+                                       if m_source else None})
 
                     yield models.Meter(**meter_dict)
 
@@ -445,15 +369,15 @@ class Connection(base.Connection):
                                   filter=q, row_start=start,
                                   row_stop=stop, columns=columns)))
 
-        if sample_filter.start:
-            start_time = sample_filter.start
+        if sample_filter.start_timestamp:
+            start_time = sample_filter.start_timestamp
         elif meters:
             start_time = meters[-1][0]['timestamp']
         else:
             start_time = None
 
-        if sample_filter.end:
-            end_time = sample_filter.end
+        if sample_filter.end_timestamp:
+            end_time = sample_filter.end_timestamp
         elif meters:
             end_time = meters[0][0]['timestamp']
         else:
@@ -496,138 +420,3 @@ class Connection(base.Connection):
                 )
             self._update_meter_stats(results[-1], meter[0])
         return results
-
-    def record_events(self, event_models):
-        """Write the events to Hbase.
-
-        :param event_models: a list of models.Event objects.
-        :return problem_events: a list of events that could not be saved in a
-          (reason, event) tuple. From the reasons that are enumerated in
-          storage.models.Event only the UNKNOWN_PROBLEM is applicable here.
-        """
-        problem_events = []
-
-        with self.conn_pool.connection() as conn:
-            events_table = conn.table(self.EVENT_TABLE)
-            for event_model in event_models:
-                # Row key consists of timestamp and message_id from
-                # models.Event or purposes of storage event sorted by
-                # timestamp in the database.
-                ts = event_model.generated
-                row = "%d_%s" % (hbase_utils.timestamp(ts, reverse=False),
-                                 event_model.message_id)
-                event_type = event_model.event_type
-                traits = {}
-                if event_model.traits:
-                    for trait in event_model.traits:
-                        key = "%s+%d" % (trait.name, trait.dtype)
-                        traits[key] = trait.value
-                record = hbase_utils.serialize_entry(traits,
-                                                     event_type=event_type,
-                                                     timestamp=ts)
-                try:
-                    events_table.put(row, record)
-                except Exception as ex:
-                    LOG.debug(_("Failed to record event: %s") % ex)
-                    problem_events.append((models.Event.UNKNOWN_PROBLEM,
-                                           event_model))
-        return problem_events
-
-    def get_events(self, event_filter):
-        """Return an iter of models.Event objects.
-
-        :param event_filter: storage.EventFilter object, consists of filters
-          for events that are stored in database.
-        """
-        q, start, stop = hbase_utils.make_events_query_from_filter(
-            event_filter)
-        with self.conn_pool.connection() as conn:
-            events_table = conn.table(self.EVENT_TABLE)
-
-            gen = events_table.scan(filter=q, row_start=start, row_stop=stop)
-
-        for event_id, data in gen:
-            traits = []
-            events_dict = hbase_utils.deserialize_entry(data)[0]
-            for key, value in events_dict.items():
-                if (not key.startswith('event_type')
-                        and not key.startswith('timestamp')):
-                    trait_name, trait_dtype = key.rsplit('+', 1)
-                    traits.append(models.Trait(name=trait_name,
-                                               dtype=int(trait_dtype),
-                                               value=value))
-            ts, mess = event_id.split('_', 1)
-
-            yield models.Event(
-                message_id=mess,
-                event_type=events_dict['event_type'],
-                generated=events_dict['timestamp'],
-                traits=sorted(traits,
-                              key=operator.attrgetter('dtype'))
-            )
-
-    def get_event_types(self):
-        """Return all event types as an iterable of strings."""
-        with self.conn_pool.connection() as conn:
-            events_table = conn.table(self.EVENT_TABLE)
-            gen = events_table.scan()
-
-        event_types = set()
-        for event_id, data in gen:
-            events_dict = hbase_utils.deserialize_entry(data)[0]
-            for key, value in events_dict.items():
-                if key.startswith('event_type'):
-                    if value not in event_types:
-                        event_types.add(value)
-                        yield value
-
-    def get_trait_types(self, event_type):
-        """Return a dictionary containing the name and data type of the trait.
-
-        Only trait types for the provided event_type are returned.
-
-        :param event_type: the type of the Event
-        """
-
-        q = hbase_utils.make_query(event_type=event_type)
-        trait_names = set()
-        with self.conn_pool.connection() as conn:
-            events_table = conn.table(self.EVENT_TABLE)
-            gen = events_table.scan(filter=q)
-        for event_id, data in gen:
-            events_dict = hbase_utils.deserialize_entry(data)[0]
-            for key, value in events_dict.items():
-                if (not key.startswith('event_type') and
-                        not key.startswith('timestamp')):
-                    trait_name, trait_type = key.rsplit('+', 1)
-                    if trait_name not in trait_names:
-                        # Here we check that our method return only unique
-                        # trait types, for ex. if it is found the same trait
-                        # types in different events with equal event_type,
-                        # method will return only one trait type. It is
-                        # proposed that certain trait name could have only one
-                        # trait type.
-                        trait_names.add(trait_name)
-                        data_type = models.Trait.type_names[int(trait_type)]
-                        yield {'name': trait_name, 'data_type': data_type}
-
-    def get_traits(self, event_type, trait_type=None):
-        """Return all trait instances associated with an event_type.
-
-        If trait_type is specified, only return instances of that trait type.
-        :param event_type: the type of the Event to filter by
-        :param trait_type: the name of the Trait to filter by
-        """
-        q = hbase_utils.make_query(event_type=event_type,
-                                   trait_type=trait_type)
-        with self.conn_pool.connection() as conn:
-            events_table = conn.table(self.EVENT_TABLE)
-            gen = events_table.scan(filter=q)
-        for event_id, data in gen:
-            events_dict = hbase_utils.deserialize_entry(data)[0]
-            for key, value in events_dict.items():
-                if (not key.startswith('event_type') and
-                        not key.startswith('timestamp')):
-                    trait_name, trait_type = key.rsplit('+', 1)
-                    yield models.Trait(name=trait_name,
-                                       dtype=int(trait_type), value=value)

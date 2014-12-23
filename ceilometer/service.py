@@ -21,10 +21,10 @@ import socket
 import sys
 
 from oslo.config import cfg
+from oslo import i18n
 
+from ceilometer.i18n import _
 from ceilometer import messaging
-from ceilometer.openstack.common import gettextutils
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import utils
 
@@ -50,7 +50,7 @@ OPTS = [
 ]
 cfg.CONF.register_opts(OPTS)
 
-CLI_OPTIONS = [
+CLI_OPTS = [
     cfg.StrOpt('os-username',
                deprecated_group="DEFAULT",
                default=os.environ.get('OS_USERNAME', 'ceilometer'),
@@ -89,7 +89,7 @@ CLI_OPTIONS = [
                 help='Disables X.509 certificate validation when an '
                      'SSL connection to Identity Service is established.'),
 ]
-cfg.CONF.register_cli_opts(CLI_OPTIONS, group="service_credentials")
+cfg.CONF.register_cli_opts(CLI_OPTS, group="service_credentials")
 
 cfg.CONF.import_opt('default_log_levels',
                     'ceilometer.openstack.common.log')
@@ -113,8 +113,7 @@ def get_workers(name):
 
 
 def prepare_service(argv=None):
-    gettextutils.install('ceilometer')
-    gettextutils.enable_lazy()
+    i18n.enable_lazy()
     log_levels = (cfg.CONF.default_log_levels +
                   ['stevedore=INFO', 'keystoneclient=INFO'])
     cfg.set_defaults(log.log_opts,

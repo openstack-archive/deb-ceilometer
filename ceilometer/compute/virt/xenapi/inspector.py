@@ -25,19 +25,20 @@ except ImportError:
 
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 
 opt_group = cfg.OptGroup(name='xenapi',
                          title='Options for XenAPI')
 
-xenapi_opts = [
+OPTS = [
     cfg.StrOpt('connection_url',
-               help='URL for connection to XenServer/Xen Cloud Platform'),
+               help='URL for connection to XenServer/Xen Cloud Platform.'),
     cfg.StrOpt('connection_username',
                default='root',
-               help='Username for connection to XenServer/Xen Cloud Platform'),
+               help='Username for connection to XenServer/Xen Cloud '
+                    'Platform.'),
     cfg.StrOpt('connection_password',
-               help='Password for connection to XenServer/Xen Cloud Platform',
+               help='Password for connection to XenServer/Xen Cloud Platform.',
                secret=True),
     cfg.IntOpt('login_timeout',
                default=10,
@@ -46,7 +47,7 @@ xenapi_opts = [
 
 CONF = cfg.CONF
 CONF.register_group(opt_group)
-CONF.register_opts(xenapi_opts, group=opt_group)
+CONF.register_opts(OPTS, group=opt_group)
 
 
 class XenapiException(virt_inspector.InspectorException):

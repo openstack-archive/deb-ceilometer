@@ -24,7 +24,7 @@ import glanceclient
 from oslo.config import cfg
 from oslo.utils import timeutils
 
-from ceilometer.central import plugin
+from ceilometer.agent import plugin_base
 from ceilometer import sample
 
 
@@ -39,17 +39,17 @@ OPTS = [
                     "(default value in glanceclient is used)."),
 ]
 
-service_types_opts = [
+SERVICE_OPTS = [
     cfg.StrOpt('glance',
                default='image',
                help='Glance service type.'),
 ]
 
 cfg.CONF.register_opts(OPTS)
-cfg.CONF.register_opts(service_types_opts, group='service_types')
+cfg.CONF.register_opts(SERVICE_OPTS, group='service_types')
 
 
-class _Base(plugin.CentralPollster):
+class _Base(plugin_base.PollsterBase):
 
     @property
     def default_discovery(self):

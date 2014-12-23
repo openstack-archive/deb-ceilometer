@@ -22,18 +22,18 @@ import copy
 from oslo.utils import timeutils
 
 import ceilometer
-from ceilometer.compute import plugin
+from ceilometer.compute import pollsters
 from ceilometer.compute.pollsters import util
 from ceilometer.compute import util as compute_util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
 
 
-class _Base(plugin.ComputePollster):
+class _Base(pollsters.BaseComputePollster):
 
     NET_USAGE_MESSAGE = ' '.join(["NETWORK USAGE:", "%s %s:", "read-bytes=%d",
                                   "write-bytes=%d"])
@@ -70,8 +70,7 @@ class _Base(plugin.ComputePollster):
     CACHE_KEY_VNIC = 'vnics'
 
     def _get_vnic_info(self, inspector, instance):
-        instance_name = util.instance_name(instance)
-        return inspector.inspect_vnics(instance_name)
+        return inspector.inspect_vnics(instance)
 
     @staticmethod
     def _get_rx_info(info):
@@ -82,13 +81,12 @@ class _Base(plugin.ComputePollster):
         return info.tx_bytes
 
     def _get_vnics_for_instance(self, cache, inspector, instance):
-        instance_name = util.instance_name(instance)
         i_cache = cache.setdefault(self.CACHE_KEY_VNIC, {})
-        if instance_name not in i_cache:
-            i_cache[instance_name] = list(
+        if instance.id not in i_cache:
+            i_cache[instance.id] = list(
                 self._get_vnic_info(inspector, instance)
             )
-        return i_cache[instance_name]
+        return i_cache[instance.id]
 
     def get_samples(self, manager, cache, resources):
         self._inspection_duration = self._record_poll_time()
@@ -98,7 +96,7 @@ class _Base(plugin.ComputePollster):
             try:
                 vnics = self._get_vnics_for_instance(
                     cache,
-                    manager.inspector,
+                    self.inspector,
                     instance,
                 )
                 for vnic, info in vnics:
@@ -113,7 +111,7 @@ class _Base(plugin.ComputePollster):
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '
                             ' %(pollster)s'),
-                          {'inspector': manager.inspector.__class__.__name__,
+                          {'inspector': self.inspector.__class__.__name__,
                            'pollster': self.__class__.__name__})
             except Exception as err:
                 LOG.exception(_('Ignoring instance %(name)s: %(error)s'),

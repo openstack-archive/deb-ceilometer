@@ -71,7 +71,7 @@ Name                             Type*  Unit       Resource  Origin**  Support**
 instance                         g      instance   inst ID   both      1, 2, 3, 4     Existence of instance
 instance:<type>                  g      instance   inst ID   both      1, 2, 3, 4     Existence of instance <type> (openstack types)
 memory                           g      MB         inst ID   n         1, 2           Volume of RAM allocated in MB
-memory.usage                     g      MB         inst ID   p         3, 4           Volume of RAM used in MB
+memory.usage                     g      MB         inst ID   p         1, 3, 4        Volume of RAM used in MB
 cpu                              c      ns         inst ID   p         1, 2           CPU time used
 cpu_util                         g      %          inst ID   p         1, 2, 3, 4     Average CPU utilisation
 vcpus                            g      vcpu       inst ID   n         1, 2           Number of VCPUs
@@ -118,6 +118,12 @@ network.outgoing.packets.rate    g      packet/s   iface ID  p         1, 2, 3, 
   [3]: Vsphere support
   [4]: XenAPI support
 
+.. note:: To enable the libvirt memory.usage supporting, you need libvirt
+   version 1.1.1+, qemu version 1.5+, and you need to prepare suitable balloon
+   driver in the image, particularly for Windows guests, most modern Linuxes
+   have it built in. The memory.usage meters can't be fetched without image
+   balloon driver.
+
 Contributors are welcome to extend other virtualization backends' meters
 or complete the existing ones.
 
@@ -163,6 +169,7 @@ router.update             Delta       router    rtr ID    notification  Update r
 ip.floating               Gauge       ip        ip ID     both          Existence of floating ip
 ip.floating.create        Delta       ip        ip ID     notification  Creation requests for this floating ip
 ip.floating.update        Delta       ip        ip ID     notification  Update requests for this floating ip
+bandwidth                 Delta       B         label ID  notification  Bytes through this l3 metering label
 ========================  ==========  ========  ========  ============  ======================================================
 
 Image (Glance)
@@ -183,14 +190,23 @@ image.serve               Delta       B        image ID  notification  Image is 
 Volume (Cinder)
 ===============
 
-========================  ==========  ========  ========  ============  =======================================================
-Name                      Type        Unit      Resource  Origin        Note
-========================  ==========  ========  ========  ============  =======================================================
-volume                    Gauge       volume    vol ID    notification  Existence of volume
-volume.size               Gauge       GB        vol ID    notification  Size of volume
-snapshot                  Gauge       snapshot  snap ID   notification  Existence of snapshot
-snapshot.size             Gauge       GB        snap ID   notification  Size of snapshot's volume
-========================  ==========  ========  ========  ============  =======================================================
+============================  ==========   ========  ========  ============  =======================================================
+Name                          Type         Unit      Resource  Origin        Note
+============================  ==========   ========  ========  ============  =======================================================
+volume                         Gauge       volume    vol ID    notification  Existence of volume
+volume.size                    Gauge       GB        vol ID    notification  Size of volume
+volume.create.(start|end)      Delta       volume    vol ID    notification  Creation of volume
+volume.delete.(start|end)      Delta       volume    vol ID    notification  Deletion of volume
+volume.update.(start|end)      Delta       volume    vol ID    notification  Update volume(name or description)
+volume.resize.(start|end)      Delta       volume    vol ID    notification  Update volume size
+volume.attach.(start|end)      Delta       volume    vol ID    notification  Attaching volume to instance
+volume.detach.(start|end)      Delta       volume    vol ID    notification  Detaching volume from instance
+snapshot                       Gauge       snapshot  snap ID   notification  Existence of snapshot
+snapshot.size                  Gauge       GB        snap ID   notification  Size of snapshot's volume
+snapshot.create.(start|end)    Delta       snapshot  snap ID   notification  Creation of snapshot
+snapshot.delete.(start|end)    Delta       snapshot  snap ID   notification  Deletion of snapshot
+snapshot.update.(start|end)    Delta       snapshot  snap ID   notification  Update snapshot(name or description)
+============================  ==========   ========  ========  ============  =======================================================
 
 Make sure Cinder is properly configured first: see :ref:`installing_manually`.
 
@@ -203,6 +219,8 @@ Name                              Type        Unit             Resource    Origi
 identity.authenticate.success     Delta       user             user ID     notification  User successfully authenticates
 identity.authenticate.pending     Delta       user             user ID     notification  User pending authentication
 identity.authenticate.failure     Delta       user             user ID     notification  User failed authentication
+identity.role_assignment.created  Delta       role_assignment  role ID     notification  A role is added to an actor on a target
+identity.role_assignment.deleted  Delta       role_assignment  role ID     notification  A role is removed from an actor on a target
 identity.user.created             Delta       user             user ID     notification  A user is created
 identity.user.deleted             Delta       user             user ID     notification  A user is deleted
 identity.user.updated             Delta       user             user ID     notification  A user is updated
@@ -323,7 +341,7 @@ network.services.lb.pool                 Gauge       pool          pool ID     p
 network.services.lb.vip                  Gauge       vip           vip ID      pollster   Existence of a LB Vip
 network.services.lb.member               Gauge       member        member ID   pollster   Existence of a LB Member
 network.services.lb.health_monitor       Gauge       monitor       monitor ID  pollster   Existence of a LB Health Probe
-network.services.lb.total.connections    Gauge       connection    pool ID     pollster   Total connections on a LB
+network.services.lb.total.connections    Cumulative  connection    pool ID     pollster   Total connections on a LB
 network.services.lb.active.connections   Gauge       connection    pool ID     pollster   Active connections on a LB
 network.services.lb.incoming.bytes       Cumulative  B             pool ID     pollster   Number of incoming Bytes
 network.services.lb.outgoing.bytes       Cumulative  B             pool ID     pollster   Number of outgoing Bytes

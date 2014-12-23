@@ -17,19 +17,20 @@
 """Tests for ceilometer/alarm/evaluator/threshold.py
 """
 import datetime
-import mock
-import pytz
 import uuid
 
+from ceilometerclient import exc
+from ceilometerclient.v2 import statistics
+import mock
+from oslo.config import cfg
 from oslo.utils import timeutils
+import pytz
 from six import moves
 
 from ceilometer.alarm.evaluator import threshold
 from ceilometer.alarm.storage import models
 from ceilometer.tests.alarm.evaluator import base
-from ceilometerclient import exc
-from ceilometerclient.v2 import statistics
-from oslo.config import cfg
+from ceilometer.tests import constants
 
 
 class TestEvaluate(base.TestEvaluatorBase):
@@ -45,8 +46,8 @@ class TestEvaluate(base.TestEvaluatorBase):
                          project_id='snafu',
                          alarm_id=str(uuid.uuid4()),
                          state='insufficient data',
-                         state_timestamp=None,
-                         timestamp=None,
+                         state_timestamp=constants.MIN_DATETIME,
+                         timestamp=constants.MIN_DATETIME,
                          insufficient_data_actions=[],
                          ok_actions=[],
                          alarm_actions=[],
@@ -73,8 +74,8 @@ class TestEvaluate(base.TestEvaluatorBase):
                          user_id='foobar',
                          project_id='snafu',
                          state='insufficient data',
-                         state_timestamp=None,
-                         timestamp=None,
+                         state_timestamp=constants.MIN_DATETIME,
+                         timestamp=constants.MIN_DATETIME,
                          insufficient_data_actions=[],
                          ok_actions=[],
                          alarm_actions=[],
@@ -137,7 +138,7 @@ class TestEvaluate(base.TestEvaluatorBase):
             expected = [mock.call(alarm.alarm_id, state='insufficient data')
                         for alarm in self.alarms]
             update_calls = self.api_client.alarms.set_state.call_args_list
-            self.assertEqual(update_calls, expected)
+            self.assertEqual(expected, update_calls)
             expected = [mock.call(
                 alarm,
                 'ok',

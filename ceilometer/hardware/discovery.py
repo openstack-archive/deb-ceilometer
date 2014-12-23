@@ -14,10 +14,10 @@
 
 from oslo.config import cfg
 
+from ceilometer.agent import plugin_base
+from ceilometer.i18n import _
 from ceilometer import nova_client
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
-from ceilometer import plugin
 
 
 LOG = log.getLogger(__name__)
@@ -25,18 +25,19 @@ LOG = log.getLogger(__name__)
 OPTS = [
     cfg.StrOpt('url_scheme',
                default='snmp://',
-               help='URL scheme to use for hardware nodes'),
+               help='URL scheme to use for hardware nodes.'),
     cfg.StrOpt('readonly_user_name',
                default='ro_snmp_user',
                help='SNMPd user name of all nodes running in the cloud.'),
     cfg.StrOpt('readonly_user_password',
                default='password',
-               help='SNMPd password of all the nodes running in the cloud'),
+               help='SNMPd password of all the nodes running in the cloud.',
+               secret=True),
 ]
 cfg.CONF.register_opts(OPTS, group='hardware')
 
 
-class NodesDiscoveryTripleO(plugin.DiscoveryBase):
+class NodesDiscoveryTripleO(plugin_base.DiscoveryBase):
     def __init__(self):
         super(NodesDiscoveryTripleO, self).__init__()
         self.nova_cli = nova_client.Client()
@@ -70,7 +71,7 @@ class NodesDiscoveryTripleO(plugin.DiscoveryBase):
 
                 resources.append(resource)
             except KeyError:
-                LOG.error(_("Couldn't obtain IP address of"
+                LOG.error(_("Couldn't obtain IP address of "
                             "instance %s") % instance.id)
 
         return resources

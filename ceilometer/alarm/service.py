@@ -28,8 +28,8 @@ from stevedore import extension
 from ceilometer.alarm.partition import coordination as alarm_coordination
 from ceilometer.alarm import rpc as rpc_alarm
 from ceilometer import coordination as coordination
+from ceilometer.i18n import _
 from ceilometer import messaging
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 
@@ -61,6 +61,11 @@ LOG = log.getLogger(__name__)
 class AlarmService(object):
 
     EXTENSIONS_NAMESPACE = "ceilometer.alarm.evaluator"
+
+    def __init__(self):
+        super(AlarmService, self).__init__()
+        self._load_evaluators()
+        self.api_client = None
 
     def _load_evaluators(self):
         self.evaluators = extension.ExtensionManager(
@@ -121,8 +126,6 @@ class AlarmEvaluationService(AlarmService, os_service.Service):
 
     def __init__(self):
         super(AlarmEvaluationService, self).__init__()
-        self._load_evaluators()
-        self.api_client = None
         self.partition_coordinator = coordination.PartitionCoordinator()
 
     def start(self):
@@ -158,8 +161,6 @@ class SingletonAlarmService(AlarmService, os_service.Service):
 
     def __init__(self):
         super(SingletonAlarmService, self).__init__()
-        self._load_evaluators()
-        self.api_client = None
 
     def start(self):
         super(SingletonAlarmService, self).start()
@@ -185,8 +186,6 @@ class PartitionedAlarmService(AlarmService, os_service.Service):
         self.rpc_server = messaging.get_rpc_server(
             transport, cfg.CONF.alarm.partition_rpc_topic, self)
 
-        self._load_evaluators()
-        self.api_client = None
         self.partition_coordinator = alarm_coordination.PartitionCoordinator()
 
     def start(self):
@@ -254,7 +253,7 @@ class AlarmNotifierService(os_service.Service):
         self.rpc_server.stop()
         super(AlarmNotifierService, self).stop()
 
-    def _handle_action(self, action, alarm_id, previous,
+    def _handle_action(self, action, alarm_id, alarm_name, previous,
                        current, reason, reason_data):
         try:
             action = netutils.urlsplit(action)
@@ -277,7 +276,7 @@ class AlarmNotifierService(os_service.Service):
         try:
             LOG.debug(_("Notifying alarm %(id)s with action %(act)s") % (
                       {'id': alarm_id, 'act': action}))
-            notifier.notify(action, alarm_id, previous,
+            notifier.notify(action, alarm_id, alarm_name, previous,
                             current, reason, reason_data)
         except Exception:
             LOG.exception(_("Unable to notify alarm %s"), alarm_id)
@@ -292,6 +291,7 @@ class AlarmNotifierService(os_service.Service):
              - actions, the URL of the action to run; this is mapped to
                extensions automatically
              - alarm_id, the ID of the alarm that has been triggered
+             - alarm_name, the name of the alarm that has been triggered
              - previous, the previous state of the alarm
              - current, the new state the alarm has transitioned to
              - reason, the reason the alarm changed its state
@@ -305,6 +305,7 @@ class AlarmNotifierService(os_service.Service):
         for action in actions:
             self._handle_action(action,
                                 data.get('alarm_id'),
+                                data.get('alarm_name'),
                                 data.get('previous'),
                                 data.get('current'),
                                 data.get('reason'),

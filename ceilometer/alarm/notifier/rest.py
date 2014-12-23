@@ -23,13 +23,13 @@ import requests
 import six.moves.urllib.parse as urlparse
 
 from ceilometer.alarm import notifier
+from ceilometer.i18n import _
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
 
-REST_NOTIFIER_OPTS = [
+OPTS = [
     cfg.StrOpt('rest_notifier_certificate_file',
                default='',
                help='SSL Client certificate for REST notifier.'
@@ -50,30 +50,30 @@ REST_NOTIFIER_OPTS = [
 
 ]
 
-cfg.CONF.register_opts(REST_NOTIFIER_OPTS, group="alarm")
+cfg.CONF.register_opts(OPTS, group="alarm")
 
 
 class RestAlarmNotifier(notifier.AlarmNotifier):
     """Rest alarm notifier."""
 
     @staticmethod
-    def notify(action, alarm_id, previous, current, reason, reason_data,
-               headers=None):
+    def notify(action, alarm_id, alarm_name, previous, current, reason,
+               reason_data, headers=None):
         headers = headers or {}
         if not headers.get('x-openstack-request-id'):
             headers['x-openstack-request-id'] = context.generate_request_id()
 
         LOG.info(_(
-            "Notifying alarm %(alarm_id)s from %(previous)s "
-            "to %(current)s with action %(action)s because "
-            "%(reason)s. request-id: %(request_id)s") %
-            ({'alarm_id': alarm_id, 'previous': previous,
-              'current': current, 'action': action,
-              'reason': reason,
+            "Notifying alarm %(alarm_name)s %(alarm_id)s from "
+            "%(previous)s to %(current)s with action %(action)s because "
+            "%(reason)s. request-id: %(request_id)s ") %
+            ({'alarm_name': alarm_name, 'alarm_id': alarm_id,
+              'previous': previous, 'current': current,
+              'action': action, 'reason': reason,
               'request_id': headers['x-openstack-request-id']}))
-        body = {'alarm_id': alarm_id, 'previous': previous,
-                'current': current, 'reason': reason,
-                'reason_data': reason_data}
+        body = {'alarm_name': alarm_name, 'alarm_id': alarm_id,
+                'previous': previous, 'current': current,
+                'reason': reason, 'reason_data': reason_data}
         headers['content-type'] = 'application/json'
         kwargs = {'data': jsonutils.dumps(body),
                   'headers': headers}

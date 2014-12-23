@@ -19,43 +19,58 @@
 
 from oslo.config import cfg
 from oslo.db import options as db_options
+import retrying
 import six
 import six.moves.urllib.parse as urlparse
 from stevedore import driver
 
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import utils
 
 
 LOG = log.getLogger(__name__)
 
-OLD_STORAGE_OPTS = [
+OLD_OPTS = [
     cfg.StrOpt('database_connection',
                secret=True,
                help='DEPRECATED - Database connection string.',
                ),
 ]
 
-cfg.CONF.register_opts(OLD_STORAGE_OPTS)
+cfg.CONF.register_opts(OLD_OPTS)
 
 
-STORAGE_OPTS = [
+OPTS = [
     cfg.IntOpt('time_to_live',
                default=-1,
                help="Number of seconds that samples are kept "
                "in the database for (<= 0 means forever)."),
     cfg.StrOpt('metering_connection',
                default=None,
-               help='The connection string used to connect to the meteting '
+               help='The connection string used to connect to the metering '
                'database. (if unset, connection is used)'),
     cfg.StrOpt('alarm_connection',
                default=None,
                help='The connection string used to connect to the alarm '
                'database. (if unset, connection is used)'),
+    cfg.StrOpt('event_connection',
+               default=None,
+               help='The connection string used to connect to the event '
+               'database. (if unset, connection is used)'),
+    cfg.StrOpt('mongodb_replica_set',
+               default='',
+               help='The name of the replica set which is used to connect to '
+                    'MongoDB database. If it is set, MongoReplicaSetClient '
+                    'will be used instead of MongoClient.'),
+    cfg.IntOpt('db2nosql_resource_id_maxlen',
+               default=512,
+               help="The max length of resources id in DB2 nosql, "
+                    "the value should be larger than len(hostname) * 2 "
+                    "as compute node's resource id is <hostname>_<nodename>."),
 ]
 
-cfg.CONF.register_opts(STORAGE_OPTS, group='database')
+cfg.CONF.register_opts(OPTS, group='database')
 
 db_options.set_defaults(cfg.CONF)
 cfg.CONF.import_opt('connection', 'oslo.db.options', group='database')
@@ -70,6 +85,11 @@ class StorageBadAggregate(Exception):
     code = 400
 
 
+# Convert retry_interval secs to msecs for retry decorator
+@retrying.retry(wait_fixed=cfg.CONF.database.retry_interval * 1000,
+                stop_max_attempt_number=cfg.CONF.database.max_retries
+                if cfg.CONF.database.max_retries >= 0
+                else None)
 def get_connection_from_config(conf, purpose=None):
     if conf.database_connection:
         conf.set_override('connection', conf.database_connection,
@@ -99,9 +119,9 @@ class SampleFilter(object):
 
     :param user: The sample owner.
     :param project: The sample project.
-    :param start: Earliest time point in the request.
+    :param start_timestamp: Earliest time point in the request.
     :param start_timestamp_op: Earliest timestamp operation in the request.
-    :param end: Latest time point in the request.
+    :param end_timestamp: Latest time point in the request.
     :param end_timestamp_op: Latest timestamp operation in the request.
     :param resource: Optional filter for resource id.
     :param meter: Optional filter for meter type using the meter name.
@@ -110,16 +130,16 @@ class SampleFilter(object):
     :param metaquery: Optional filter on the metadata
     """
     def __init__(self, user=None, project=None,
-                 start=None, start_timestamp_op=None,
-                 end=None, end_timestamp_op=None,
+                 start_timestamp=None, start_timestamp_op=None,
+                 end_timestamp=None, end_timestamp_op=None,
                  resource=None, meter=None,
                  source=None, message_id=None,
                  metaquery=None):
         self.user = user
         self.project = project
-        self.start = utils.sanitize_timestamp(start)
+        self.start_timestamp = utils.sanitize_timestamp(start_timestamp)
         self.start_timestamp_op = start_timestamp_op
-        self.end = utils.sanitize_timestamp(end)
+        self.end_timestamp = utils.sanitize_timestamp(end_timestamp)
         self.end_timestamp_op = end_timestamp_op
         self.resource = resource
         self.meter = meter
@@ -127,12 +147,36 @@ class SampleFilter(object):
         self.metaquery = metaquery or {}
         self.message_id = message_id
 
+    def __repr__(self):
+        return ("<SampleFilter(user: %s,"
+                " project: %s,"
+                " start_timestamp: %s,"
+                " start_timestamp_op: %s,"
+                " end_timestamp: %s,"
+                " end_timestamp_op: %s,"
+                " resource: %s,"
+                " meter: %s,"
+                " source: %s,"
+                " metaquery: %s,"
+                " message_id: %s)>" %
+                (self.user,
+                 self.project,
+                 self.start_timestamp,
+                 self.start_timestamp_op,
+                 self.end_timestamp,
+                 self.end_timestamp_op,
+                 self.resource,
+                 self.meter,
+                 self.source,
+                 self.metaquery,
+                 self.message_id))
+
 
 class EventFilter(object):
     """Properties for building an Event query.
 
-    :param start_time: UTC start datetime (mandatory)
-    :param end_time: UTC end datetime (mandatory)
+    :param start_timestamp: UTC start datetime (mandatory)
+    :param end_timestamp: UTC end datetime (mandatory)
     :param event_type: the name of the event. None for all.
     :param message_id: the message_id of the event. None for all.
     :param traits_filter: the trait filter dicts, all of which are optional.
@@ -148,20 +192,20 @@ class EventFilter(object):
         'op': <eq, lt, le, ne, gt or ge> }
     """
 
-    def __init__(self, start_time=None, end_time=None, event_type=None,
-                 message_id=None, traits_filter=None):
-        self.start_time = utils.sanitize_timestamp(start_time)
-        self.end_time = utils.sanitize_timestamp(end_time)
+    def __init__(self, start_timestamp=None, end_timestamp=None,
+                 event_type=None, message_id=None, traits_filter=None):
+        self.start_timestamp = utils.sanitize_timestamp(start_timestamp)
+        self.end_timestamp = utils.sanitize_timestamp(end_timestamp)
         self.message_id = message_id
         self.event_type = event_type
         self.traits_filter = traits_filter or []
 
     def __repr__(self):
-        return ("<EventFilter(start_time: %s,"
-                " end_time: %s,"
+        return ("<EventFilter(start_timestamp: %s,"
+                " end_timestamp: %s,"
                 " event_type: %s,"
                 " traits: %s)>" %
-                (self.start_time,
-                 self.end_time,
+                (self.start_timestamp,
+                 self.end_timestamp,
                  self.event_type,
                  six.text_type(self.traits_filter)))

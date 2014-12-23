@@ -28,6 +28,7 @@ from six import moves
 from ceilometer.alarm.partition import coordination
 from ceilometer.alarm.storage import models
 from ceilometer.tests import base as tests_base
+from ceilometer.tests import constants
 
 
 class MockLoggingHandler(logging.Handler):
@@ -116,8 +117,8 @@ class TestCoordinate(tests_base.BaseTestCase):
                             description='',
                             repeat_actions=False,
                             state='insufficient data',
-                            state_timestamp=None,
-                            timestamp=None,
+                            state_timestamp=constants.MIN_DATETIME,
+                            timestamp=constants.MIN_DATETIME,
                             ok_actions=[],
                             alarm_actions=[],
                             insufficient_data_actions=[],
@@ -174,11 +175,11 @@ class TestCoordinate(tests_base.BaseTestCase):
         for call in calls:
             args, _ = call
             target, alarms = args
-            self.assertTrue(target in uneffected)
+            self.assertIn(target, uneffected)
             uneffected.remove(target)
             self.assertEqual(per_worker, len(alarms))
             for aid in alarms:
-                self.assertTrue(aid in remainder)
+                self.assertIn(aid, remainder)
                 remainder.remove(aid)
         self.assertEqual(set(expect_uneffected), set(uneffected))
         return remainder

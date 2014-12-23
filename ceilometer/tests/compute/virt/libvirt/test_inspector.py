@@ -22,6 +22,7 @@ import contextlib
 
 import fixtures
 import mock
+from oslo.utils import units
 from oslotest import base
 
 from ceilometer.compute.virt import inspector as virt_inspector
@@ -32,7 +33,11 @@ class TestLibvirtInspection(base.BaseTestCase):
 
     def setUp(self):
         super(TestLibvirtInspection, self).setUp()
-        self.instance_name = 'instance-00000001'
+
+        class VMInstance:
+            id = 'ff58e738-12f4-4c58-acde-77617b68da56'
+            name = 'instance-00000001'
+        self.instance = VMInstance
         self.inspector = libvirt_inspector.LibvirtInspector()
         self.inspector.connection = mock.Mock()
         libvirt_inspector.libvirt = mock.Mock()
@@ -64,12 +69,12 @@ class TestLibvirtInspection(base.BaseTestCase):
 
     def test_inspect_cpus(self):
         with contextlib.nested(mock.patch.object(self.inspector.connection,
-                                                 'lookupByName',
+                                                 'lookupByUUIDString',
                                                  return_value=self.domain),
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(0L, 0L, 0L,
                                                                2L, 999999L))):
-                cpu_info = self.inspector.inspect_cpus(self.instance_name)
+                cpu_info = self.inspector.inspect_cpus(self.instance)
                 self.assertEqual(2L, cpu_info.number)
                 self.assertEqual(999999L, cpu_info.time)
 
@@ -139,7 +144,8 @@ class TestLibvirtInspection(base.BaseTestCase):
         interfaceStats = interface_stats.__getitem__
 
         connection = self.inspector.connection
-        with contextlib.nested(mock.patch.object(connection, 'lookupByName',
+        with contextlib.nested(mock.patch.object(connection,
+                                                 'lookupByUUIDString',
                                                  return_value=self.domain),
                                mock.patch.object(self.domain, 'XMLDesc',
                                                  return_value=dom_xml),
@@ -149,7 +155,7 @@ class TestLibvirtInspection(base.BaseTestCase):
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(0L, 0L, 0L,
                                                                2L, 999999L))):
-            interfaces = list(self.inspector.inspect_vnics(self.instance_name))
+            interfaces = list(self.inspector.inspect_vnics(self.instance))
 
             self.assertEqual(3, len(interfaces))
             vnic0, info0 = interfaces[0]
@@ -190,13 +196,14 @@ class TestLibvirtInspection(base.BaseTestCase):
 
     def test_inspect_vnics_with_domain_shutoff(self):
         connection = self.inspector.connection
-        with contextlib.nested(mock.patch.object(connection, 'lookupByName',
+        with contextlib.nested(mock.patch.object(connection,
+                                                 'lookupByUUIDString',
                                                  return_value=self.domain),
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(5L, 0L, 0L,
                                                                2L, 999999L))):
-            interfaces = list(self.inspector.inspect_vnics(self.instance_name))
-            self.assertEqual(interfaces, [])
+            interfaces = list(self.inspector.inspect_vnics(self.instance))
+            self.assertEqual([], interfaces)
 
     def test_inspect_disks(self):
         dom_xml = """
@@ -215,7 +222,7 @@ class TestLibvirtInspection(base.BaseTestCase):
         """
 
         with contextlib.nested(mock.patch.object(self.inspector.connection,
-                                                 'lookupByName',
+                                                 'lookupByUUIDString',
                                                  return_value=self.domain),
                                mock.patch.object(self.domain, 'XMLDesc',
                                                  return_value=dom_xml),
@@ -225,7 +232,7 @@ class TestLibvirtInspection(base.BaseTestCase):
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(0L, 0L, 0L,
                                                                2L, 999999L))):
-                disks = list(self.inspector.inspect_disks(self.instance_name))
+                disks = list(self.inspector.inspect_disks(self.instance))
 
                 self.assertEqual(1, len(disks))
                 disk0, info0 = disks[0]
@@ -237,13 +244,52 @@ class TestLibvirtInspection(base.BaseTestCase):
 
     def test_inspect_disks_with_domain_shutoff(self):
         connection = self.inspector.connection
-        with contextlib.nested(mock.patch.object(connection, 'lookupByName',
+        with contextlib.nested(mock.patch.object(connection,
+                                                 'lookupByUUIDString',
                                                  return_value=self.domain),
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(5L, 0L, 0L,
                                                                2L, 999999L))):
-            disks = list(self.inspector.inspect_disks(self.instance_name))
-            self.assertEqual(disks, [])
+            disks = list(self.inspector.inspect_disks(self.instance))
+            self.assertEqual([], disks)
+
+    def test_inspect_memory_usage(self):
+        fake_memory_stats = {'available': 51200L, 'unused': 25600L}
+        connection = self.inspector.connection
+        with mock.patch.object(connection, 'lookupByUUIDString',
+                               return_value=self.domain):
+            with mock.patch.object(self.domain, 'info',
+                                   return_value=(0L, 0L, 51200L,
+                                                 2L, 999999L)):
+                with mock.patch.object(self.domain, 'memoryStats',
+                                       return_value=fake_memory_stats):
+                    memory = self.inspector.inspect_memory_usage(
+                        self.instance)
+                    self.assertEqual(25600L / units.Ki, memory.usage)
+
+    def test_inspect_memory_usage_with_domain_shutoff(self):
+        connection = self.inspector.connection
+        with mock.patch.object(connection, 'lookupByUUIDString',
+                               return_value=self.domain):
+            with mock.patch.object(self.domain, 'info',
+                                   return_value=(5L, 0L, 0L,
+                                                 2L, 999999L)):
+                memory = self.inspector.inspect_memory_usage(
+                    self.instance)
+                self.assertIsNone(memory)
+
+    def test_inspect_memory_usage_with_empty_stats(self):
+        connection = self.inspector.connection
+        with mock.patch.object(connection, 'lookupByUUIDString',
+                               return_value=self.domain):
+            with mock.patch.object(self.domain, 'info',
+                                   return_value=(0L, 0L, 51200L,
+                                                 2L, 999999L)):
+                with mock.patch.object(self.domain, 'memoryStats',
+                                       return_value={}):
+                    memory = self.inspector.inspect_memory_usage(
+                        self.instance)
+                    self.assertIsNone(memory)
 
 
 class TestLibvirtInspectionWithError(base.BaseTestCase):

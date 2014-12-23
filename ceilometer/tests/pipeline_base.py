@@ -170,6 +170,10 @@ class BasePipelineTestCase(base.BaseTestCase):
         """Break the pipeline config with a malformed element."""
 
     @abc.abstractmethod
+    def _dup_pipeline_name_cfg(self):
+        """Break the pipeline config with duplicate pipeline name."""
+
+    @abc.abstractmethod
     def _set_pipeline_cfg(self, field, value):
         """Set a field to a value in the pipeline config."""
 
@@ -869,11 +873,11 @@ class BasePipelineTestCase(base.BaseTestCase):
         pipe.publish_samples(None, counters)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(2, len(publisher.samples))
-        core_temp = publisher.samples[1]
+        core_temp = publisher.samples[0]
         self.assertEqual('core_temperature', getattr(core_temp, 'name'))
         self.assertEqual('°F', getattr(core_temp, 'unit'))
         self.assertEqual(96.8, getattr(core_temp, 'volume'))
-        amb_temp = publisher.samples[0]
+        amb_temp = publisher.samples[1]
         self.assertEqual('ambient_temperature', getattr(amb_temp, 'name'))
         self.assertEqual('°F', getattr(amb_temp, 'unit'))
         self.assertEqual(88.8, getattr(amb_temp, 'volume'))
@@ -1783,3 +1787,7 @@ class BasePipelineTestCase(base.BaseTestCase):
         pipe.flush(None)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(0, len(publisher.samples))
+
+    def test_unique_pipeline_names(self):
+        self._dup_pipeline_name_cfg()
+        self._exception_create_pipelinemanager()

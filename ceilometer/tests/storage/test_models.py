@@ -20,6 +20,7 @@ import datetime
 from oslotest import base as testbase
 
 from ceilometer.alarm.storage import models as alarm_models
+from ceilometer.event.storage import models as event_models
 from ceilometer.storage import base
 from ceilometer.storage import models
 
@@ -58,7 +59,7 @@ class ModelTest(testbase.BaseTestCase):
                          d)
 
     def test_event_repr_no_traits(self):
-        x = models.Event("1", "name", "now", None)
+        x = event_models.Event("1", "name", "now", None)
         self.assertEqual("<Event: 1, name, now, >", repr(x))
 
     def test_get_field_names_of_sample(self):
@@ -93,21 +94,65 @@ class ModelTest(testbase.BaseTestCase):
 class TestTraitModel(testbase.BaseTestCase):
 
     def test_convert_value(self):
-        v = models.Trait.convert_value(
-            models.Trait.INT_TYPE, '10')
+        v = event_models.Trait.convert_value(
+            event_models.Trait.INT_TYPE, '10')
         self.assertEqual(10, v)
         self.assertIsInstance(v, int)
-        v = models.Trait.convert_value(
-            models.Trait.FLOAT_TYPE, '10')
+        v = event_models.Trait.convert_value(
+            event_models.Trait.FLOAT_TYPE, '10')
         self.assertEqual(10.0, v)
         self.assertIsInstance(v, float)
 
-        v = models.Trait.convert_value(
-            models.Trait.DATETIME_TYPE, '2013-08-08 21:05:37.123456')
+        v = event_models.Trait.convert_value(
+            event_models.Trait.DATETIME_TYPE, '2013-08-08 21:05:37.123456')
         self.assertEqual(datetime.datetime(2013, 8, 8, 21, 5, 37, 123456), v)
         self.assertIsInstance(v, datetime.datetime)
 
-        v = models.Trait.convert_value(
-            models.Trait.TEXT_TYPE, 10)
+        v = event_models.Trait.convert_value(
+            event_models.Trait.TEXT_TYPE, 10)
         self.assertEqual("10", v)
         self.assertIsInstance(v, str)
+
+
+class TestClassModel(testbase.BaseTestCase):
+
+    ALARM = {
+        'alarm_id': '503490ea-ee9e-40d6-9cad-93a71583f4b2',
+        'enabled': True,
+        'type': 'threshold',
+        'name': 'alarm-test',
+        'description': 'alarm-test-description',
+        'timestamp': None,
+        'user_id': '5c76351f5fef4f6490d1048355094ca3',
+        'project_id': 'd83ed14a457141fc8661b4dcb3fd883d',
+        'state': "insufficient data",
+        'state_timestamp': None,
+        'ok_actions': [],
+        'alarm_actions': [],
+        'insufficient_data_actions': [],
+        'repeat_actions': False,
+        'time_constraints': [],
+        'rule': {
+            'comparison_operator': 'lt',
+            'threshold': 34,
+            'statistic': 'max',
+            'evaluation_periods': 1,
+            'period': 60,
+            'meter_name': 'cpu_util',
+            'query': []
+        }
+    }
+
+    def test_timestamp_cannot_be_none(self):
+        self.ALARM['timestamp'] = None
+        self.ALARM['state_timestamp'] = datetime.datetime.utcnow()
+        self.assertRaises(TypeError,
+                          alarm_models.Alarm.__init__,
+                          **self.ALARM)
+
+    def test_state_timestamp_cannot_be_none(self):
+        self.ALARM['timestamp'] = datetime.datetime.utcnow()
+        self.ALARM['state_timestamp'] = None
+        self.assertRaises(TypeError,
+                          alarm_models.Alarm.__init__,
+                          **self.ALARM)

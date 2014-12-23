@@ -50,11 +50,22 @@ run through tox_.
 
    $ sudo pip install tox
 
-2. Install the test dependencies::
+2. On Ubuntu install ``mongodb`` and ``libmysqlclient-dev`` packages::
+
+   $ sudo apt-get install mongodb
+   $ sudo apt-get install libmysqlclient-dev
+
+   For Fedora20 there is no ``libmysqlclient-dev`` package, so you’ll need
+   to install ``mariadb-devel.x86-64`` (or ``mariadb-devel.i386``) instead::
+
+   $ sudo yum install mongodb
+   $ sudo yum install mariadb-devel.x86_64
+
+3. Install the test dependencies::
 
    $ sudo pip install -r /opt/stack/ceilometer/test-requirements.txt
 
-3. Run the unit and code-style tests::
+4. Run the unit and code-style tests::
 
    $ cd /opt/stack/ceilometer
    $ tox -e py27,pep8
@@ -92,7 +103,7 @@ through gerrit.
 
 .. seealso::
 
-   * http://wiki.openstack.org/GerritWorkflow
+   * http://docs.openstack.org/infra/manual/developers.html#development-workflow
    * `OpenStack Gerrit instance`_.
 
 .. _OpenStack Gerrit instance: https://review.openstack.org/#/q/status:open+project:openstack/ceilometer,n,z

@@ -19,17 +19,18 @@
 """Tests alarm operation."""
 
 import datetime
-import json as jsonutils
 import uuid
 
 import mock
 import oslo.messaging.conffixture
+from oslo.serialization import jsonutils
 import six
 from six import moves
 
 from ceilometer.alarm.storage import models
 from ceilometer import messaging
 from ceilometer.tests.api import v2
+from ceilometer.tests import constants
 from ceilometer.tests import db as tests_db
 
 
@@ -55,8 +56,8 @@ class TestAlarms(v2.FunctionalTest,
                          alarm_id='a',
                          description='a',
                          state='insufficient data',
-                         state_timestamp=None,
-                         timestamp=None,
+                         state_timestamp=constants.MIN_DATETIME,
+                         timestamp=constants.MIN_DATETIME,
                          ok_actions=[],
                          insufficient_data_actions=[],
                          alarm_actions=[],
@@ -83,8 +84,8 @@ class TestAlarms(v2.FunctionalTest,
                          alarm_id='b',
                          description='b',
                          state='insufficient data',
-                         state_timestamp=None,
-                         timestamp=None,
+                         state_timestamp=constants.MIN_DATETIME,
+                         timestamp=constants.MIN_DATETIME,
                          ok_actions=[],
                          insufficient_data_actions=[],
                          alarm_actions=[],
@@ -109,8 +110,8 @@ class TestAlarms(v2.FunctionalTest,
                          alarm_id='c',
                          description='c',
                          state='insufficient data',
-                         state_timestamp=None,
-                         timestamp=None,
+                         state_timestamp=constants.MIN_DATETIME,
+                         timestamp=constants.MIN_DATETIME,
                          ok_actions=[],
                          insufficient_data_actions=[],
                          alarm_actions=[],
@@ -135,8 +136,8 @@ class TestAlarms(v2.FunctionalTest,
                          alarm_id='d',
                          description='d',
                          state='insufficient data',
-                         state_timestamp=None,
-                         timestamp=None,
+                         state_timestamp=constants.MIN_DATETIME,
+                         timestamp=constants.MIN_DATETIME,
                          ok_actions=[],
                          insufficient_data_actions=[],
                          alarm_actions=[],
@@ -212,8 +213,8 @@ class TestAlarms(v2.FunctionalTest,
                              alarm_id='d',
                              description='d',
                              state='ok',
-                             state_timestamp=None,
-                             timestamp=None,
+                             state_timestamp=constants.MIN_DATETIME,
+                             timestamp=constants.MIN_DATETIME,
                              ok_actions=[],
                              insufficient_data_actions=[],
                              alarm_actions=[],
@@ -230,6 +231,15 @@ class TestAlarms(v2.FunctionalTest,
                              )
         self.assertEqual(1, len(resp))
         self.assertEqual('ok', resp[0]['state'])
+
+    def test_list_alarms_by_type(self):
+        alarms = self.get_json('/alarms',
+                               q=[{'field': 'type',
+                                   'op': 'eq',
+                                   'value': 'threshold'}])
+        self.assertEqual(3, len(alarms))
+        self.assertEqual(set(['threshold']),
+                         set(alarm['type'] for alarm in alarms))
 
     def test_get_not_existing_alarm(self):
         resp = self.get_json('/alarms/alarm-id-3', expect_errors=True)
@@ -262,8 +272,8 @@ class TestAlarms(v2.FunctionalTest,
                              alarm_id='d',
                              description='d',
                              state='insufficient data',
-                             state_timestamp=None,
-                             timestamp=None,
+                             state_timestamp=constants.MIN_DATETIME,
+                             timestamp=constants.MIN_DATETIME,
                              ok_actions=[],
                              insufficient_data_actions=[],
                              alarm_actions=[],
@@ -534,12 +544,9 @@ class TestAlarms(v2.FunctionalTest,
         resp = self.post_json('/alarms', params=json, expect_errors=True,
                               status=400, headers=self.auth_headers)
         expected_err_msg = ("Invalid input for field/attribute"
-                            " statistic."
-                            " Value: 'magic'."
-                            " Value should be one of:"
-                            " count, max, sum, avg, min")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+                            " statistic. Value: 'magic'.")
+        self.assertIn(expected_err_msg,
+                      resp.json['error_message']['faultstring'])
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(4, len(alarms))
 
@@ -557,11 +564,9 @@ class TestAlarms(v2.FunctionalTest,
         resp = self.post_json('/alarms', params=json, expect_errors=True,
                               status=400, headers=self.auth_headers)
         expected_err_msg = ("Invalid input for field/attribute state."
-                            " Value: 'bad_state'."
-                            " Value should be one of:"
-                            " alarm, ok, insufficient data")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+                            " Value: 'bad_state'.")
+        self.assertIn(expected_err_msg,
+                      resp.json['error_message']['faultstring'])
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(4, len(alarms))
 
@@ -580,11 +585,9 @@ class TestAlarms(v2.FunctionalTest,
                               status=400, headers=self.auth_headers)
         expected_err_msg = ("Invalid input for field/attribute"
                             " comparison_operator."
-                            " Value: 'bad_co'."
-                            " Value should be one of:"
-                            " gt, lt, ne, ge, le, eq")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+                            " Value: 'bad_co'.")
+        self.assertIn(expected_err_msg,
+                      resp.json['error_message']['faultstring'])
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(4, len(alarms))
 
@@ -603,11 +606,9 @@ class TestAlarms(v2.FunctionalTest,
                               status=400, headers=self.auth_headers)
         expected_err_msg = ("Invalid input for field/attribute"
                             " type."
-                            " Value: 'bad_type'."
-                            " Value should be one of:"
-                            " threshold, combination")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+                            " Value: 'bad_type'.")
+        self.assertIn(expected_err_msg,
+                      resp.json['error_message']['faultstring'])
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(4, len(alarms))
 
@@ -679,10 +680,9 @@ class TestAlarms(v2.FunctionalTest,
                               status=400, headers=self.auth_headers)
         expected_err_msg = ("Invalid input for field/attribute"
                             " operator."
-                            " Value: 'bad_operator'."
-                            " Value should be one of: and, or")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+                            " Value: 'bad_operator'.")
+        self.assertIn(expected_err_msg,
+                      resp.json['error_message']['faultstring'])
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(4, len(alarms))
 
@@ -1902,8 +1902,8 @@ class TestAlarms(v2.FunctionalTest,
         actual = jsonutils.dumps(jsonutils.loads(actual), sort_keys=True)
         for k, v in six.iteritems(expected):
             fragment = jsonutils.dumps({k: v}, sort_keys=True)[1:-1]
-            self.assertTrue(fragment in actual,
-                            '%s not in %s' % (fragment, actual))
+            self.assertIn(fragment, actual,
+                          '%s not in %s' % (fragment, actual))
 
     def test_record_alarm_history_config(self):
         self.CONF.set_override('record_history', False, group='alarm')
@@ -2160,10 +2160,8 @@ class TestAlarms(v2.FunctionalTest,
                                        expect_errors=True, status=400)
         self.assertEqual('Unknown argument: "alarm_id": unrecognized'
                          " field in query: [<Query u'alarm_id' eq"
-                         " u'b' Unset>], valid keys: ['end_timestamp',"
-                         " 'end_timestamp_op', 'project',"
-                         " 'start_timestamp', 'start_timestamp_op',"
-                         " 'type', 'user']",
+                         " u'b' Unset>], valid keys: ['project', "
+                         "'search_offset', 'timestamp', 'type', 'user']",
                          resp.json['error_message']['faultstring'])
 
     def test_get_alarm_history_constrained_by_not_supported_rule(self):
@@ -2173,10 +2171,8 @@ class TestAlarms(v2.FunctionalTest,
                                        expect_errors=True, status=400)
         self.assertEqual('Unknown argument: "abcd": unrecognized'
                          " field in query: [<Query u'abcd' eq"
-                         " u'abcd' Unset>], valid keys: ['end_timestamp',"
-                         " 'end_timestamp_op', 'project',"
-                         " 'start_timestamp', 'start_timestamp_op',"
-                         " 'type', 'user']",
+                         " u'abcd' Unset>], valid keys: ['project', "
+                         "'search_offset', 'timestamp', 'type', 'user']",
                          resp.json['error_message']['faultstring'])
 
     def test_get_nonexistent_alarm_history(self):
@@ -2235,20 +2231,24 @@ class TestAlarms(v2.FunctionalTest,
     def test_alarm_sends_notification(self):
         # Hit the AlarmController (with alarm_id supplied) ...
         data = self.get_json('/alarms')
+        del_alarm_name = "name1"
+        for d in data:
+            if d['name'] == del_alarm_name:
+                del_alarm_id = d['alarm_id']
+
         with mock.patch.object(messaging, 'get_notifier') as get_notifier:
             notifier = get_notifier.return_value
 
-            self.delete('/alarms/%s' % data[0]['alarm_id'],
+            self.delete('/alarms/%s' % del_alarm_id,
                         headers=self.auth_headers, status=204)
             get_notifier.assert_called_once_with(mock.ANY,
                                                  publisher_id='ceilometer.api')
-
         calls = notifier.info.call_args_list
         self.assertEqual(1, len(calls))
         args, _ = calls[0]
         context, event_type, payload = args
         self.assertEqual('alarm.deletion', event_type)
-        self.assertEqual('name1', payload['detail']['name'])
+        self.assertEqual(del_alarm_name, payload['detail']['name'])
         self.assertTrue(set(['alarm_id', 'detail', 'event_id', 'on_behalf_of',
                              'project_id', 'timestamp', 'type',
                              'user_id']).issubset(payload.keys()))

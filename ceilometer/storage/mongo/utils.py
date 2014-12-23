@@ -18,16 +18,16 @@
 """Common functions for MongoDB and DB2 backends
 """
 
-
 import time
+import weakref
 
 from oslo.config import cfg
 from oslo.utils import netutils
 import pymongo
 import six
-import weakref
+from six.moves.urllib import parse
 
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
@@ -74,8 +74,8 @@ def make_events_query_from_filter(event_filter):
     :param event_filter: storage.EventFilter object.
     """
     q = {}
-    ts_range = make_timestamp_range(event_filter.start_time,
-                                    event_filter.end_time)
+    ts_range = make_timestamp_range(event_filter.start_timestamp,
+                                    event_filter.end_timestamp)
     if ts_range:
         q['timestamp'] = ts_range
     if event_filter.event_type:
@@ -130,8 +130,8 @@ def make_query_from_filter(sample_filter, require_meter=True):
     elif require_meter:
         raise RuntimeError('Missing required meter specifier')
 
-    ts_range = make_timestamp_range(sample_filter.start,
-                                    sample_filter.end,
+    ts_range = make_timestamp_range(sample_filter.start_timestamp,
+                                    sample_filter.end_timestamp,
                                     sample_filter.start_timestamp_op,
                                     sample_filter.end_timestamp_op)
 
@@ -147,9 +147,80 @@ def make_query_from_filter(sample_filter, require_meter=True):
 
     # so the samples call metadata resource_metadata, so we convert
     # to that.
-    q.update(dict(('resource_%s' % k, v)
-                  for (k, v) in six.iteritems(sample_filter.metaquery)))
+    q.update(dict(
+        ('resource_%s' % k, v) for (k, v) in six.iteritems(
+            improve_keys(sample_filter.metaquery, metaquery=True))))
     return q
+
+
+def quote_key(key, reverse=False):
+    """Prepare key for storage data in MongoDB.
+
+    :param key: key that should be quoted
+    :param reverse: boolean, True --- if we need a reverse order of the keys
+                    parts
+    :return: iter of quoted part of the key
+    """
+    r = -1 if reverse else 1
+
+    for k in key.split('.')[::r]:
+        if k.startswith('$'):
+            k = parse.quote(k)
+        yield k
+
+
+def improve_keys(data, metaquery=False):
+    """Improves keys in dict if they contained '.' or started with '$'.
+
+    :param data: is a dictionary where keys need to be checked and improved
+    :param metaquery: boolean, if True dots are not escaped from the keys
+    :return: improved dictionary if keys contained dots or started with '$':
+            {'a.b': 'v'} -> {'a': {'b': 'v'}}
+            {'$ab': 'v'} -> {'%24ab': 'v'}
+    """
+    if not isinstance(data, dict):
+        return data
+
+    if metaquery:
+        for key in data.iterkeys():
+            if '.$' in key:
+                key_list = []
+                for k in quote_key(key):
+                    key_list.append(k)
+                new_key = '.'.join(key_list)
+                data[new_key] = data.pop(key)
+    else:
+        for key, value in data.items():
+            if isinstance(value, dict):
+                improve_keys(value)
+            if '.' in key:
+                new_dict = {}
+                for k in quote_key(key, reverse=True):
+                    new = {}
+                    new[k] = new_dict if new_dict else data.pop(key)
+                    new_dict = new
+                data.update(new_dict)
+            else:
+                if key.startswith('$'):
+                    new_key = parse.quote(key)
+                    data[new_key] = data.pop(key)
+    return data
+
+
+def unquote_keys(data):
+    """Restores initial view of 'quoted' keys in dictionary data
+
+    :param data: is a dictionary
+    :return: data with restored keys if they were 'quoted'.
+    """
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                unquote_keys(value)
+            if key.startswith('%24'):
+                k = parse.unquote(key)
+                data[k] = data.pop(key)
+    return data
 
 
 class ConnectionPool(object):
@@ -179,26 +250,20 @@ class ConnectionPool(object):
 
     @staticmethod
     def _mongo_connect(url):
-        max_retries = cfg.CONF.database.max_retries
-        retry_interval = cfg.CONF.database.retry_interval
-        attempts = 0
-        while True:
-            try:
-                client = pymongo.MongoClient(url, safe=True)
-            except pymongo.errors.ConnectionFailure as e:
-                if 0 <= max_retries <= attempts:
-                    LOG.error(_('Unable to connect to the database after '
-                                '%(retries)d retries. Giving up.') %
-                              {'retries': max_retries})
-                    raise
-                LOG.warn(_('Unable to connect to the database server: '
-                           '%(errmsg)s. Trying again in %(retry_interval)d '
-                           'seconds.') %
-                         {'errmsg': e, 'retry_interval': retry_interval})
-                attempts += 1
-                time.sleep(retry_interval)
+        try:
+            if cfg.CONF.database.mongodb_replica_set:
+                client = MongoProxy(
+                    pymongo.MongoReplicaSetClient(
+                        url,
+                        replicaSet=cfg.CONF.database.mongodb_replica_set))
             else:
-                return client
+                client = MongoProxy(
+                    pymongo.MongoClient(url, safe=True))
+            return client
+        except pymongo.errors.ConnectionFailure as e:
+            LOG.warn(_('Unable to connect to the database server: '
+                       '%(errmsg)s.') % {'errmsg': e})
+            raise
 
 
 class QueryTransformer(object):
@@ -321,3 +386,100 @@ class QueryTransformer(object):
             return self._handle_not_op(negated_tree)
 
         return self._handle_simple_op(operator_node, nodes)
+
+
+def safe_mongo_call(call):
+    def closure(*args, **kwargs):
+        max_retries = cfg.CONF.database.max_retries
+        retry_interval = cfg.CONF.database.retry_interval
+        attempts = 0
+        while True:
+            try:
+                return call(*args, **kwargs)
+            except pymongo.errors.AutoReconnect as err:
+                if 0 <= max_retries <= attempts:
+                    LOG.error(_('Unable to reconnect to the primary mongodb '
+                                'after %(retries)d retries. Giving up.') %
+                              {'retries': max_retries})
+                    raise
+                LOG.warn(_('Unable to reconnect to the primary mongodb: '
+                           '%(errmsg)s. Trying again in %(retry_interval)d '
+                           'seconds.') %
+                         {'errmsg': err, 'retry_interval': retry_interval})
+                attempts += 1
+                time.sleep(retry_interval)
+    return closure
+
+
+class MongoConn(object):
+    def __init__(self, method):
+        self.method = method
+
+    @safe_mongo_call
+    def __call__(self, *args, **kwargs):
+        return self.method(*args, **kwargs)
+
+MONGO_METHODS = set([typ for typ in dir(pymongo.collection.Collection)
+                     if not typ.startswith('_')])
+MONGO_METHODS.update(set([typ for typ in dir(pymongo.MongoClient)
+                          if not typ.startswith('_')]))
+MONGO_METHODS.update(set([typ for typ in dir(pymongo)
+                          if not typ.startswith('_')]))
+
+
+class MongoProxy(object):
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __getitem__(self, item):
+        """Create and return proxy around the method in the connection.
+
+        :param item: name of the connection
+        """
+        return MongoProxy(self.conn[item])
+
+    def find(self, *args, **kwargs):
+        # We need this modifying method to return a CursorProxy object so that
+        # we can handle the Cursor next function to catch the AutoReconnect
+        # exception.
+        return CursorProxy(self.conn.find(*args, **kwargs))
+
+    def __getattr__(self, item):
+        """Wrap MongoDB connection.
+
+        If item is the name of an executable method, for example find or
+        insert, wrap this method in the MongoConn.
+        Else wrap getting attribute with MongoProxy.
+        """
+        if item in ('name', 'database'):
+            return getattr(self.conn, item)
+        if item in MONGO_METHODS:
+            return MongoConn(getattr(self.conn, item))
+        return MongoProxy(getattr(self.conn, item))
+
+    def __call__(self, *args, **kwargs):
+        return self.conn(*args, **kwargs)
+
+
+class CursorProxy(pymongo.cursor.Cursor):
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    def __getitem__(self, item):
+        return self.cursor[item]
+
+    @safe_mongo_call
+    def next(self):
+        """Wrap Cursor next method.
+
+        This method will be executed before each Cursor next method call.
+        """
+        try:
+            save_cursor = self.cursor.clone()
+            return self.cursor.next()
+        except pymongo.errors.AutoReconnect:
+            self.cursor = save_cursor
+            raise
+
+    def __getattr__(self, item):
+        return getattr(self.cursor, item)

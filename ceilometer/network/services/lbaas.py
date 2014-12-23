@@ -21,8 +21,8 @@ import collections
 from oslo.utils import timeutils
 import six
 
+from ceilometer.i18n import _
 from ceilometer.network.services import base
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -281,7 +281,7 @@ class LBTotalConnectionsPollster(_LBStatsPollster):
         return make_sample_from_pool(
             pool,
             name='network.services.lb.total.connections',
-            type=sample.TYPE_GAUGE,
+            type=sample.TYPE_CUMULATIVE,
             unit='connection',
             volume=data.total_connections,
         )

@@ -29,8 +29,9 @@ import mock
 from oslo.utils import timeutils
 
 from ceilometer.alarm.storage import impl_sqlalchemy as impl_sqla_alarm
+from ceilometer.event.storage import impl_sqlalchemy as impl_sqla_event
+from ceilometer.event.storage import models
 from ceilometer.storage import impl_sqlalchemy
-from ceilometer.storage import models
 from ceilometer.storage.sqlalchemy import models as sql_models
 from ceilometer.tests import base as test_base
 from ceilometer.tests import db as tests_db
@@ -52,26 +53,26 @@ class TraitTypeTest(tests_db.TestBase):
     # Not applicable to other drivers.
 
     def test_trait_type_exists(self):
-        tt1 = self.conn._get_or_create_trait_type("foo", 0)
+        tt1 = self.event_conn._get_or_create_trait_type("foo", 0)
         self.assertTrue(tt1.id >= 0)
-        tt2 = self.conn._get_or_create_trait_type("foo", 0)
+        tt2 = self.event_conn._get_or_create_trait_type("foo", 0)
         self.assertEqual(tt2.id, tt1.id)
         self.assertEqual(tt2.desc, tt1.desc)
         self.assertEqual(tt2.data_type, tt1.data_type)
 
     def test_new_trait_type(self):
-        tt1 = self.conn._get_or_create_trait_type("foo", 0)
+        tt1 = self.event_conn._get_or_create_trait_type("foo", 0)
         self.assertTrue(tt1.id >= 0)
-        tt2 = self.conn._get_or_create_trait_type("blah", 0)
+        tt2 = self.event_conn._get_or_create_trait_type("blah", 0)
         self.assertNotEqual(tt1.id, tt2.id)
         self.assertNotEqual(tt1.desc, tt2.desc)
         # Test the method __repr__ returns a string
         self.assertTrue(repr.repr(tt2))
 
     def test_trait_different_data_type(self):
-        tt1 = self.conn._get_or_create_trait_type("foo", 0)
+        tt1 = self.event_conn._get_or_create_trait_type("foo", 0)
         self.assertTrue(tt1.id >= 0)
-        tt2 = self.conn._get_or_create_trait_type("foo", 1)
+        tt2 = self.event_conn._get_or_create_trait_type("foo", 1)
         self.assertNotEqual(tt1.id, tt2.id)
         self.assertEqual(tt2.desc, tt1.desc)
         self.assertNotEqual(tt1.data_type, tt2.data_type)
@@ -85,16 +86,16 @@ class EventTypeTest(tests_db.TestBase):
     # Not applicable to other drivers.
 
     def test_event_type_exists(self):
-        et1 = self.conn._get_or_create_event_type("foo")
+        et1 = self.event_conn._get_or_create_event_type("foo")
         self.assertTrue(et1.id >= 0)
-        et2 = self.conn._get_or_create_event_type("foo")
+        et2 = self.event_conn._get_or_create_event_type("foo")
         self.assertEqual(et2.id, et1.id)
         self.assertEqual(et2.desc, et1.desc)
 
     def test_event_type_unique(self):
-        et1 = self.conn._get_or_create_event_type("foo")
+        et1 = self.event_conn._get_or_create_event_type("foo")
         self.assertTrue(et1.id >= 0)
-        et2 = self.conn._get_or_create_event_type("blah")
+        et2 = self.event_conn._get_or_create_event_type("blah")
         self.assertNotEqual(et1.id, et2.id)
         self.assertNotEqual(et1.desc, et2.desc)
         # Test the method __repr__ returns a string
@@ -109,7 +110,7 @@ class MyException(Exception):
 class EventTest(tests_db.TestBase):
     def test_string_traits(self):
         model = models.Trait("Foo", models.Trait.TEXT_TYPE, "my_text")
-        trait = self.conn._make_trait(model, None)
+        trait = self.event_conn._make_trait(model, None)
         self.assertEqual(models.Trait.TEXT_TYPE, trait.trait_type.data_type)
         self.assertIsNone(trait.t_float)
         self.assertIsNone(trait.t_int)
@@ -119,7 +120,7 @@ class EventTest(tests_db.TestBase):
 
     def test_int_traits(self):
         model = models.Trait("Foo", models.Trait.INT_TYPE, 100)
-        trait = self.conn._make_trait(model, None)
+        trait = self.event_conn._make_trait(model, None)
         self.assertEqual(models.Trait.INT_TYPE, trait.trait_type.data_type)
         self.assertIsNone(trait.t_float)
         self.assertIsNone(trait.t_string)
@@ -129,7 +130,7 @@ class EventTest(tests_db.TestBase):
 
     def test_float_traits(self):
         model = models.Trait("Foo", models.Trait.FLOAT_TYPE, 123.456)
-        trait = self.conn._make_trait(model, None)
+        trait = self.event_conn._make_trait(model, None)
         self.assertEqual(models.Trait.FLOAT_TYPE, trait.trait_type.data_type)
         self.assertIsNone(trait.t_int)
         self.assertIsNone(trait.t_string)
@@ -140,7 +141,7 @@ class EventTest(tests_db.TestBase):
     def test_datetime_traits(self):
         now = datetime.datetime.utcnow()
         model = models.Trait("Foo", models.Trait.DATETIME_TYPE, now)
-        trait = self.conn._make_trait(model, None)
+        trait = self.event_conn._make_trait(model, None)
         self.assertEqual(models.Trait.DATETIME_TYPE,
                          trait.trait_type.data_type)
         self.assertIsNone(trait.t_int)
@@ -154,9 +155,9 @@ class EventTest(tests_db.TestBase):
         m = [models.Event("1", "Foo", now, []),
              models.Event("2", "Zoo", now, [])]
 
-        with mock.patch.object(self.conn, "_record_event") as mock_save:
+        with mock.patch.object(self.event_conn, "_record_event") as mock_save:
             mock_save.side_effect = MyException("Boom")
-            problem_events = self.conn.record_events(m)
+            problem_events = self.event_conn.record_events(m)
         self.assertEqual(2, len(problem_events))
         for bad, event in problem_events:
             self.assertEqual(bad, models.Event.UNKNOWN_PROBLEM)
@@ -227,10 +228,16 @@ class CapabilitiesTest(test_base.BaseTestCase):
                                                'stddev': True,
                                                'cardinality': True}}
                            },
-            'events': {'query': {'simple': True}}
         }
 
         actual_capabilities = impl_sqlalchemy.Connection.get_capabilities()
+        self.assertEqual(expected_capabilities, actual_capabilities)
+
+    def test_event_capabilities(self):
+        expected_capabilities = {
+            'events': {'query': {'simple': True}},
+        }
+        actual_capabilities = impl_sqla_event.Connection.get_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)
 
     def test_alarm_capabilities(self):

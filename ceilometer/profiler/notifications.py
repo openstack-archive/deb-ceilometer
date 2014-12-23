@@ -16,14 +16,14 @@
 from oslo.config import cfg
 import oslo.messaging
 
-from ceilometer import plugin
+from ceilometer.agent import plugin_base
 from ceilometer import sample
 
 
 OPTS = [
     cfg.StrOpt('trove_control_exchange',
                default='trove',
-               help="Exchange name for DBaaS notifications"),
+               help="Exchange name for DBaaS notifications."),
 ]
 
 cfg.CONF.register_opts(OPTS)
@@ -32,7 +32,7 @@ cfg.CONF.import_opt('keystone_control_exchange',
                     'ceilometer.identity.notifications')
 
 
-class ProfilerNotifications(plugin.NotificationBase):
+class ProfilerNotifications(plugin_base.NotificationBase):
 
     event_types = ["profiler.*"]
 

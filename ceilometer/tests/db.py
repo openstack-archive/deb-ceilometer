@@ -18,16 +18,17 @@
 # under the License.
 
 """Base classes for API tests."""
-import fixtures
 import os
 import uuid
 import warnings
 
+import fixtures
 import mock
 from oslo.config import fixture as fixture_config
 from oslotest import mockpatch
 import six
 from six.moves.urllib import parse as urlparse
+import sqlalchemy
 import testscenarios.testcase
 from testtools import testcase
 
@@ -52,6 +53,8 @@ class MongoDbManager(fixtures.Fixture):
                     self.url, 'ceilometer.metering.storage')
                 self.alarm_connection = storage.get_connection(
                     self.url, 'ceilometer.alarm.storage')
+                self.event_connection = storage.get_connection(
+                    self.url, 'ceilometer.event.storage')
             except storage.StorageBadVersion as e:
                 raise testcase.TestSkipped(six.text_type(e))
 
@@ -61,6 +64,45 @@ class MongoDbManager(fixtures.Fixture):
             'url': self._url,
             'db': uuid.uuid4().hex
         }
+
+
+class SQLManager(fixtures.Fixture):
+    def setUp(self):
+        super(SQLManager, self).setUp()
+        self.connection = storage.get_connection(
+            self.url, 'ceilometer.metering.storage')
+        self.alarm_connection = storage.get_connection(
+            self.url, 'ceilometer.alarm.storage')
+        self.event_connection = storage.get_connection(
+            self.url, 'ceilometer.event.storage')
+
+    @property
+    def url(self):
+        return self._url.replace('template1', self._db_name)
+
+
+class PgSQLManager(SQLManager):
+
+    def __init__(self, url):
+        self._url = url
+        self._db_name = 'ceilometer_%s' % uuid.uuid4().hex
+        self._engine = sqlalchemy.create_engine(self._url)
+        self._conn = self._engine.connect()
+        self._conn.connection.set_isolation_level(0)
+        self._conn.execute(
+            'CREATE DATABASE %s WITH TEMPLATE template0;' % self._db_name)
+        self._conn.connection.set_isolation_level(1)
+
+
+class MySQLManager(SQLManager):
+
+    def __init__(self, url):
+        self._url = url
+        self._db_name = 'ceilometer_%s' % uuid.uuid4().hex
+        self._engine = sqlalchemy.create_engine(
+            self._url.replace('template1', ''))
+        self._conn = self._engine.connect()
+        self._conn.execute('CREATE DATABASE %s;' % self._db_name)
 
 
 class HBaseManager(fixtures.Fixture):
@@ -73,6 +115,8 @@ class HBaseManager(fixtures.Fixture):
             self.url, 'ceilometer.metering.storage')
         self.alarm_connection = storage.get_connection(
             self.url, 'ceilometer.alarm.storage')
+        self.event_connection = storage.get_connection(
+            self.url, 'ceilometer.event.storage')
         # Unique prefix for each test to keep data is distinguished because
         # all test data is stored in one table
         data_prefix = str(uuid.uuid4().hex)
@@ -112,12 +156,16 @@ class SQLiteManager(fixtures.Fixture):
             self.url, 'ceilometer.metering.storage')
         self.alarm_connection = storage.get_connection(
             self.url, 'ceilometer.alarm.storage')
+        self.event_connection = storage.get_connection(
+            self.url, 'ceilometer.event.storage')
 
 
 class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
 
     DRIVER_MANAGERS = {
         'mongodb': MongoDbManager,
+        'mysql': MySQLManager,
+        'postgresql': PgSQLManager,
         'db2': MongoDbManager,
         'sqlite': SQLiteManager,
         'hbase': HBaseManager,
@@ -148,6 +196,9 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         self.alarm_conn = self.db_manager.alarm_connection
         self.alarm_conn.upgrade()
 
+        self.event_conn = self.db_manager.event_connection
+        self.event_conn.upgrade()
+
         self.useFixture(mockpatch.Patch('ceilometer.storage.get_connection',
                                         side_effect=self._get_connection))
 
@@ -161,6 +212,8 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         )
 
     def tearDown(self):
+        self.event_conn.clear()
+        self.event_conn = None
         self.alarm_conn.clear()
         self.alarm_conn = None
         self.conn.clear()
@@ -170,6 +223,8 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
     def _get_connection(self, url, namespace):
         if namespace == "ceilometer.alarm.storage":
             return self.alarm_conn
+        elif namespace == "ceilometer.event.storage":
+            return self.event_conn
         return self.conn
 
     def _get_driver_manager(self, engine):
@@ -202,11 +257,24 @@ class MixinTestsWithBackendScenarios(object):
 
     scenarios = [
         ('sqlite', {'db_url': 'sqlite://'}),
-        ('mongodb', {'db_url': os.environ.get('CEILOMETER_TEST_MONGODB_URL')}),
-        ('hbase', {'db_url': os.environ.get('CEILOMETER_TEST_HBASE_URL',
-                                            'hbase://__test__')}),
-        ('db2', {'db_url': (os.environ.get('CEILOMETER_TEST_DB2_URL') or
-                            os.environ.get('CEILOMETER_TEST_MONGODB_URL',
-                                           '').replace('mongodb://',
-                                                       'db2://'))})
     ]
+
+    for db in ('MONGODB', 'MYSQL', 'PGSQL', 'HBASE', 'DB2'):
+        if os.environ.get('CEILOMETER_TEST_%s_URL' % db):
+            scenarios.append(
+                (db.lower(), {'db_url': os.environ.get(
+                    'CEILOMETER_TEST_%s_URL' % db)}))
+
+    scenarios_db = [db for db, _ in scenarios]
+
+    # Insert default value for hbase test
+    if 'hbase' not in scenarios_db:
+        scenarios.append(
+            ('hbase', {'db_url': 'hbase://__test__'}))
+
+    # Insert default value for db2 test
+    if 'mongodb' in scenarios_db and 'db2' not in scenarios_db:
+        scenarios.append(
+            ('db2', {'db_url': os.environ.get('CEILOMETER_TEST_MONGODB_URL',
+                                              '').replace('mongodb://',
+                                                          'db2://')}))

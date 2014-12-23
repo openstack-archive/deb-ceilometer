@@ -12,17 +12,14 @@
 """Tests the mongodb and db2 common functionality
 """
 
-import contextlib
 import copy
 import datetime
 
 import mock
-import pymongo
 
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.publisher import utils
 from ceilometer import sample
-from ceilometer.storage.mongo import utils as pymongo_utils
+from ceilometer.tests import constants
 from ceilometer.tests import db as tests_db
 from ceilometer.tests.storage import test_storage_scenarios
 
@@ -100,7 +97,7 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
                      enabled=True,
                      name='old-alert',
                      description='old-alert',
-                     timestamp=None,
+                     timestamp=constants.MIN_DATETIME,
                      meter_name='cpu',
                      user_id='me',
                      project_id='and-da-boys',
@@ -110,7 +107,7 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
                      evaluation_periods=1,
                      period=60,
                      state="insufficient data",
-                     state_timestamp=None,
+                     state_timestamp=constants.MIN_DATETIME,
                      ok_actions=[],
                      alarm_actions=['http://nowhere/alarms'],
                      insufficient_data_actions=[],
@@ -168,41 +165,3 @@ class CompatibilityTest(test_storage_scenarios.DBTestBase,
     def test_counter_unit(self):
         meters = list(self.conn.get_meters())
         self.assertEqual(1, len(meters))
-
-    def test_mongodb_connect_raises_after_custom_number_of_attempts(self):
-        retry_interval = 13
-        max_retries = 37
-        self.CONF.set_override(
-            'retry_interval', retry_interval, group='database')
-        self.CONF.set_override(
-            'max_retries', max_retries, group='database')
-        # PyMongo is being used to connect even to DB2, but it only
-        # accepts URLs with the 'mongodb' scheme. This replacement is
-        # usually done in the DB2 connection implementation, but since
-        # we don't call that, we have to do it here.
-        self.CONF.set_override(
-            'connection', self.db_manager.url.replace('db2:', 'mongodb:', 1),
-            group='database')
-
-        pool = pymongo_utils.ConnectionPool()
-        with contextlib.nested(
-                mock.patch(
-                    'pymongo.MongoClient',
-                    side_effect=pymongo.errors.ConnectionFailure('foo')),
-                mock.patch.object(pymongo_utils.LOG, 'error'),
-                mock.patch.object(pymongo_utils.LOG, 'warn'),
-                mock.patch.object(pymongo_utils.time, 'sleep')
-        ) as (MockMongo, MockLOGerror, MockLOGwarn, Mocksleep):
-            self.assertRaises(pymongo.errors.ConnectionFailure,
-                              pool.connect, self.CONF.database.connection)
-            Mocksleep.assert_has_calls([mock.call(retry_interval)
-                                        for i in range(max_retries)])
-            MockLOGwarn.assert_any_call(
-                _('Unable to connect to the database server: %(errmsg)s.'
-                  ' Trying again in %(retry_interval)d seconds.') %
-                {'errmsg': 'foo',
-                 'retry_interval': retry_interval})
-            MockLOGerror.assert_called_with(
-                _('Unable to connect to the database after '
-                  '%(retries)d retries. Giving up.') %
-                {'retries': max_retries})

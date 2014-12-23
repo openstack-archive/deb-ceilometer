@@ -25,8 +25,8 @@ from oslo.utils import timeutils
 import six.moves.urllib.parse as urlparse
 from swiftclient import client as swift
 
-from ceilometer.central import plugin
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.agent import plugin_base
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -40,17 +40,18 @@ OPTS = [
                "reseller_prefix in proxy-server.conf."),
 ]
 
-service_types_opts = [
+SERVICE_OPTS = [
     cfg.StrOpt('swift',
                default='object-store',
                help='Swift service type.'),
 ]
 
 cfg.CONF.register_opts(OPTS)
-cfg.CONF.register_opts(service_types_opts, group='service_types')
+cfg.CONF.register_opts(SERVICE_OPTS, group='service_types')
+cfg.CONF.import_group('service_credentials', 'ceilometer.service')
 
 
-class _Base(plugin.CentralPollster):
+class _Base(plugin_base.PollsterBase):
 
     METHOD = 'head'
     _ENDPOINT = None

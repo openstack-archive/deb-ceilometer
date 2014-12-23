@@ -28,6 +28,7 @@ import pecan
 from ceilometer.api import config as api_config
 from ceilometer.api import hooks
 from ceilometer.api import middleware
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import storage
 
@@ -36,14 +37,14 @@ LOG = log.getLogger(__name__)
 CONF = cfg.CONF
 CONF.import_opt('debug', 'ceilometer.openstack.common.log')
 
-auth_opts = [
+OPTS = [
     cfg.StrOpt('api_paste_config',
                default="api_paste.ini",
                help="Configuration file for WSGI definition of API."
                ),
 ]
 
-api_opts = [
+API_OPTS = [
     cfg.BoolOpt('pecan_debug',
                 default=CONF.debug,
                 help='Toggle Pecan Debug Middleware. '
@@ -51,8 +52,8 @@ api_opts = [
                 ),
 ]
 
-CONF.register_opts(auth_opts)
-CONF.register_opts(api_opts, group='api')
+CONF.register_opts(OPTS)
+CONF.register_opts(API_OPTS, group='api')
 
 
 def get_pecan_config():
@@ -66,6 +67,7 @@ def setup_app(pecan_config=None, extra_hooks=None):
     app_hooks = [hooks.ConfigHook(),
                  hooks.DBHook(
                      storage.get_connection_from_config(cfg.CONF, 'metering'),
+                     storage.get_connection_from_config(cfg.CONF, 'event'),
                      storage.get_connection_from_config(cfg.CONF, 'alarm'),),
                  hooks.PipelineHook(),
                  hooks.TranslationHook()]
@@ -118,8 +120,9 @@ def get_server_cls(host):
     if netaddr.valid_ipv6(host):
         # NOTE(dzyu) make sure use IPv6 sockets if host is in IPv6 pattern
         if getattr(server_cls, 'address_family') == socket.AF_INET:
-            class server_cls(server_cls):
+            class ipv6_server_cls(server_cls):
                 address_family = socket.AF_INET6
+            return ipv6_server_cls
     return server_cls
 
 

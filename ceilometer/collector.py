@@ -24,8 +24,7 @@ from oslo.utils import units
 
 from ceilometer import dispatcher
 from ceilometer import messaging
-from ceilometer.openstack.common.gettextutils import _
-from ceilometer.openstack.common.gettextutils import _LE
+from ceilometer.i18n import _, _LE
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 
@@ -41,7 +40,7 @@ OPTS = [
                 default=False,
                 help='Requeue the sample on the collector sample queue '
                 'when the collector fails to dispatch it. This is only valid '
-                'if the sample come from the notifier publisher'),
+                'if the sample come from the notifier publisher.'),
 ]
 
 cfg.CONF.register_opts(OPTS, group="collector")

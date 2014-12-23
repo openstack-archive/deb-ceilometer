@@ -28,6 +28,7 @@ import sys
 
 import bson.code
 import bson.objectid
+from oslo.config import cfg
 from oslo.utils import timeutils
 import pymongo
 import six
@@ -159,7 +160,14 @@ class Connection(pymongo_base.Connection):
         # queries, so the database won't take advantage of an index
         # including both.
         if self.db.resource.index_information() == {}:
-            resource_id = str(bson.objectid.ObjectId())
+            # Initializing a longer resource id to workaround DB2 nosql issue.
+            # Longer resource id is required by compute node's resource as
+            # their id is '<hostname>_<nodename>'. DB2 creates a VARCHAR(70)
+            # for resource id when its length < 70. But DB2 can create a
+            # VARCHAR(n) for the resource id which has n(n>70) characters.
+            # Users can adjust 'db2nosql_resource_id_maxlen'(default is 512)
+            # for their ENV.
+            resource_id = 'x' * cfg.CONF.database.db2nosql_resource_id_maxlen
             self.db.resource.insert({'_id': resource_id,
                                      'no_key': resource_id})
             meter_id = str(bson.objectid.ObjectId())
@@ -198,7 +206,7 @@ class Connection(pymongo_base.Connection):
         # not been implemented. However calling this method is important for
         # removal of all the empty dbs created during the test runs since
         # test run is against mongodb on Jenkins
-        self.conn.drop_database(self.db)
+        self.conn.drop_database(self.db.name)
         self.conn.close()
 
     def record_metering_data(self, data):
@@ -208,6 +216,9 @@ class Connection(pymongo_base.Connection):
                      ceilometer.meter.meter_message_from_counter
         """
         # Record the updated resource metadata
+        data = copy.deepcopy(data)
+        data['resource_metadata'] = pymongo_utils.improve_keys(
+            data.pop('resource_metadata'))
         self.db.resource.update(
             {'_id': data['resource_id']},
             {'$set': {'project_id': data['project_id'],
@@ -255,7 +266,7 @@ class Connection(pymongo_base.Connection):
         if pagination:
             raise ceilometer.NotImplementedError('Pagination not implemented')
 
-        metaquery = metaquery or {}
+        metaquery = pymongo_utils.improve_keys(metaquery, metaquery=True) or {}
 
         q = {}
         if user is not None:
@@ -302,7 +313,8 @@ class Connection(pymongo_base.Connection):
                                   last_sample_timestamp=last_ts,
                                   source=latest_meter['source'],
                                   user_id=latest_meter['user_id'],
-                                  metadata=latest_meter['resource_metadata'])
+                                  metadata=pymongo_utils.unquote_keys(
+                latest_meter['resource_metadata']))
 
     def get_meter_statistics(self, sample_filter, period=None, groupby=None,
                              aggregate=None):
@@ -324,8 +336,8 @@ class Connection(pymongo_base.Connection):
         q = pymongo_utils.make_query_from_filter(sample_filter)
 
         if period:
-            if sample_filter.start:
-                period_start = sample_filter.start
+            if sample_filter.start_timestamp:
+                period_start = sample_filter.start_timestamp
             else:
                 period_start = self.db.meter.find(
                     limit=1, sort=[('timestamp',

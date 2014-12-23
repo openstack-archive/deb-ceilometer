@@ -18,16 +18,15 @@
 # under the License.
 
 import fnmatch
-import itertools
-import operator
 import os
 
 from oslo.config import cfg
 import yaml
 
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import publisher
+from ceilometer import sample as sample_util
 from ceilometer import transformer as xformer
 
 
@@ -50,6 +49,30 @@ class PipelineException(Exception):
 
     def __str__(self):
         return 'Pipeline %s: %s' % (self.pipeline_cfg, self.msg)
+
+
+class PipelineEndpoint(object):
+
+    def __init__(self, context, pipeline):
+        self.publish_context = PublishContext(context, [pipeline])
+
+    def sample(self, ctxt, publisher_id, event_type, payload, metadata):
+        """RPC endpoint for pipeline messages."""
+        samples = [
+            sample_util.Sample(name=s['counter_name'],
+                               type=s['counter_type'],
+                               unit=s['counter_unit'],
+                               volume=s['counter_volume'],
+                               user_id=s['user_id'],
+                               project_id=s['project_id'],
+                               resource_id=s['resource_id'],
+                               timestamp=s['timestamp'],
+                               resource_metadata=s['resource_metadata'],
+                               source=s.get('source'))
+            for s in payload
+        ]
+        with self.publish_context as p:
+            p(samples)
 
 
 class PublishContext(object):
@@ -288,15 +311,18 @@ class Sink(object):
         """
 
         transformed_samples = []
-        for sample in samples:
-            LOG.debug(_(
-                "Pipeline %(pipeline)s: Transform sample "
-                "%(smp)s from %(trans)s transformer") % ({'pipeline': self,
-                                                          'smp': sample,
-                                                          'trans': start}))
-            sample = self._transform_sample(start, ctxt, sample)
-            if sample:
-                transformed_samples.append(sample)
+        if not self.transformers:
+            transformed_samples = samples
+        else:
+            for sample in samples:
+                LOG.debug(_(
+                    "Pipeline %(pipeline)s: Transform sample "
+                    "%(smp)s from %(trans)s transformer") % ({'pipeline': self,
+                                                              'smp': sample,
+                                                              'trans': start}))
+                sample = self._transform_sample(start, ctxt, sample)
+                if sample:
+                    transformed_samples.append(sample)
 
         if transformed_samples:
             for p in self.publishers:
@@ -309,10 +335,7 @@ class Sink(object):
                                                       'pub': p}))
 
     def publish_samples(self, ctxt, samples):
-        for meter_name, samples in itertools.groupby(
-                sorted(samples, key=operator.attrgetter('name')),
-                operator.attrgetter('name')):
-            self._publish_samples(0, ctxt, samples)
+        self._publish_samples(0, ctxt, samples)
 
     def flush(self, ctxt):
         """Flush data after all samples have been injected to pipeline."""
@@ -489,14 +512,26 @@ class PipelineManager(object):
             for source in sources:
                 source.check_sinks(sinks)
                 for target in source.sinks:
-                    self.pipelines.append(Pipeline(source,
-                                                   sinks[target]))
+                    pipe = Pipeline(source, sinks[target])
+                    if pipe.name in [p.name for p in self.pipelines]:
+                        raise PipelineException(
+                            "Duplicate pipeline name: %s. Ensure pipeline"
+                            " names are unique. (name is the source and sink"
+                            " names combined)" % pipe.name, cfg)
+                    else:
+                        self.pipelines.append(pipe)
         else:
             LOG.warning(_('detected deprecated pipeline config format'))
             for pipedef in cfg:
                 source = Source(pipedef)
                 sink = Sink(pipedef, transformer_manager)
-                self.pipelines.append(Pipeline(source, sink))
+                pipe = Pipeline(source, sink)
+                if pipe.name in [p.name for p in self.pipelines]:
+                    raise PipelineException(
+                        "Duplicate pipeline name: %s. Ensure pipeline"
+                        " names are unique" % pipe.name, cfg)
+                else:
+                    self.pipelines.append(pipe)
 
     def publisher(self, context):
         """Build a new Publisher for these manager pipelines.

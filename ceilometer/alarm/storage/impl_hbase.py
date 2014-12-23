@@ -10,21 +10,17 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-"""HBase storage backend
-"""
-import datetime
-import os
 
-import happybase
-from oslo.utils import netutils
-from six.moves.urllib import parse as urlparse
+import datetime
+import operator
 
 import ceilometer
 from ceilometer.alarm.storage import base
 from ceilometer.alarm.storage import models
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
-from ceilometer.storage.hbase import inmemory as hbase_inmemory
+from ceilometer.storage.hbase import base as hbase_base
+from ceilometer.storage.hbase import migration as hbase_migration
 from ceilometer.storage.hbase import utils as hbase_utils
 from ceilometer import utils
 
@@ -44,8 +40,8 @@ AVAILABLE_STORAGE_CAPABILITIES = {
 }
 
 
-class Connection(base.Connection):
-    """Put the data into a HBase database
+class Connection(hbase_base.Connection, base.Connection):
+    """Put the alarm data into a HBase database
 
     Collections:
 
@@ -58,7 +54,7 @@ class Connection(base.Connection):
 
     - alarm_h:
 
-      - row_key: uuid of alarm + "_" + reversed timestamp
+      - row_key: uuid of alarm + ":" + reversed timestamp
       - Column Families:
 
         f: raw incoming alarm_history data. Timestamp becomes now()
@@ -77,31 +73,14 @@ class Connection(base.Connection):
     ALARM_HISTORY_TABLE = "alarm_h"
 
     def __init__(self, url):
-        """Hbase Connection Initialization."""
-        opts = self._parse_connection_url(url)
-
-        if opts['host'] == '__test__':
-            url = os.environ.get('CEILOMETER_TEST_HBASE_URL')
-            if url:
-                # Reparse URL, but from the env variable now
-                opts = self._parse_connection_url(url)
-                self.conn_pool = self._get_connection_pool(opts)
-            else:
-                # This is a in-memory usage for unit tests
-                if Connection._memory_instance is None:
-                    LOG.debug(_('Creating a new in-memory HBase '
-                              'Connection object'))
-                    Connection._memory_instance = (hbase_inmemory.
-                                                   MConnectionPool())
-                self.conn_pool = Connection._memory_instance
-        else:
-            self.conn_pool = self._get_connection_pool(opts)
+        super(Connection, self).__init__(url)
 
     def upgrade(self):
         tables = [self.ALARM_HISTORY_TABLE, self.ALARM_TABLE]
         column_families = {'f': dict()}
         with self.conn_pool.connection() as conn:
             hbase_utils.create_tables(conn, tables, column_families)
+            hbase_migration.migrate_tables(conn, tables)
 
     def clear(self):
         LOG.debug(_('Dropping HBase schema...'))
@@ -116,43 +95,6 @@ class Connection(base.Connection):
                     conn.delete_table(table)
                 except Exception:
                     LOG.debug(_('Cannot delete table but ignoring error'))
-
-    @staticmethod
-    def _get_connection_pool(conf):
-        """Return a connection pool to the database.
-
-        .. note::
-
-          The tests use a subclass to override this and return an
-          in-memory connection pool.
-        """
-        LOG.debug(_('connecting to HBase on %(host)s:%(port)s') % (
-                  {'host': conf['host'], 'port': conf['port']}))
-        return happybase.ConnectionPool(size=100, host=conf['host'],
-                                        port=conf['port'],
-                                        table_prefix=conf['table_prefix'])
-
-    @staticmethod
-    def _parse_connection_url(url):
-        """Parse connection parameters from a database url.
-
-        .. note::
-
-          HBase Thrift does not support authentication and there is no
-          database name, so we are not looking for these in the url.
-        """
-        opts = {}
-        result = netutils.urlsplit(url)
-        opts['table_prefix'] = urlparse.parse_qs(
-            result.query).get('table_prefix', [None])[0]
-        opts['dbtype'] = result.scheme
-        if ':' in result.netloc:
-            opts['host'], port = result.netloc.split(':')
-        else:
-            opts['host'] = result.netloc
-            port = 9090
-        opts['port'] = port and int(port) or 9090
-        return opts
 
     def update_alarm(self, alarm):
         """Create an alarm.
@@ -177,7 +119,8 @@ class Connection(base.Connection):
             alarm_table.delete(alarm_id)
 
     def get_alarms(self, name=None, user=None, state=None, meter=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None):
+                   project=None, enabled=None, alarm_id=None, pagination=None,
+                   alarm_type=None):
 
         if pagination:
             raise ceilometer.NotImplementedError('Pagination not implemented')
@@ -187,21 +130,26 @@ class Connection(base.Connection):
 
         q = hbase_utils.make_query(alarm_id=alarm_id, name=name,
                                    enabled=enabled, user_id=user,
-                                   project_id=project, state=state)
+                                   project_id=project, state=state,
+                                   type=alarm_type)
 
         with self.conn_pool.connection() as conn:
             alarm_table = conn.table(self.ALARM_TABLE)
             gen = alarm_table.scan(filter=q)
-            for ignored, data in gen:
-                stored_alarm = hbase_utils.deserialize_entry(data)[0]
-                yield models.Alarm(**stored_alarm)
+            alarms = [hbase_utils.deserialize_entry(data)[0]
+                      for ignored, data in gen]
+            for alarm in sorted(
+                    alarms,
+                    key=operator.itemgetter('timestamp'),
+                    reverse=True):
+                yield models.Alarm(**alarm)
 
     def get_alarm_changes(self, alarm_id, on_behalf_of,
-                          user=None, project=None, type=None,
+                          user=None, project=None, alarm_type=None,
                           start_timestamp=None, start_timestamp_op=None,
                           end_timestamp=None, end_timestamp_op=None):
         q = hbase_utils.make_query(alarm_id=alarm_id,
-                                   on_behalf_of=on_behalf_of, type=type,
+                                   on_behalf_of=on_behalf_of, type=alarm_type,
                                    user_id=user, project_id=project)
         start_row, end_row = hbase_utils.make_timestamp_query(
             hbase_utils.make_general_rowkey_scan,
@@ -223,5 +171,6 @@ class Connection(base.Connection):
         rts = hbase_utils.timestamp(ts)
         with self.conn_pool.connection() as conn:
             alarm_history_table = conn.table(self.ALARM_HISTORY_TABLE)
-            alarm_history_table.put(alarm_change.get('alarm_id') + "_" +
-                                    str(rts), alarm_change_dict)
+            alarm_history_table.put(
+                hbase_utils.prepare_key(alarm_change.get('alarm_id'), rts),
+                alarm_change_dict)

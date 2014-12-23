@@ -19,8 +19,8 @@ import mock
 from oslotest import base
 from oslotest import mockpatch
 
-from ceilometer.central import manager
-from ceilometer.central import plugin
+from ceilometer.agent import manager
+from ceilometer.agent import plugin_base
 from ceilometer.network.services import discovery
 from ceilometer.network.services import lbaas
 from ceilometer.openstack.common import context
@@ -34,9 +34,9 @@ class _BaseTestLBPollster(base.BaseTestCase):
         self.addCleanup(mock.patch.stopall)
         self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
-        plugin._get_keystone = mock.Mock()
-        plugin._get_keystone.service_catalog.get_endpoints = mock.MagicMock(
-            return_value={'network': mock.ANY})
+        plugin_base._get_keystone = mock.Mock()
+        plugin_base._get_keystone.service_catalog.get_endpoints = (
+            mock.MagicMock(return_value={'network': mock.ANY}))
 
 
 class TestLBPoolPollster(_BaseTestLBPollster):
@@ -157,9 +157,9 @@ class TestLBPoolPollster(_BaseTestLBPollster):
         self.assertEqual(4, len(discovered_pools))
         for pool in self.fake_get_pools():
             if pool['status'] == 'error':
-                self.assertTrue(pool not in discovered_pools)
+                self.assertNotIn(pool, discovered_pools)
             else:
-                self.assertTrue(pool in discovered_pools)
+                self.assertIn(pool, discovered_pools)
 
 
 class TestLBVipPollster(_BaseTestLBPollster):
@@ -280,9 +280,9 @@ class TestLBVipPollster(_BaseTestLBPollster):
         self.assertEqual(4, len(discovered_vips))
         for pool in self.fake_get_vips():
             if pool['status'] == 'error':
-                self.assertTrue(pool not in discovered_vips)
+                self.assertNotIn(pool, discovered_vips)
             else:
-                self.assertTrue(pool in discovered_vips)
+                self.assertIn(pool, discovered_vips)
 
 
 class TestLBMemberPollster(_BaseTestLBPollster):
@@ -374,9 +374,9 @@ class TestLBMemberPollster(_BaseTestLBPollster):
         self.assertEqual(4, len(discovered_members))
         for pool in self.fake_get_members():
             if pool['status'] == 'error':
-                self.assertTrue(pool not in discovered_members)
+                self.assertNotIn(pool, discovered_members)
             else:
-                self.assertTrue(pool in discovered_members)
+                self.assertIn(pool, discovered_members)
 
 
 class TestLBHealthProbePollster(_BaseTestLBPollster):
@@ -486,7 +486,7 @@ class TestLBStatsPollster(_BaseTestLBPollster):
     def test_lb_total_connections(self):
         self._check_get_samples(lbaas.LBTotalConnectionsPollster,
                                 'network.services.lb.total.connections',
-                                4L, 'gauge')
+                                4L, 'cumulative')
 
     def test_lb_active_connections(self):
         self._check_get_samples(lbaas.LBActiveConnectionsPollster,

@@ -24,10 +24,10 @@ import collections
 import six
 
 import ceilometer
-from ceilometer.compute import plugin
+from ceilometer.compute import pollsters
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -48,7 +48,7 @@ DiskRateData = collections.namedtuple('DiskRateData',
 
 
 @six.add_metaclass(abc.ABCMeta)
-class _Base(plugin.ComputePollster):
+class _Base(pollsters.BaseComputePollster):
 
     DISKIO_USAGE_MESSAGE = ' '.join(["DISKIO USAGE:",
                                      "%s %s:",
@@ -61,9 +61,9 @@ class _Base(plugin.ComputePollster):
 
     CACHE_KEY_DISK = 'diskio'
 
-    def _populate_cache(self, inspector, cache, instance, instance_name):
+    def _populate_cache(self, inspector, cache, instance):
         i_cache = cache.setdefault(self.CACHE_KEY_DISK, {})
-        if instance_name not in i_cache:
+        if instance.id not in i_cache:
             r_bytes = 0
             r_requests = 0
             w_bytes = 0
@@ -72,7 +72,7 @@ class _Base(plugin.ComputePollster):
             per_device_read_requests = {}
             per_device_write_bytes = {}
             per_device_write_requests = {}
-            for disk, info in inspector.inspect_disks(instance_name):
+            for disk, info in inspector.inspect_disks(instance):
                 LOG.debug(self.DISKIO_USAGE_MESSAGE,
                           instance, disk.device, info.read_requests,
                           info.read_bytes, info.write_requests,
@@ -92,14 +92,14 @@ class _Base(plugin.ComputePollster):
                 'write_bytes': per_device_write_bytes,
                 'write_requests': per_device_write_requests,
             }
-            i_cache[instance_name] = DiskIOData(
+            i_cache[instance.id] = DiskIOData(
                 r_bytes=r_bytes,
                 r_requests=r_requests,
                 w_bytes=w_bytes,
                 w_requests=w_requests,
                 per_disk_requests=per_device_requests,
             )
-        return i_cache[instance_name]
+        return i_cache[instance.id]
 
     @abc.abstractmethod
     def _get_samples(instance, c_data):
@@ -110,10 +110,9 @@ class _Base(plugin.ComputePollster):
             instance_name = util.instance_name(instance)
             try:
                 c_data = self._populate_cache(
-                    manager.inspector,
+                    self.inspector,
                     cache,
                     instance,
-                    instance_name,
                 )
                 for s in self._get_samples(instance, c_data):
                     yield s
@@ -124,7 +123,7 @@ class _Base(plugin.ComputePollster):
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '
                             ' %(pollster)s'),
-                          {'inspector': manager.inspector.__class__.__name__,
+                          {'inspector': self.inspector.__class__.__name__,
                            'pollster': self.__class__.__name__})
             except Exception as err:
                 LOG.exception(_('Ignoring instance %(name)s: %(error)s'),
@@ -264,7 +263,7 @@ class PerDeviceWriteBytesPollster(_Base):
 
 
 @six.add_metaclass(abc.ABCMeta)
-class _DiskRatesPollsterBase(plugin.ComputePollster):
+class _DiskRatesPollsterBase(pollsters.BaseComputePollster):
 
     CACHE_KEY_DISK_RATE = 'diskio-rate'
 
@@ -316,7 +315,7 @@ class _DiskRatesPollsterBase(plugin.ComputePollster):
         for instance in resources:
             try:
                 disk_rates_info = self._populate_cache(
-                    manager.inspector,
+                    self.inspector,
                     cache,
                     instance,
                 )
@@ -329,7 +328,7 @@ class _DiskRatesPollsterBase(plugin.ComputePollster):
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '
                             ' %(pollster)s'),
-                          {'inspector': manager.inspector.__class__.__name__,
+                          {'inspector': self.inspector.__class__.__name__,
                            'pollster': self.__class__.__name__})
             except Exception as err:
                 instance_name = util.instance_name(instance)

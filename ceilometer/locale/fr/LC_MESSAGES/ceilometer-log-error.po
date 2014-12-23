@@ -4,13 +4,14 @@
 #
 # Translators:
 # Frédéric <frosmont@free.fr>, 2014
+# Maxime COQUEREL <max.coquerel@gmail.com>, 2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Ceilometer\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2014-09-09 06:08+0000\n"
-"PO-Revision-Date: 2014-09-02 00:36+0000\n"
-"Last-Translator: openstackjenkins <jenkins@openstack.org>\n"
+"POT-Creation-Date: 2014-10-28 06:10+0000\n"
+"PO-Revision-Date: 2014-10-27 20:50+0000\n"
+"Last-Translator: Maxime COQUEREL <max.coquerel@gmail.com>\n"
 "Language-Team: French (http://www.transifex.com/projects/p/ceilometer/"
 "language/fr/)\n"
 "Language: fr\n"
@@ -26,7 +27,7 @@ msgstr ""
 
 #: ceilometer/coordination.py:76
 msgid "Error connecting to coordination backend."
-msgstr ""
+msgstr "Erreur de connexion à la coordination du backend ."
 
 #: ceilometer/coordination.py:89
 msgid "Error sending a heartbeat to coordination backend."
@@ -36,21 +37,6 @@ msgstr ""
 msgid "Error getting group membership info from coordination backend."
 msgstr ""
 
-#: ceilometer/openstack/common/excutils.py:76
-#, python-format
-msgid "Original exception being dropped: %s"
-msgstr "Exception d'origine en cours de suppression : %s"
-
-#: ceilometer/openstack/common/excutils.py:105
-#, python-format
-msgid "Unexpected exception occurred %d time(s)... retrying."
-msgstr "Exception inattendue survenue %d fois... Nouvel essai."
-
-#: ceilometer/openstack/common/lockutils.py:117
-#, python-format
-msgid "Could not release the acquired lock `%s`"
-msgstr "Impossible de libérer le verrou acquis `%s`"
-
 #: ceilometer/openstack/common/loopingcall.py:95
 msgid "in fixed duration looping call"
 msgstr "dans l'appel en boucle de durée fixe"
@@ -59,25 +45,17 @@ msgstr "dans l'appel en boucle de durée fixe"
 msgid "in dynamic looping call"
 msgstr "dans l'appel en boucle dynamique"
 
-#: ceilometer/openstack/common/policy.py:508
+#: ceilometer/openstack/common/policy.py:535
+#: ceilometer/openstack/common/policy.py:815
 #, python-format
 msgid "Failed to understand rule %s"
 msgstr "Règle %s incompréhensible"
 
-#: ceilometer/openstack/common/policy.py:518
+#: ceilometer/openstack/common/policy.py:545
 #, python-format
 msgid "No handler for matches of kind %s"
 msgstr "Aucun gestionnaire pour les correspondances de type %s"
 
-#: ceilometer/openstack/common/policy.py:788
-#, python-format
-msgid "Failed to understand rule %r"
-msgstr "Règle %r incompréhensible"
-
-#: ceilometer/openstack/common/service.py:188
-msgid "Exception during rpc cleanup."
-msgstr "Exception pendant le nettoyage rpc."
-
-#: ceilometer/openstack/common/service.py:277
+#: ceilometer/openstack/common/service.py:269
 msgid "Unhandled exception"
 msgstr "Exception non gérée"

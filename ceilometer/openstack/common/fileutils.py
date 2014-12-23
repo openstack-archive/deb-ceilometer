@@ -15,11 +15,11 @@
 
 import contextlib
 import errno
+import logging
 import os
 import tempfile
 
-from ceilometer.openstack.common import excutils
-from ceilometer.openstack.common import log as logging
+from oslo.utils import excutils
 
 LOG = logging.getLogger(__name__)
 

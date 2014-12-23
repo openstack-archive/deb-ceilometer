@@ -163,10 +163,28 @@ class TestNotification(tests_base.BaseTestCase):
         event_endpoint = self.srv.listeners[0].dispatcher.endpoints[0]
         self.assertEqual(1, len(list(event_endpoint.dispatcher_manager)))
 
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
+    @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start',
+                       mock.MagicMock())
+    @mock.patch('ceilometer.event.endpoint.EventsNotificationEndpoint')
+    def test_unique_consumers(self, fake_event_endpoint_class):
 
-class TestRealNotification(tests_base.BaseTestCase):
+        def fake_get_notifications_manager_dup_targets(pm):
+            plugin = instance.Instance(pm)
+            return extension.ExtensionManager.make_test_instance(
+                [extension.Extension('test', None, None, plugin),
+                 extension.Extension('test', None, None, plugin)])
+
+        with mock.patch.object(self.srv,
+                               '_get_notifications_manager') as get_nm:
+            get_nm.side_effect = fake_get_notifications_manager_dup_targets
+            self.srv.start()
+            self.assertEqual(1, len(self.srv.listeners[0].dispatcher.targets))
+
+
+class BaseRealNotification(tests_base.BaseTestCase):
     def setUp(self):
-        super(TestRealNotification, self).setUp()
+        super(BaseRealNotification, self).setUp()
         self.CONF = self.useFixture(fixture_config.Config()).conf
         self.setup_messaging(self.CONF, 'nova')
 
@@ -184,12 +202,9 @@ class TestRealNotification(tests_base.BaseTestCase):
                                                         prefix="pipeline",
                                                         suffix="yaml")
         self.CONF.set_override("pipeline_cfg_file", pipeline_cfg_file)
-        self.srv = notification.NotificationService()
         self.publisher = test_publisher.TestPublisher("")
 
-    @mock.patch('ceilometer.publisher.test.TestPublisher')
-    def test_notification_service(self, fake_publisher_cls):
-        fake_publisher_cls.return_value = self.publisher
+    def _check_notification_service(self):
         self.srv.start()
 
         notifier = messaging.get_notifier(self.transport,
@@ -207,3 +222,43 @@ class TestRealNotification(tests_base.BaseTestCase):
         resources = list(set(s.resource_id for s in self.publisher.samples))
         self.assertEqual(self.expected_samples, len(self.publisher.samples))
         self.assertEqual(["9f9d01b9-4a58-4271-9e27-398b21ab20d1"], resources)
+
+
+class TestRealNotification(BaseRealNotification):
+
+    def setUp(self):
+        super(TestRealNotification, self).setUp()
+        self.srv = notification.NotificationService()
+
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_notification_service(self, fake_publisher_cls):
+        fake_publisher_cls.return_value = self.publisher
+        self._check_notification_service()
+
+    @mock.patch('ceilometer.coordination.PartitionCoordinator')
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_ha_configured_agent_coord_disabled(self, fake_publisher_cls,
+                                                fake_coord):
+        fake_publisher_cls.return_value = self.publisher
+        fake_coord1 = mock.MagicMock()
+        fake_coord1.extract_my_subset.side_effect = lambda x, y: y
+        fake_coord.return_value = fake_coord1
+        self._check_notification_service()
+
+
+class TestRealNotificationHA(BaseRealNotification):
+
+    def setUp(self):
+        super(TestRealNotificationHA, self).setUp()
+        self.CONF.set_override('workload_partitioning', True,
+                               group='notification')
+        self.srv = notification.NotificationService()
+
+    @mock.patch('ceilometer.coordination.PartitionCoordinator')
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_notification_service(self, fake_publisher_cls, fake_coord):
+        fake_publisher_cls.return_value = self.publisher
+        fake_coord1 = mock.MagicMock()
+        fake_coord1.extract_my_subset.side_effect = lambda x, y: y
+        fake_coord.return_value = fake_coord1
+        self._check_notification_service()

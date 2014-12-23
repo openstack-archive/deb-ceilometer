@@ -18,8 +18,9 @@ import json
 
 import bson.json_util
 from happybase.hbase import ttypes
+import six
 
-from ceilometer.openstack.common.gettextutils import _
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import utils
 
@@ -64,10 +65,10 @@ def make_events_query_from_filter(event_filter):
     Query is based on the selected parameter.
     :param event_filter: storage.EventFilter object.
     """
-    start = "%s" % (timestamp(event_filter.start_time, reverse=False)
-                    if event_filter.start_time else "")
-    stop = "%s" % (timestamp(event_filter.end_time, reverse=False)
-                   if event_filter.end_time else "")
+    start = "%s" % (timestamp(event_filter.start_timestamp, reverse=False)
+                    if event_filter.start_timestamp else "")
+    stop = "%s" % (timestamp(event_filter.end_timestamp, reverse=False)
+                   if event_filter.end_timestamp else "")
     kwargs = {'event_type': event_filter.event_type,
               'event_id': event_filter.message_id}
     res_q = make_query(**kwargs)
@@ -147,9 +148,9 @@ def make_query(metaquery=None, trait_query=None, **kwargs):
         for k, v in kwargs.items():
             if v is not None:
                 res_q = ("SingleColumnValueFilter "
-                         "('f', '%s+%d', %s, 'binary:%s', true, true)" %
-                         (trait_name, EVENT_TRAIT_TYPES[k], OP_SIGN[op],
-                          dump(v)))
+                         "('f', '%s', %s, 'binary:%s', true, true)" %
+                         (prepare_key(trait_name, EVENT_TRAIT_TYPES[k]),
+                          OP_SIGN[op], dump(v)))
         return res_q
 
     # Note: we use extended constructor for SingleColumnValueFilter here.
@@ -164,11 +165,11 @@ def make_query(metaquery=None, trait_query=None, **kwargs):
             elif key == 'trait_type':
                 q.append("ColumnPrefixFilter('%s')" % value)
             elif key == 'event_id':
-                q.append("RowFilter ( = , 'regexstring:\d*_%s')" % value)
+                q.append("RowFilter ( = , 'regexstring:\d*:%s')" % value)
             else:
                 q.append("SingleColumnValueFilter "
                          "('f', '%s', =, 'binary:%s', true, true)" %
-                         (key, dump(value)))
+                         (quote(key), dump(value)))
     res_q = None
     if len(q):
         res_q = " AND ".join(q)
@@ -239,8 +240,10 @@ def make_sample_query_from_filter(sample_filter, require_meter=True):
         raise RuntimeError('Missing required meter specifier')
     start_row, end_row, ts_query = make_timestamp_query(
         make_general_rowkey_scan,
-        start=sample_filter.start, start_op=sample_filter.start_timestamp_op,
-        end=sample_filter.end, end_op=sample_filter.end_timestamp_op,
+        start=sample_filter.start_timestamp,
+        start_op=sample_filter.start_timestamp_op,
+        end=sample_filter.end_timestamp,
+        end_op=sample_filter.end_timestamp_op,
         some_id=meter)
     kwargs = dict(user_id=sample_filter.user,
                   project_id=sample_filter.project,
@@ -256,7 +259,8 @@ def make_sample_query_from_filter(sample_filter, require_meter=True):
     else:
         res_q = ts_query if ts_query else None
 
-    need_timestamp = (sample_filter.start or sample_filter.end) is not None
+    need_timestamp = (sample_filter.start_timestamp or
+                      sample_filter.end_timestamp) is not None
     columns = get_meter_columns(metaquery=sample_filter.metaquery,
                                 need_timestamp=need_timestamp, **kwargs)
     return res_q, start_row, end_row, columns
@@ -281,11 +285,13 @@ def make_meter_query_for_resource(start_timestamp, start_timestamp_op,
     end_op = end_timestamp_op or 'lt'
 
     if start_rts:
-        filter_value = start_rts + '+' + source if source else start_rts
+        filter_value = (start_rts + ':' + quote(source) if source
+                        else start_rts)
         mq.append(_QualifierFilter(OP_SIGN_REV[start_op], filter_value))
 
     if end_rts:
-        filter_value = end_rts + '+' + source if source else end_rts
+        filter_value = (end_rts + ':' + quote(source) if source
+                        else end_rts)
         mq.append(_QualifierFilter(OP_SIGN_REV[end_op], filter_value))
 
     if mq:
@@ -307,16 +313,29 @@ def make_general_rowkey_scan(rts_start=None, rts_end=None, some_id=None):
     if some_id is None:
         return None, None
     if not rts_start:
-        rts_start = chr(127)
-    end_row = "%s_%s" % (some_id, rts_start)
-    start_row = "%s_%s" % (some_id, rts_end)
+        # NOTE(idegtiarov): Here we could not use chr > 122 because chr >= 123
+        # will be quoted and character will be turn in a composition that is
+        # started with '%' (chr(37)) that lexicographically is less then chr
+        # of number
+        rts_start = chr(122)
+    end_row = prepare_key(some_id, rts_start)
+    start_row = prepare_key(some_id, rts_end)
 
     return start_row, end_row
 
 
-def format_meter_reference(c_name, c_type, c_unit, rts, source):
-    """Format reference to meter data."""
-    return "%s+%s+%s!%s!%s" % (rts, source, c_name, c_type, c_unit)
+def prepare_key(*args):
+    """Prepares names for rows and columns with correct separator.
+
+    :param args: strings or numbers that we want our key construct of
+    :return: key with quoted args that are separated with character ":"
+    """
+    key_quote = []
+    for key in args:
+        if isinstance(key, six.integer_types):
+            key = str(key)
+        key_quote.append(quote(key))
+    return ":".join(key_quote)
 
 
 def timestamp_from_record_tuple(record):
@@ -348,14 +367,19 @@ def deserialize_entry(entry, get_raw_meta=True):
     metadata_flattened = {}
     for k, v in entry.items():
         if k.startswith('f:s_'):
-            sources.append(k[4:])
+            sources.append(decode_unicode(k[4:]))
         elif k.startswith('f:r_metadata.'):
-            metadata_flattened[k[len('f:r_metadata.'):]] = load(v)
+            qualifier = decode_unicode(k[len('f:r_metadata.'):])
+            metadata_flattened[qualifier] = load(v)
         elif k.startswith("f:m_"):
-            meter = (k[4:], load(v))
+            meter = ([unquote(i) for i in k[4:].split(':')], load(v))
             meters.append(meter)
         else:
-            flatten_result[k[2:]] = load(v)
+            if ':' in k[2:]:
+                key = tuple([unquote(i) for i in k[2:].split(':')])
+            else:
+                key = unquote(k[2:])
+            flatten_result[key] = load(v)
     if get_raw_meta:
         metadata = flatten_result.get('resource_metadata', {})
     else:
@@ -382,20 +406,23 @@ def serialize_entry(data=None, **kwargs):
             # To make insertion safe we need to store all meters and sources in
             # a separate cell. For this purpose s_ and m_ prefixes are
             # introduced.
-                result['f:s_%s' % v] = dump('1')
+            qualifier = encode_unicode('f:s_%s' % v)
+            result[qualifier] = dump('1')
         elif k == 'meter':
             for meter, ts in v.items():
-                result['f:m_%s' % meter] = dump(ts)
+                qualifier = encode_unicode('f:m_%s' % meter)
+                result[qualifier] = dump(ts)
         elif k == 'resource_metadata':
             # keep raw metadata as well as flattened to provide
             # capability with API v2. It will be flattened in another
             # way on API level. But we need flattened too for quick filtering.
             flattened_meta = dump_metadata(v)
-            for k, m in flattened_meta.items():
-                result['f:r_metadata.' + k] = dump(m)
+            for key, m in flattened_meta.items():
+                metadata_qualifier = encode_unicode('f:r_metadata.' + key)
+                result[metadata_qualifier] = dump(m)
             result['f:resource_metadata'] = dump(v)
         else:
-            result['f:' + k] = dump(v)
+            result['f:' + quote(k, ':')] = dump(v)
     return result
 
 
@@ -412,6 +439,14 @@ def dump(data):
 
 def load(data):
     return json.loads(data, object_hook=object_hook)
+
+
+def encode_unicode(data):
+    return data.encode('utf-8') if isinstance(data, six.text_type) else data
+
+
+def decode_unicode(data):
+    return data.decode('utf-8') if isinstance(data, six.string_types) else data
 
 
 # We don't want to have tzinfo in decoded json.This object_hook is
@@ -439,3 +474,22 @@ def create_tables(conn, tables, column_families):
             LOG.warn(_("Cannot create table %(table_name)s   "
                        "it already exists. Ignoring error")
                      % {'table_name': table})
+
+
+def quote(s, *args):
+    """Return quoted string even if it is unicode one.
+
+    :param s: string that should be quoted
+    :param args: any symbol we want to stay unquoted
+    """
+    s_en = s.encode('utf8')
+    return six.moves.urllib.parse.quote(s_en, *args)
+
+
+def unquote(s):
+    """Return unquoted and decoded string.
+
+    :param s: string that should be unquoted
+    """
+    s_de = six.moves.urllib.parse.unquote(s)
+    return s_de.decode('utf8')

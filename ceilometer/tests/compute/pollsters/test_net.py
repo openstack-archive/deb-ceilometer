@@ -19,7 +19,7 @@
 
 import mock
 
-from ceilometer.compute import manager
+from ceilometer.agent import manager
 from ceilometer.compute.pollsters import net
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer import sample
@@ -215,7 +215,7 @@ class TestNetPollsterCache(base.TestPollsterBase):
         pollster = factory()
         cache = {
             pollster.CACHE_KEY_VNIC: {
-                self.instance.name: vnics,
+                self.instance.id: vnics,
             },
         }
         samples = list(pollster.get_samples(mgr, cache, [self.instance]))

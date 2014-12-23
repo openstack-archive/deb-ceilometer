@@ -17,21 +17,21 @@
 from oslo.config import cfg
 import oslo.messaging
 
-from ceilometer import plugin
+from ceilometer.agent import plugin_base
 from ceilometer import sample
 
 
 OPTS = [
     cfg.StrOpt('sahara_control_exchange',
                default='sahara',
-               help="Exchange name for Data Processing notifications"),
+               help="Exchange name for Data Processing notifications."),
 ]
 
 cfg.CONF.register_opts(OPTS)
 SERVICE = 'sahara'
 
 
-class DataProcessing(plugin.NotificationBase):
+class DataProcessing(plugin_base.NotificationBase):
 
     resource_name = '%s.cluster' % SERVICE
 

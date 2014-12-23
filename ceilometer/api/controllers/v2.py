@@ -3,6 +3,7 @@
 # Copyright 2013 IBM Corp.
 # Copyright 2013 eNovance <licensing@enovance.com>
 # Copyright Ericsson AB 2013. All rights reserved
+# Copyright 2014 Hewlett-Packard Company
 #
 # Authors: Doug Hellmann <doug.hellmann@dreamhost.com>
 #          Angus Salkeld <asalkeld@redhat.com>
@@ -10,6 +11,7 @@
 #          Julien Danjou <julien@danjou.info>
 #          Ildiko Vancsa <ildiko.vancsa@ericsson.com>
 #          Balazs Gibizer <balazs.gibizer@ericsson.com>
+#          Fabio Giannetti <fabio.giannetti@hp.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -27,21 +29,21 @@
 import ast
 import base64
 import copy
-import croniter
 import datetime
 import functools
 import inspect
 import json
-import jsonschema
-import pytz
 import uuid
 
+import croniter
+import jsonschema
 from oslo.config import cfg
 from oslo.utils import netutils
 from oslo.utils import strutils
 from oslo.utils import timeutils
 import pecan
 from pecan import rest
+import pytz
 import six
 import wsme
 from wsme import types as wtypes
@@ -50,10 +52,11 @@ import wsmeext.pecan as wsme_pecan
 import ceilometer
 from ceilometer.alarm import service as alarm_service
 from ceilometer.alarm.storage import models as alarm_models
-from ceilometer.api import acl
+from ceilometer.api import rbac
+from ceilometer.event.storage import models as event_models
+from ceilometer.i18n import _
 from ceilometer import messaging
 from ceilometer.openstack.common import context
-from ceilometer.openstack.common.gettextutils import _
 from ceilometer.openstack.common import log
 from ceilometer import sample
 from ceilometer import storage
@@ -349,7 +352,7 @@ def _get_auth_project(on_behalf_of=None):
     # hence for null auth_project (indicating admin-ness) we check if
     # the creating tenant differs from the tenant on whose behalf the
     # alarm is being created
-    auth_project = acl.get_limited_to_project(pecan.request.headers)
+    auth_project = rbac.get_limited_to_project(pecan.request.headers)
     created_by = pecan.request.headers.get('X-Project-Id')
     is_admin = auth_project is None
 
@@ -385,7 +388,7 @@ def _sanitize_query(query, db_func, on_behalf_of=None):
 def _verify_query_segregation(query, auth_project=None):
     """Ensure non-admin queries are not constrained to another project."""
     auth_project = (auth_project or
-                    acl.get_limited_to_project(pecan.request.headers))
+                    rbac.get_limited_to_project(pecan.request.headers))
 
     if not auth_project:
         return
@@ -410,7 +413,7 @@ def _validate_query(query, db_func, internal_keys=None,
     :param allow_timestamps: defines whether the timestamp-based constraint is
         applicable for this query or not
 
-    :returns: None, if the query is valid
+    :returns: valid query keys the db_func supported
 
     :raises InvalidInput: if an operator is not supported for a given field
     :raises InvalidInput: if timestamp constraints are allowed, but
@@ -423,6 +426,15 @@ def _validate_query(query, db_func, internal_keys=None,
     _verify_query_segregation(query)
 
     valid_keys = inspect.getargspec(db_func)[0]
+    if 'alarm_type' in valid_keys:
+        valid_keys.remove('alarm_type')
+        valid_keys.append('type')
+
+    internal_timestamp_keys = ['end_timestamp', 'start_timestamp',
+                               'end_timestamp_op', 'start_timestamp_op']
+    if 'start_timestamp' in valid_keys:
+        internal_keys += internal_timestamp_keys
+        valid_keys += ['timestamp', 'search_offset']
     internal_keys.append('self')
     valid_keys = set(valid_keys) - set(internal_keys)
     translation = {'user_id': 'user',
@@ -465,6 +477,7 @@ def _validate_query(query, db_func, internal_keys=None,
                 msg = ("unrecognized field in query: %s, "
                        "valid keys: %s") % (query, sorted(valid_keys))
                 raise wsme.exc.UnknownArgument(key, msg)
+    return valid_keys
 
 
 def _validate_timestamp_fields(query, field_name, operator_list,
@@ -511,14 +524,13 @@ def _validate_timestamp_fields(query, field_name, operator_list,
 def _query_to_kwargs(query, db_func, internal_keys=None,
                      allow_timestamps=True):
     internal_keys = internal_keys or []
-    _validate_query(query, db_func, internal_keys=internal_keys,
-                    allow_timestamps=allow_timestamps)
+    valid_keys = _validate_query(query, db_func, internal_keys=internal_keys,
+                                 allow_timestamps=allow_timestamps)
     query = _sanitize_query(query, db_func)
-    internal_keys.append('self')
-    valid_keys = set(inspect.getargspec(db_func)[0]) - set(internal_keys)
     translation = {'user_id': 'user',
                    'project_id': 'project',
-                   'resource_id': 'resource'}
+                   'resource_id': 'resource',
+                   'type': 'alarm_type'}
     stamp = {}
     metaquery = {}
     kwargs = {}
@@ -547,18 +559,7 @@ def _query_to_kwargs(query, db_func, internal_keys=None,
     if metaquery and 'metaquery' in valid_keys:
         kwargs['metaquery'] = metaquery
     if stamp:
-        q_ts = _get_query_timestamps(stamp)
-        if 'start' in valid_keys:
-            kwargs['start'] = q_ts['query_start']
-            kwargs['end'] = q_ts['query_end']
-        elif 'start_timestamp' in valid_keys:
-            kwargs['start_timestamp'] = q_ts['query_start']
-            kwargs['end_timestamp'] = q_ts['query_end']
-        if 'start_timestamp_op' in stamp:
-            kwargs['start_timestamp_op'] = stamp['start_timestamp_op']
-        if 'end_timestamp_op' in stamp:
-            kwargs['end_timestamp_op'] = stamp['end_timestamp_op']
-
+        kwargs.update(_get_query_timestamps(stamp))
     return kwargs
 
 
@@ -567,9 +568,10 @@ def _validate_groupby_fields(groupby_fields):
 
     If all fields are valid, returns fields with duplicates removed.
     """
-    # NOTE(terriyu): Currently, metadata fields are not supported in our
-    # group by statistics implementation
-    valid_fields = set(['user_id', 'resource_id', 'project_id', 'source'])
+    # NOTE(terriyu): Currently, metadata fields are supported in our
+    # group by statistics implementation only for mongodb
+    valid_fields = set(['user_id', 'resource_id', 'project_id', 'source',
+                        'resource_metadata.instance_type'])
 
     invalid_fields = set(groupby_fields) - valid_fields
     if invalid_fields:
@@ -592,19 +594,14 @@ def _get_query_timestamps(args=None):
 
     Returns a dictionary containing:
 
-    query_start: First timestamp to use for query
-    start_timestamp: start_timestamp parameter from request
-    query_end: Final timestamp to use for query
-    end_timestamp: end_timestamp parameter from request
-    search_offset: search_offset parameter from request
+    start_timestamp: First timestamp to use for query
+    start_timestamp_op: First timestamp operator to use for query
+    end_timestamp: Final timestamp to use for query
+    end_timestamp_op: Final timestamp operator to use for query
     """
 
     if args is None:
-        return {'query_start': None,
-                'query_end': None,
-                'start_timestamp': None,
-                'end_timestamp': None,
-                'search_offset': 0}
+        return {}
     search_offset = int(args.get('search_offset', 0))
 
     def _parse_timestamp(timestamp):
@@ -618,20 +615,16 @@ def _get_query_timestamps(args=None):
                                         'invalid timestamp format')
         return iso_timestamp
 
-    start_timestamp = args.get('start_timestamp')
-    end_timestamp = args.get('end_timestamp')
-    start_timestamp = _parse_timestamp(start_timestamp)
-    end_timestamp = _parse_timestamp(end_timestamp)
-    query_start = start_timestamp - datetime.timedelta(
+    start_timestamp = _parse_timestamp(args.get('start_timestamp'))
+    end_timestamp = _parse_timestamp(args.get('end_timestamp'))
+    start_timestamp = start_timestamp - datetime.timedelta(
         minutes=search_offset) if start_timestamp else None
-    query_end = end_timestamp + datetime.timedelta(
+    end_timestamp = end_timestamp + datetime.timedelta(
         minutes=search_offset) if end_timestamp else None
-    return {'query_start': query_start,
-            'query_end': query_end,
-            'start_timestamp': start_timestamp,
+    return {'start_timestamp': start_timestamp,
             'end_timestamp': end_timestamp,
-            'search_offset': search_offset,
-            }
+            'start_timestamp_op': args.get('start_timestamp_op'),
+            'end_timestamp_op': args.get('end_timestamp_op')}
 
 
 def _flatten_metadata(metadata):
@@ -889,6 +882,9 @@ class MeterController(rest.RestController):
         :param q: Filter rules for the data to be returned.
         :param limit: Maximum number of samples to return.
         """
+
+        rbac.enforce('get_samples', pecan.request)
+
         q = q or []
         if limit and limit < 0:
             raise ClientSideError(_("Limit must be positive"))
@@ -905,8 +901,11 @@ class MeterController(rest.RestController):
 
         :param samples: a list of samples within the request body.
         """
+
+        rbac.enforce('create_samples', pecan.request)
+
         now = timeutils.utcnow()
-        auth_project = acl.get_limited_to_project(pecan.request.headers)
+        auth_project = rbac.get_limited_to_project(pecan.request.headers)
         def_source = pecan.request.cfg.sample_source
         def_project_id = pecan.request.headers.get('X-Project-Id')
         def_user_id = pecan.request.headers.get('X-User-Id')
@@ -969,6 +968,9 @@ class MeterController(rest.RestController):
                        period long of that number of seconds.
         :param aggregate: The selectable aggregation functions to be applied.
         """
+
+        rbac.enforce('compute_statistics', pecan.request)
+
         q = q or []
         groupby = groupby or []
         aggregate = aggregate or []
@@ -1069,6 +1071,9 @@ class MetersController(rest.RestController):
 
         :param q: Filter rules for the meters to be returned.
         """
+
+        rbac.enforce('get_meters', pecan.request)
+
         q = q or []
 
         # Timestamp field is not supported for Meter queries
@@ -1160,6 +1165,9 @@ class SamplesController(rest.RestController):
         :param q: Filter rules for the samples to be returned.
         :param limit: Maximum number of samples to be returned.
         """
+
+        rbac.enforce('get_samples', pecan.request)
+
         q = q or []
 
         if limit and limit < 0:
@@ -1171,10 +1179,13 @@ class SamplesController(rest.RestController):
 
     @wsme_pecan.wsexpose(Sample, wtypes.text)
     def get_one(self, sample_id):
-        """Return a sample
+        """Return a sample.
 
-        :param sample_id: the id of the sample
+        :param sample_id: the id of the sample.
         """
+
+        rbac.enforce('get_sample', pecan.request)
+
         f = storage.SampleFilter(message_id=sample_id)
 
         samples = list(pecan.request.storage_conn.get_samples(f))
@@ -1410,7 +1421,7 @@ class ValidatedComplexQuery(object):
         If the tenant is not admin insert an extra
         "and <visibility_field>=<tenant's project_id>" clause to the query.
         """
-        authorized_project = acl.get_limited_to_project(pecan.request.headers)
+        authorized_project = rbac.get_limited_to_project(pecan.request.headers)
         is_admin = authorized_project is None
         if not is_admin:
             self._restrict_to_project(authorized_project, visibility_field)
@@ -1546,7 +1557,10 @@ class ResourcesController(rest.RestController):
 
         :param resource_id: The UUID of the resource.
         """
-        authorized_project = acl.get_limited_to_project(pecan.request.headers)
+
+        rbac.enforce('get_resource', pecan.request)
+
+        authorized_project = rbac.get_limited_to_project(pecan.request.headers)
         resources = list(pecan.request.storage_conn.get_resources(
             resource=resource_id, project=authorized_project))
         if not resources:
@@ -1561,6 +1575,9 @@ class ResourcesController(rest.RestController):
         :param q: Filter rules for the resources to be returned.
         :param meter_links: option to include related meter links
         """
+
+        rbac.enforce('get_resources', pecan.request)
+
         q = q or []
         kwargs = _query_to_kwargs(q, pecan.request.storage_conn.get_resources)
         resources = [
@@ -1976,7 +1993,7 @@ class AlarmController(rest.RestController):
 
     def _alarm(self):
         self.conn = pecan.request.alarm_storage_conn
-        auth_project = acl.get_limited_to_project(pecan.request.headers)
+        auth_project = rbac.get_limited_to_project(pecan.request.headers)
         alarms = list(self.conn.get_alarms(alarm_id=self._id,
                                            project=auth_project))
         if not alarms:
@@ -2013,6 +2030,9 @@ class AlarmController(rest.RestController):
     @wsme_pecan.wsexpose(Alarm)
     def get(self):
         """Return this alarm."""
+
+        rbac.enforce('get_alarm', pecan.request)
+
         return Alarm.from_db_model(self._alarm())
 
     @wsme_pecan.wsexpose(Alarm, body=Alarm)
@@ -2021,13 +2041,16 @@ class AlarmController(rest.RestController):
 
         :param data: an alarm within the request body.
         """
+
+        rbac.enforce('change_alarm', pecan.request)
+
         # Ensure alarm exists
         alarm_in = self._alarm()
 
         now = timeutils.utcnow()
 
         data.alarm_id = self._id
-        user, project = acl.get_limited_to(pecan.request.headers)
+        user, project = rbac.get_limited_to(pecan.request.headers)
         if user:
             data.user_id = user
         elif data.user_id == wtypes.Unset:
@@ -2077,6 +2100,9 @@ class AlarmController(rest.RestController):
     @wsme_pecan.wsexpose(None, status_code=204)
     def delete(self):
         """Delete this alarm."""
+
+        rbac.enforce('delete_alarm', pecan.request)
+
         # ensure alarm exists before deleting
         alarm = self._alarm()
         self.conn.delete_alarm(alarm.alarm_id)
@@ -2093,11 +2119,14 @@ class AlarmController(rest.RestController):
 
         :param q: Filter rules for the changes to be described.
         """
+
+        rbac.enforce('alarm_history', pecan.request)
+
         q = q or []
         # allow history to be returned for deleted alarms, but scope changes
         # returned to those carried out on behalf of the auth'd tenant, to
         # avoid inappropriate cross-tenant visibility of alarm history
-        auth_project = acl.get_limited_to_project(pecan.request.headers)
+        auth_project = rbac.get_limited_to_project(pecan.request.headers)
         conn = pecan.request.alarm_storage_conn
         kwargs = _query_to_kwargs(q, conn.get_alarm_changes, ['on_behalf_of',
                                                               'alarm_id'])
@@ -2112,6 +2141,9 @@ class AlarmController(rest.RestController):
 
         :param state: an alarm state within the request body.
         """
+
+        rbac.enforce('change_alarm_state', pecan.request)
+
         # note(sileht): body are not validated by wsme
         # Workaround for https://bugs.launchpad.net/wsme/+bug/1227229
         if state not in state_kind:
@@ -2129,6 +2161,9 @@ class AlarmController(rest.RestController):
     @wsme_pecan.wsexpose(state_kind_enum)
     def get_state(self):
         """Get the state of this alarm."""
+
+        rbac.enforce('get_alarm_state', pecan.request)
+
         alarm = self._alarm()
         return alarm.state
 
@@ -2172,11 +2207,14 @@ class AlarmsController(rest.RestController):
 
         :param data: an alarm within the request body.
         """
+
+        rbac.enforce('create_alarm', pecan.request)
+
         conn = pecan.request.alarm_storage_conn
         now = timeutils.utcnow()
 
         data.alarm_id = str(uuid.uuid4())
-        user_limit, project_limit = acl.get_limited_to(pecan.request.headers)
+        user_limit, project_limit = rbac.get_limited_to(pecan.request.headers)
 
         def _set_ownership(aspect, owner_limitation, header):
             attr = '%s_id' % aspect
@@ -2227,6 +2265,9 @@ class AlarmsController(rest.RestController):
 
         :param q: Filter rules for the alarms to be returned.
         """
+
+        rbac.enforce('get_alarms', pecan.request)
+
         q = q or []
         # Timestamp is not supported field for Simple Alarm queries
         kwargs = _query_to_kwargs(q,
@@ -2289,9 +2330,9 @@ class Trait(_Base):
         if isinstance(trait, Trait):
             return trait
         value = (six.text_type(trait.value)
-                 if not trait.dtype == storage.models.Trait.DATETIME_TYPE
+                 if not trait.dtype == event_models.Trait.DATETIME_TYPE
                  else trait.value.isoformat())
-        trait_type = storage.models.Trait.get_name_by_type(trait.dtype)
+        trait_type = event_models.Trait.get_name_by_type(trait.dtype)
         return Trait(name=trait.name, type=trait_type, value=value)
 
     @classmethod
@@ -2341,11 +2382,16 @@ class Event(_Base):
         )
 
 
+# TODO(fabiog): this decorator should disappear and have a more unified
+# way of controlling access and scope. Before messing with this, though
+# I feel this file should be re-factored in smaller chunks one for each
+# controller (e.g. meters, alarms and so on ...). Right now its size is
+# overwhelming.
 def requires_admin(func):
 
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
-        usr_limit, proj_limit = acl.get_limited_to(pecan.request.headers)
+        usr_limit, proj_limit = rbac.get_limited_to(pecan.request.headers)
         # If User and Project are None, you have full access.
         if usr_limit and proj_limit:
             # since this decorator get's called out of wsme context
@@ -2362,8 +2408,8 @@ def _event_query_to_event_filter(q):
     evt_model_filter = {
         'event_type': None,
         'message_id': None,
-        'start_time': None,
-        'end_time': None
+        'start_timestamp': None,
+        'end_timestamp': None
     }
     traits_filter = []
 
@@ -2395,7 +2441,7 @@ class TraitsController(rest.RestController):
         """
         LOG.debug(_("Getting traits for %s") % event_type)
         return [Trait._convert_storage_trait(t)
-                for t in pecan.request.storage_conn
+                for t in pecan.request.event_storage_conn
                 .get_traits(event_type, trait_name)]
 
     @requires_admin
@@ -2405,10 +2451,10 @@ class TraitsController(rest.RestController):
 
         :param event_type: Event type to filter traits by
         """
-        get_trait_name = storage.models.Trait.get_name_by_type
+        get_trait_name = event_models.Trait.get_name_by_type
         return [TraitDescription(name=t['name'],
                                  type=get_trait_name(t['data_type']))
-                for t in pecan.request.storage_conn
+                for t in pecan.request.event_storage_conn
                 .get_trait_types(event_type)]
 
 
@@ -2425,7 +2471,7 @@ class EventTypesController(rest.RestController):
     @wsme_pecan.wsexpose([unicode])
     def get_all(self):
         """Get all event types."""
-        return list(pecan.request.storage_conn.get_event_types())
+        return list(pecan.request.event_storage_conn.get_event_types())
 
 
 class EventsController(rest.RestController):
@@ -2445,7 +2491,7 @@ class EventsController(rest.RestController):
                       generated=event.generated,
                       traits=event.traits)
                 for event in
-                pecan.request.storage_conn.get_events(event_filter)]
+                pecan.request.event_storage_conn.get_events(event_filter)]
 
     @requires_admin
     @wsme_pecan.wsexpose(Event, wtypes.text)
@@ -2456,7 +2502,7 @@ class EventsController(rest.RestController):
         """
         event_filter = storage.EventFilter(message_id=message_id)
         events = [event for event
-                  in pecan.request.storage_conn.get_events(event_filter)]
+                  in pecan.request.event_storage_conn.get_events(event_filter)]
         if not events:
             raise EntityNotFound(_("Event"), message_id)
 
@@ -2481,6 +2527,9 @@ class QuerySamplesController(rest.RestController):
 
         :param body: Query rules for the samples to be returned.
         """
+
+        rbac.enforce('query_sample', pecan.request)
+
         sample_name_mapping = {"resource": "resource_id",
                                "meter": "counter_name",
                                "type": "counter_type",
@@ -2507,6 +2556,9 @@ class QueryAlarmHistoryController(rest.RestController):
 
         :param body: Query rules for the alarm history to be returned.
         """
+
+        rbac.enforce('query_alarm_history', pecan.request)
+
         query = ValidatedComplexQuery(body,
                                       alarm_models.AlarmChange)
         query.validate(visibility_field="on_behalf_of")
@@ -2527,6 +2579,9 @@ class QueryAlarmsController(rest.RestController):
 
         :param body: Query rules for the alarms to be returned.
         """
+
+        rbac.enforce('query_alarm', pecan.request)
+
         query = ValidatedComplexQuery(body,
                                       alarm_models.Alarm)
         query.validate(visibility_field="project_id")
@@ -2558,7 +2613,9 @@ class Capabilities(_Base):
     storage = {wtypes.text: bool}
     "A flattened dictionary of storage capabilities"
     alarm_storage = {wtypes.text: bool}
-    "A flattened dictionary of storage capabilities"
+    "A flattened dictionary of alarm storage capabilities"
+    event_storage = {wtypes.text: bool}
+    "A flattened dictionary of event storage capabilities"
 
     @classmethod
     def sample(cls):
@@ -2598,8 +2655,12 @@ class Capabilities(_Base):
                                                  'complex': True}}},
                 'events': {'query': {'simple': True}},
             }),
-            storage=_flatten_capabilities({'production_ready': True}),
-            alarm_storage=_flatten_capabilities({'production_ready': True}),
+            storage=_flatten_capabilities(
+                {'storage': {'production_ready': True}}),
+            alarm_storage=_flatten_capabilities(
+                {'storage': {'production_ready': True}}),
+            event_storage=_flatten_capabilities(
+                {'storage': {'production_ready': True}}),
         )
 
 
@@ -2616,14 +2677,19 @@ class CapabilitiesController(rest.RestController):
         # the lack of strict feature parity across storage drivers
         conn = pecan.request.storage_conn
         alarm_conn = pecan.request.alarm_storage_conn
+        event_conn = pecan.request.event_storage_conn
         driver_capabilities = conn.get_capabilities().copy()
         driver_capabilities['alarms'] = alarm_conn.get_capabilities()['alarms']
+        driver_capabilities['events'] = event_conn.get_capabilities()['events']
         driver_perf = conn.get_storage_capabilities()
         alarm_driver_perf = alarm_conn.get_storage_capabilities()
+        event_driver_perf = event_conn.get_storage_capabilities()
         return Capabilities(api=_flatten_capabilities(driver_capabilities),
                             storage=_flatten_capabilities(driver_perf),
                             alarm_storage=_flatten_capabilities(
-                                alarm_driver_perf))
+                                alarm_driver_perf),
+                            event_storage=_flatten_capabilities(
+                                event_driver_perf))
 
 
 class V2Controller(object):

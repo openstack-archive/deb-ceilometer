@@ -35,6 +35,7 @@ import pymongo
 import six
 
 import ceilometer
+from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import storage
 from ceilometer.storage import base
@@ -87,13 +88,6 @@ class Connection(pymongo_base.Connection):
     CAPABILITIES = utils.update_nested(pymongo_base.Connection.CAPABILITIES,
                                        AVAILABLE_CAPABILITIES)
     CONNECTION_POOL = pymongo_utils.ConnectionPool()
-
-    REDUCE_GROUP_CLEAN = bson.code.Code("""
-    function ( curr, result ) {
-        if (result.resources.indexOf(curr.resource_id) < 0)
-            result.resources.push(curr.resource_id);
-    }
-    """)
 
     STANDARD_AGGREGATES = dict(
         emit_initial=dict(
@@ -248,10 +242,17 @@ class Connection(pymongo_base.Connection):
         var groupby_fields = %(groupby_fields)s;
         var groupby = {};
         var groupby_key = {};
-
         for ( var i=0; i<groupby_fields.length; i++ ) {
+        if (groupby_fields[i].search("resource_metadata") != -1) {
+            var key = "resource_metadata";
+            var j = groupby_fields[i].indexOf('.');
+            var value = groupby_fields[i].slice(j+1, groupby_fields[i].length);
+            groupby[groupby_fields[i]] = this[key][value];
+            groupby_key[groupby_fields[i]] = this[key][value];
+        } else {
             groupby[groupby_fields[i]] = this[groupby_fields[i]]
             groupby_key[groupby_fields[i]] = this[groupby_fields[i]]
+            }
         }
     """
 
@@ -390,7 +391,7 @@ class Connection(pymongo_base.Connection):
 
         # NOTE(jd) Use our own connection pooling on top of the Pymongo one.
         # We need that otherwise we overflow the MongoDB instance with new
-        # connection since we instanciate a Pymongo client each time someone
+        # connection since we instantiate a Pymongo client each time someone
         # requires a new storage connection.
         self.conn = self.CONNECTION_POOL.connect(url)
 
@@ -405,9 +406,34 @@ class Connection(pymongo_base.Connection):
                                  connection_options['password'])
 
         # NOTE(jd) Upgrading is just about creating index, so let's do this
-        # on connection to be sure at least the TTL is correcly updated if
+        # on connection to be sure at least the TTL is correctly updated if
         # needed.
         self.upgrade()
+
+    @staticmethod
+    def update_ttl(ttl_index_name, index_field, coll):
+        """Update or ensure time_to_live indexes.
+
+        :param ttl_index_name: name of the index we want to update or ensure.
+        :param index_field: field with the index that we need to update.
+        :param coll: collection which indexes need to be updated.
+        """
+        ttl = cfg.CONF.database.time_to_live
+        indexes = coll.index_information()
+        if ttl <= 0:
+            if ttl_index_name in indexes:
+                coll.drop_index(ttl_index_name)
+            return
+
+        if ttl_index_name in indexes:
+            return coll.database.command(
+                'collMod', coll.name,
+                index={'keyPattern': {index_field: pymongo.ASCENDING},
+                       'expireAfterSeconds': ttl})
+
+        coll.ensure_index([(index_field, pymongo.ASCENDING)],
+                          expireAfterSeconds=ttl,
+                          name=ttl_index_name)
 
     def upgrade(self):
         # Establish indexes
@@ -445,32 +471,13 @@ class Connection(pymongo_base.Connection):
         self.db.user.drop()
         self.db.project.drop()
 
-        indexes = self.db.meter.index_information()
-
-        ttl = cfg.CONF.database.time_to_live
-
-        if ttl <= 0:
-            if 'meter_ttl' in indexes:
-                self.db.meter.drop_index('meter_ttl')
-            return
-
-        if 'meter_ttl' in indexes:
-            # NOTE(sileht): manually check expireAfterSeconds because
-            # ensure_index doesn't update index options if the index already
-            # exists
-            if ttl == indexes['meter_ttl'].get('expireAfterSeconds', -1):
-                return
-
-            self.db.meter.drop_index('meter_ttl')
-
-        self.db.meter.create_index(
-            [('timestamp', pymongo.ASCENDING)],
-            expireAfterSeconds=ttl,
-            name='meter_ttl'
-        )
+        # update or ensure time_to_live index
+        self.update_ttl('meter_ttl', 'timestamp', self.db.meter)
+        self.update_ttl('resource_ttl', 'last_sample_timestamp',
+                        self.db.resource)
 
     def clear(self):
-        self.conn.drop_database(self.db)
+        self.conn.drop_database(self.db.name)
         # Connection will be reopened automatically if needed
         self.conn.close()
 
@@ -484,6 +491,9 @@ class Connection(pymongo_base.Connection):
         # unconditionally insert sample timestamps and resource metadata
         # (in the update case, this must be conditional on the sample not
         # being out-of-order)
+        data = copy.deepcopy(data)
+        data['resource_metadata'] = pymongo_utils.improve_keys(
+            data.pop('resource_metadata'))
         resource = self.db.resource.find_and_modify(
             {'_id': data['resource_id']},
             {'$set': {'project_id': data['project_id'],
@@ -538,19 +548,10 @@ class Connection(pymongo_base.Connection):
     def clear_expired_metering_data(self, ttl):
         """Clear expired data from the backend storage system.
 
-        Clearing occurs according to the time-to-live.
-        :param ttl: Number of seconds to keep records for.
+        Clearing occurs with native MongoDB time-to-live feature.
         """
-        results = self.db.meter.group(
-            key={},
-            condition={},
-            reduce=self.REDUCE_GROUP_CLEAN,
-            initial={
-                'resources': [],
-            }
-        )[0]
-
-        self.db.resource.remove({'_id': {'$nin': results['resources']}})
+        LOG.debug(_("Clearing expired metering data is based on native "
+                    "MongoDB time to live feature and going in background."))
 
     @staticmethod
     def _get_marker(db_collection, marker_pairs):
@@ -739,7 +740,7 @@ class Connection(pymongo_base.Connection):
                     first_sample_timestamp=resource['first_timestamp'],
                     last_sample_timestamp=resource['last_timestamp'],
                     source=resource['source'],
-                    metadata=resource['metadata'])
+                    metadata=pymongo_utils.unquote_keys(resource['metadata']))
         finally:
             self.db[out].drop()
 
@@ -772,7 +773,7 @@ class Connection(pymongo_base.Connection):
                 last_sample_timestamp=r.get('last_sample_timestamp',
                                             self._APOCALYPSE),
                 source=r['source'],
-                metadata=r['metadata'])
+                metadata=pymongo_utils.unquote_keys(r['metadata']))
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
@@ -794,7 +795,7 @@ class Connection(pymongo_base.Connection):
         if pagination:
             raise ceilometer.NotImplementedError('Pagination not implemented')
 
-        metaquery = metaquery or {}
+        metaquery = pymongo_utils.improve_keys(metaquery, metaquery=True) or {}
 
         query = {}
         if user is not None:
@@ -851,17 +852,17 @@ class Connection(pymongo_base.Connection):
         Items are containing meter statistics described by the query
         parameters. The filter must have a meter value set.
         """
-        if (groupby and
-                set(groupby) - set(['user_id', 'project_id',
-                                    'resource_id', 'source'])):
+        if (groupby and set(groupby) -
+            set(['user_id', 'project_id', 'resource_id', 'source',
+                 'resource_metadata.instance_type'])):
             raise ceilometer.NotImplementedError(
                 "Unable to group by these fields")
 
         q = pymongo_utils.make_query_from_filter(sample_filter)
 
         if period:
-            if sample_filter.start:
-                period_start = sample_filter.start
+            if sample_filter.start_timestamp:
+                period_start = sample_filter.start_timestamp
             else:
                 period_start = self.db.meter.find(
                     limit=1, sort=[('timestamp',

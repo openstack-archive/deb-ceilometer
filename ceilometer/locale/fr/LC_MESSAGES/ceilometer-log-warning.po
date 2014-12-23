@@ -4,13 +4,14 @@
 #
 # Translators:
 # Frédéric <frosmont@free.fr>, 2014
+# Maxime COQUEREL <max.coquerel@gmail.com>, 2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Ceilometer\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2014-09-24 06:05+0000\n"
-"PO-Revision-Date: 2014-07-17 07:01+0000\n"
-"Last-Translator: Frédéric <frosmont@free.fr>\n"
+"POT-Creation-Date: 2014-10-28 06:10+0000\n"
+"PO-Revision-Date: 2014-10-27 09:51+0000\n"
+"Last-Translator: openstackjenkins <jenkins@openstack.org>\n"
 "Language-Team: French (http://www.transifex.com/projects/p/ceilometer/"
 "language/fr/)\n"
 "Language: fr\n"
@@ -23,14 +24,21 @@ msgstr ""
 #: ceilometer/central/discovery.py:46
 #, python-format
 msgid "No endpoints found for service %s"
-msgstr ""
+msgstr "Pas endpoints trouvé pour le service %s"
 
 #: ceilometer/openstack/common/loopingcall.py:87
 #, python-format
 msgid "task %(func_name)s run outlasted interval by %(delay).2f sec"
 msgstr ""
+"L'exécution de la tâche %(func_name)s a dépassé intervalle de %(delay).2f "
+"secondes "
 
-#: ceilometer/openstack/common/service.py:364
+#: ceilometer/openstack/common/policy.py:248
+#, python-format
+msgid "Can not find policy directories %s"
+msgstr "Ne peut trouver les répertoires de la politique %s"
+
+#: ceilometer/openstack/common/service.py:356
 #, python-format
 msgid "pid %d not in child list"
 msgstr "PID %d absent de la liste d'enfants"

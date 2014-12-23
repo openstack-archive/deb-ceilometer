@@ -64,6 +64,15 @@ class TestDeprecatedPipeline(pipeline_base.BasePipelineTestCase):
             'publishers': ['except'],
         })
 
+    def _dup_pipeline_name_cfg(self):
+        self.pipeline_cfg.append({
+            'name': 'test_pipeline',
+            'interval': 5,
+            'counters': ['b'],
+            'transformers': [],
+            'publishers': ['except'],
+        })
+
     def _set_pipeline_cfg(self, field, value):
         self.pipeline_cfg[0][field] = value
 
@@ -94,6 +103,20 @@ class TestDeprecatedPipeline(pipeline_base.BasePipelineTestCase):
 
     def test_rate_of_change_boilerplate_disk_write_cfg(self):
         meters = ('disk.write.bytes', 'disk.write.requests')
+        units = ('B', 'request')
+        self._do_test_rate_of_change_in_boilerplate_pipeline_cfg(2,
+                                                                 meters,
+                                                                 units)
+
+    def test_rate_of_change_boilerplate_per_disk_device_read_cfg(self):
+        meters = ('disk.device.read.bytes', 'disk.device.read.requests')
+        units = ('B', 'request')
+        self._do_test_rate_of_change_in_boilerplate_pipeline_cfg(2,
+                                                                 meters,
+                                                                 units)
+
+    def test_rate_of_change_boilerplate_per_disk_device_write_cfg(self):
+        meters = ('disk.device.write.bytes', 'disk.device.write.requests')
         units = ('B', 'request')
         self._do_test_rate_of_change_in_boilerplate_pipeline_cfg(2,
                                                                  meters,
