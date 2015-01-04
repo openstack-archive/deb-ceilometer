@@ -27,7 +27,7 @@ override_dh_install:
 		--namespace keystonemiddleware.auth_token
 	sed -i 's|[# \t]*auth_protocol[\t ]*=.*|auth_protocol=http|' $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
 	chmod 0644 $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
-	sed -i 's|#connection=.*|connection=mongodb://localhost:27017/ceilometer|' $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
+	sed -i 's|#connection[ \t]*=.*|connection=mongodb://localhost:27017/ceilometer|' $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
 
 override_dh_auto_build:
 	dh_auto_build

@@ -2,6 +2,7 @@ ceilometer (2015.1~b1-1) UNRELEASED; urgency=medium
 
   * New upstream release.
   * Reviewed (build-)depends for this release.
+  * Fixed default connection sed command line.
 
  -- Thomas Goirand <zigo@debian.org>  Tue, 23 Dec 2014 14:47:10 +0800
 
