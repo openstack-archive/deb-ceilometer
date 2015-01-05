@@ -1,0 +1,19 @@
+Description: No ssl.PROTOCOL_SSLv3
+ This patch is needed since there's no ssl.PROTOCOL_SSLv3 support in Debian
+ anymore, and otherwise, this breaks unit tests.
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: no
+Last-Update: 2015-01-05
+
+--- ceilometer-2014.1.3.orig/ceilometer/openstack/common/sslutils.py
++++ ceilometer-2014.1.3/ceilometer/openstack/common/sslutils.py
+@@ -80,8 +80,7 @@ def wrap(sock):
+ 
+ _SSL_PROTOCOLS = {
+     "tlsv1": ssl.PROTOCOL_TLSv1,
+-    "sslv23": ssl.PROTOCOL_SSLv23,
+-    "sslv3": ssl.PROTOCOL_SSLv3
++    "sslv23": ssl.PROTOCOL_SSLv23
+ }
+ 
+ try:

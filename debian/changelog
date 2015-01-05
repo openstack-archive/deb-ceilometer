@@ -1,6 +1,8 @@
 ceilometer (2014.1.3-5) unstable; urgency=medium
 
   * Now depends on openstack-pkg-tools (>= 21~).
+  * Patches sslutils.py to remove ssl.PROTOCOL_SSLv3 which isn't defined in
+    Debian anymore.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 22 Dec 2014 18:39:35 +0800
 
