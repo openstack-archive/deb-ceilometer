@@ -1,3 +1,9 @@
+ceilometer (2014.2.2-1) experimental; urgency=medium
+
+  * New upstream point release.
+
+ -- Thomas Goirand <zigo@debian.org>  Sat, 07 Feb 2015 11:59:41 +0100
+
 ceilometer (2014.2.1-2) experimental; urgency=medium
 
   * Build-depends on dh-python and on openstack-pkg-tools (>= 22~).
