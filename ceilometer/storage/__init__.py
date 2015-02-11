@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,8 +15,8 @@
 """Storage backend management
 """
 
-from oslo.config import cfg
 from oslo.db import options as db_options
+from oslo_config import cfg
 import retrying
 import six
 import six.moves.urllib.parse as urlparse
@@ -73,7 +71,6 @@ OPTS = [
 cfg.CONF.register_opts(OPTS, group='database')
 
 db_options.set_defaults(cfg.CONF)
-cfg.CONF.import_opt('connection', 'oslo.db.options', group='database')
 
 
 class StorageBadVersion(Exception):

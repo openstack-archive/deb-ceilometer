@@ -1,8 +1,6 @@
 #
 # Copyright 2013-2014 eNovance
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,24 +14,26 @@
 # under the License.
 
 import mock
-from oslo.config import fixture as fixture_config
 from oslo.serialization import jsonutils
+from oslo_config import fixture as fixture_config
+from oslo_context import context
 from oslotest import mockpatch
 import requests
 import six.moves.urllib.parse as urlparse
 
+from ceilometer import alarm as ceilometer_alarm
 from ceilometer.alarm import service
-from ceilometer.openstack.common import context
 from ceilometer.tests import base as tests_base
 
 
 DATA_JSON = jsonutils.loads(
     '{"current": "ALARM", "alarm_id": "foobar", "alarm_name": "testalarm",'
-    ' "reason": "what ?", "reason_data": {"test": "test"},'
-    ' "previous": "OK"}'
+    ' "severity": "critical", "reason": "what ?",'
+    ' "reason_data": {"test": "test"}, "previous": "OK"}'
 )
 NOTIFICATION = dict(alarm_id='foobar',
                     alarm_name='testalarm',
+                    severity='critical',
                     condition=dict(threshold=42),
                     reason='what ?',
                     reason_data={'test': 'test'},
@@ -49,7 +49,7 @@ class TestAlarmNotifier(tests_base.BaseTestCase):
         self.setup_messaging(self.CONF)
         self.service = service.AlarmNotifierService()
         self.useFixture(mockpatch.Patch(
-            'ceilometer.openstack.common.context.generate_request_id',
+            'oslo_context.context.generate_request_id',
             self._fake_generate_request_id))
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
@@ -65,17 +65,19 @@ class TestAlarmNotifier(tests_base.BaseTestCase):
             'actions': ['test://'],
             'alarm_id': 'foobar',
             'alarm_name': 'testalarm',
+            'severity': 'critical',
             'previous': 'OK',
             'current': 'ALARM',
             'reason': 'Everything is on fire',
             'reason_data': {'fire': 'everywhere'}
         }
         self.service.notify_alarm(context.get_admin_context(), data)
-        notifications = self.service.notifiers['test'].obj.notifications
+        notifications = ceilometer_alarm.NOTIFIERS['test'].obj.notifications
         self.assertEqual(1, len(notifications))
         self.assertEqual((urlparse.urlsplit(data['actions'][0]),
                           data['alarm_id'],
                           data['alarm_name'],
+                          data['severity'],
                           data['previous'],
                           data['current'],
                           data['reason'],
@@ -214,7 +216,7 @@ class TestAlarmNotifier(tests_base.BaseTestCase):
         raise Exception("Evil urlsplit!")
 
     def test_notify_alarm_invalid_url(self):
-        with mock.patch('oslo.utils.netutils.urlsplit',
+        with mock.patch('oslo_utils.netutils.urlsplit',
                         self._fake_urlsplit):
             LOG = mock.MagicMock()
             with mock.patch('ceilometer.alarm.service.LOG', LOG):

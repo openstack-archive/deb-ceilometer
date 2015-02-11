@@ -2,9 +2,6 @@
 # Copyright 2012 eNovance <licensing@enovance.com>
 # Copyright 2012 Red Hat, Inc
 #
-# Author: Julien Danjou <julien@danjou.info>
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -308,7 +305,7 @@ class TestNetRatesPollster(base.TestPollsterBase):
              ],
         )
 
-    def test_outgoing_bytes(self):
+    def test_outgoing_bytes_rate(self):
         instance_name_id = "%s-%s" % (self.instance.name, self.instance.id)
         self._check_get_samples(
             net.OutgoingBytesRatePollster,

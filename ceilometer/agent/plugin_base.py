@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,13 +20,13 @@ import collections
 import fnmatch
 
 from keystoneclient.v2_0 import client as ksclient
-from oslo.config import cfg
 import oslo.messaging
+from oslo_config import cfg
+from oslo_context import context
 import six
 
 from ceilometer.i18n import _
 from ceilometer import messaging
-from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 from ceilometer.publisher import utils
 
@@ -72,7 +70,7 @@ def check_keystone(service_type=None):
                 keystone = _get_keystone()
             if isinstance(keystone, Exception):
                 LOG.error(_('Skip due to keystone error %s'),
-                          str(keystone) if keystone else '')
+                          keystone if keystone else '')
                 return iter([])
             elif service_type:
                 endpoints = keystone.service_catalog.get_endpoints(
@@ -177,7 +175,7 @@ class NotificationBase(PluginBase):
         if self.requeue:
             meters = [
                 utils.meter_message_from_counter(
-                    sample, cfg.CONF.publisher.metering_secret)
+                    sample, cfg.CONF.publisher.telemetry_secret)
                 for sample in self.process_notification(notification)
             ]
             for notifier in self.transporter:

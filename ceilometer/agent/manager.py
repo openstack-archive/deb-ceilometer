@@ -1,8 +1,6 @@
 #
 # Copyright 2012-2013 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,7 +14,7 @@
 # under the License.
 
 from keystoneclient.v2_0 import client as ksclient
-from oslo.config import cfg
+from oslo_config import cfg
 
 from ceilometer.agent import base
 from ceilometer.openstack.common import log

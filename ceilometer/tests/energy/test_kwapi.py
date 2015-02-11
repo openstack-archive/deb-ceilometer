@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 #
-# Author: François Rossigneux <francois.rossigneux@inria.fr>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,13 +16,13 @@ import datetime
 
 from keystoneclient import exceptions
 import mock
+from oslo_context import context
 from oslotest import base
 from oslotest import mockpatch
 import six
 
 from ceilometer.agent import manager
 from ceilometer.energy import kwapi
-from ceilometer.openstack.common import context
 
 
 PROBE_DICT = {

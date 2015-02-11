@@ -70,37 +70,39 @@ Name                             Type*  Unit       Resource  Origin**  Support**
 ===============================  =====  =========  ========  ========  =============  ==================================================================
 instance                         g      instance   inst ID   both      1, 2, 3, 4     Existence of instance
 instance:<type>                  g      instance   inst ID   both      1, 2, 3, 4     Existence of instance <type> (openstack types)
-memory                           g      MB         inst ID   n         1, 2           Volume of RAM allocated in MB
-memory.usage                     g      MB         inst ID   p         1, 3, 4        Volume of RAM used in MB
+memory                           g      MB         inst ID   n         1, 2           Volume of RAM allocated
+memory.usage                     g      MB         inst ID   p         1, 2, 3, 4     Volume of RAM used
 cpu                              c      ns         inst ID   p         1, 2           CPU time used
 cpu_util                         g      %          inst ID   p         1, 2, 3, 4     Average CPU utilisation
 vcpus                            g      vcpu       inst ID   n         1, 2           Number of VCPUs
 disk.read.requests               c      request    inst ID   p         1, 2           Number of read requests
-disk.read.requests.rate          g      request/s  inst ID   p         1, 2, 3        Average rate of read requests per second
+disk.read.requests.rate          g      request/s  inst ID   p         1, 2, 3        Average rate of reads
 disk.write.requests              c      request    inst ID   p         1, 2           Number of write requests
-disk.write.requests.rate         g      request/s  inst ID   p         1, 2, 3        Average rate of write requests per second
-disk.read.bytes                  c      B          inst ID   p         1, 2           Volume of reads in B
-disk.read.bytes.rate             g      B/s        inst ID   p         1, 2, 3, 4     Average rate of reads in B per second
-disk.write.bytes                 c      B          inst ID   p         1, 2           Volume of writes in B
-disk.write.bytes.rate            g      B/s        inst ID   p         1, 2, 3, 4     Average volume of writes in B per second
-disk.device.read.requests        c      request    disk ID   p         1, 2           Number of read requests per device
-disk.device.read.requests.rate   g      request/s  disk ID   p         1, 2, 3        Average rate of read requests per second per device
-disk.device.write.requests       c      request    disk ID   p         1, 2           Number of write requests per device
-disk.device.write.requests.rate  g      request/s  disk ID   p         1, 2, 3        Average rate of write requests per second per device
-disk.device.read.bytes           c      B          disk ID   p         1, 2           Volume of reads in B per device
-disk.device.read.bytes.rate      g      B/s        disk ID   p         1, 2, 3        Average rate of reads in B per second per device
-disk.device.write.bytes          c      B          disk ID   p         1, 2           Volume of writes in B per device
-disk.device.write.bytes.rate     g      B/s        disk ID   p         1, 2, 3        Average volume of writes in B per second per device
-disk.root.size                   g      GB         inst ID   n         1, 2           Size of root disk in GB
-disk.ephemeral.size              g      GB         inst ID   n         1, 2           Size of ephemeral disk in GB
-network.incoming.bytes           c      B          iface ID  p         1, 2           Number of incoming bytes on a VM network interface
-network.incoming.bytes.rate      g      B/s        iface ID  p         1, 2, 3, 4     Average rate per sec of incoming bytes on a VM network interface
-network.outgoing.bytes           c      B          iface ID  p         1, 2           Number of outgoing bytes on a VM network interface
-network.outgoing.bytes.rate      g      B/s        iface ID  p         1, 2, 3, 4     Average rate per sec of outgoing bytes on a VM network interface
-network.incoming.packets         c      packet     iface ID  p         1, 2           Number of incoming packets on a VM network interface
-network.incoming.packets.rate    g      packet/s   iface ID  p         1, 2, 3, 4     Average rate per sec of incoming packets on a VM network interface
-network.outgoing.packets         c      packet     iface ID  p         1, 2           Number of outgoing packets on a VM network interface
-network.outgoing.packets.rate    g      packet/s   iface ID  p         1, 2, 3, 4     Average rate per sec of outgoing packets on a VM network interface
+disk.write.requests.rate         g      request/s  inst ID   p         1, 2, 3        Average rate of writes
+disk.read.bytes                  c      B          inst ID   p         1, 2           Volume of reads
+disk.read.bytes.rate             g      B/s        inst ID   p         1, 2, 3, 4     Average rate of reads
+disk.write.bytes                 c      B          inst ID   p         1, 2           Volume of writes
+disk.write.bytes.rate            g      B/s        inst ID   p         1, 2, 3, 4     Average volume of writes
+disk.latency                     g      ms         inst ID   p         2              Average disk latency
+disk.device.read.requests        c      request    disk ID   p         1, 2           Number of read requests
+disk.device.read.requests.rate   g      request/s  disk ID   p         1, 2, 3        Average rate of read requests
+disk.device.write.requests       c      request    disk ID   p         1, 2           Number of write requests
+disk.device.write.requests.rate  g      request/s  disk ID   p         1, 2, 3        Average rate of write requests
+disk.device.read.bytes           c      B          disk ID   p         1, 2           Volume of reads
+disk.device.read.bytes.rate      g      B/s        disk ID   p         1, 2, 3        Average rate of reads
+disk.device.write.bytes          c      B          disk ID   p         1, 2           Volume of writes
+disk.device.write.bytes.rate     g      B/s        disk ID   p         1, 2, 3        Average volume of writes
+disk.device.latency              g      ms         disk ID   p         2              Average disk latency per device
+disk.root.size                   g      GB         inst ID   n         1, 2           Size of root disk
+disk.ephemeral.size              g      GB         inst ID   n         1, 2           Size of ephemeral disk
+network.incoming.bytes           c      B          iface ID  p         1, 2           Number of incoming bytes
+network.incoming.bytes.rate      g      B/s        iface ID  p         1, 2, 3, 4     Average rate of incoming bytes
+network.outgoing.bytes           c      B          iface ID  p         1, 2           Number of outgoing bytes
+network.outgoing.bytes.rate      g      B/s        iface ID  p         1, 2, 3, 4     Average rate of outgoing bytes
+network.incoming.packets         c      packet     iface ID  p         1, 2           Number of incoming packets
+network.incoming.packets.rate    g      packet/s   iface ID  p         1, 2, 3, 4     Average rate of incoming packets
+network.outgoing.packets         c      packet     iface ID  p         1, 2           Number of outgoing packets
+network.outgoing.packets.rate    g      packet/s   iface ID  p         1, 2, 3, 4     Average rate of outgoing packets
 ===============================  =====  =========  ========  ========  =============  ==================================================================
 
 ::
@@ -123,6 +125,24 @@ network.outgoing.packets.rate    g      packet/s   iface ID  p         1, 2, 3, 
    driver in the image, particularly for Windows guests, most modern Linuxes
    have it built in. The memory.usage meters can't be fetched without image
    balloon driver.
+
+.. note:: On libvirt/hyperV, the following meters are not generated directly
+   from the underlying hypervisor, but are generated by the 'rate_of_change'
+   transformer as defined in the default pipeline configuration.
+
+   - cpu_util
+   - disk.read.requests.rate
+   - disk.write.requests.rate
+   - disk.read.bytes.rate
+   - disk.write.bytes.rate
+   - disk.device.read.requests.rate
+   - disk.device.write.requests.rate
+   - disk.device.read.bytes.rate
+   - disk.device.write.bytes.rate
+   - network.incoming.bytes.rate
+   - network.outgoing.bytes.rate
+   - network.incoming.packets.rate
+   - network.outgoing.packets.rate
 
 Contributors are welcome to extend other virtualization backends' meters
 or complete the existing ones.
@@ -287,6 +307,19 @@ cluster.delete                   Delta       cluster     cluster ID   notificati
 
 To enable Sahara notifications configure Sahara as described in :ref:`installing_manually`.
 
+Key Value Store (MagnetoDB)
+=============================
+
+===============================  ==========  ==========  ===========  ============  =================================================
+Name                             Type        Unit        Resource     Origin        Note
+===============================  ==========  ==========  ===========  ============  =================================================
+magnetodb.table.create           Gauge       table       table ID     notification  Creation requests for a table successful
+magnetodb.table.delete           Gauge       table       table ID     notification  Deletion requests for a table successful
+magnetodb.table.index.count      Gauge       index       table ID     notification  Number of indices created in a table
+===============================  ==========  ==========  ===========  ============  =================================================
+
+To enable MagnetoDB notifications configure MagnetoDB as described in :ref:`installing_manually`.
+
 Energy (Kwapi)
 ==============
 
@@ -334,39 +367,64 @@ switch.flow.bytes                  Cumulative  B       switch ID  pollster  Rece
 LoadBalancer as a Service (LBaaS)
 =================================
 
-=======================================  ==========  ==========    ==========  =========  ==============================
-Meter                                    Type        Unit          Resource    Origin     Note
-=======================================  ==========  ==========    ==========  =========  ==============================
-network.services.lb.pool                 Gauge       pool          pool ID     pollster   Existence of a LB Pool
-network.services.lb.vip                  Gauge       vip           vip ID      pollster   Existence of a LB Vip
-network.services.lb.member               Gauge       member        member ID   pollster   Existence of a LB Member
-network.services.lb.health_monitor       Gauge       monitor       monitor ID  pollster   Existence of a LB Health Probe
-network.services.lb.total.connections    Cumulative  connection    pool ID     pollster   Total connections on a LB
-network.services.lb.active.connections   Gauge       connection    pool ID     pollster   Active connections on a LB
-network.services.lb.incoming.bytes       Cumulative  B             pool ID     pollster   Number of incoming Bytes
-network.services.lb.outgoing.bytes       Cumulative  B             pool ID     pollster   Number of outgoing Bytes
-=======================================  ==========  ==========    ==========  =========  ==============================
+=========================================   ==========  ==========    ==========  ============  ==============================
+Meter                                       Type        Unit          Resource    Origin        Note
+=========================================   ==========  ==========    ==========  ============  ==============================
+network.services.lb.pool                    Gauge       pool          pool ID     both          Existence of a LB Pool
+network.services.lb.pool.create             Delta       pool          pool ID     notification  Creation of a LB Pool
+network.services.lb.pool.update             Delta       pool          pool ID     notification  Update of a LB Pool
+network.services.lb.vip                     Gauge       vip           vip ID      both          Existence of a LB Vip
+network.services.lb.vip.create              Delta       vip           vip ID      notification  Creation of a LB Vip
+network.services.lb.vip.update              Delta       vip           vip ID      notification  Update of a LB Vip
+network.services.lb.member                  Gauge       member        member ID   both          Existence of a LB Member
+network.services.lb.member.create           Delta       member        member ID   notification  Creation of a LB Member
+network.services.lb.member.update           Delta       member        member ID   notification  Update of a LB Member
+network.services.lb.health_monitor          Gauge       monitor       monitor ID  both          Existence of a LB Health Probe
+network.services.lb.health_monitor.create   Delta       monitor       monitor ID  notification  Creation of a LB Health Probe
+network.services.lb.health_monitor.update   Delta       monitor       monitor ID  notification  Update of a LB Health Probe
+network.services.lb.total.connections       Cumulative  connection    pool ID     pollster      Total connections on a LB
+network.services.lb.active.connections      Gauge       connection    pool ID     pollster      Active connections on a LB
+network.services.lb.incoming.bytes          Cumulative  B             pool ID     pollster      Number of incoming Bytes
+network.services.lb.outgoing.bytes          Cumulative  B             pool ID     pollster      Number of outgoing Bytes
+=========================================   ==========  ==========    ==========  ============  ==============================
 
 VPN as a Service (VPNaaS)
 =========================
 
-================================  =====  ==========    =============  ========  ===============================
-Meter                             Type   Unit          Resource       Origin    Note
-================================  =====  ==========    =============  ========  ===============================
-network.services.vpn              Gauge  vpn           vpn ID         pollster  Existence of a VPN service
-network.services.vpn.connections  Gauge  connection    connection ID  pollster  Existence of a IPSec Connection
-================================  =====  ==========    =============  ========  ===============================
+=======================================  =====  ===========   ============== ============  ===============================
+Meter                                    Type   Unit          Resource       Origin        Note
+=======================================  =====  ===========   ============== ============  ===============================
+network.services.vpn                     Gauge  vpn           vpn ID         both          Existence of a VPN service
+network.services.vpn.create              Delta  vpn           vpn ID         notification  Creation of a VPN service
+network.services.vpn.update              Delta  vpn           vpn ID         notification  Update of a VPN service
+network.services.vpn.connections         Gauge  connection    connection ID  both          Existence of a IPSec Connection
+network.services.vpn.connections.create  Delta  connection    connection ID  notification  Creation of a IPSec Connection
+network.services.vpn.connections.update  Delta  connection    connection ID  notification  Update of a IPSec Connection
+network.services.vpn.ipsecpolicy         Gauge  ipsecpolicy   ipsecpolicy ID notification  Existence of a IPSec Policy
+network.services.vpn.ipsecpolicy.create  Delta  ipsecpolicy   ipsecpolicy ID notification  Creation of a IPSec Policy
+network.services.vpn.ipsecpolicy.update  Delta  ipsecpolicy   ipsecpolicy ID notification  Update of a IPSec Policy
+network.services.vpn.ikepolicy           Gauge  ikepolicy     ikepolicy ID   notification  Existence of a Ike Policy
+network.services.vpn.ikepolicy.create    Delta  ikepolicy     ikepolicy ID   notification  Creation of a Ike Policy
+network.services.vpn.ikepolicy.update    Delta  ikepolicy     ikepolicy ID   notification  Update of a Ike Policy
+=======================================  =====  ===========   ============== ============  ===============================
 
 
 Firewall as a Service (FWaaS)
 =============================
 
-================================  =====  ========    ===========  ========  ===============================
-Meter                             Type   Unit        Resource     Origin    Note
-================================  =====  ========    ===========  ========  ===============================
-network.services.firewall         Gauge  firewall    firewall ID  pollster  Existence of a Firewall service
-network.services.firewall.policy  Gauge  policy      policy ID    pollster  Existence of Firewall Policy
-================================  =====  ========    ===========  ========  ===============================
+=======================================  =====  ========    ===========  ============  ===============================
+Meter                                    Type   Unit        Resource     Origin        Note
+=======================================  =====  ========    ===========  ============  ===============================
+network.services.firewall                Gauge  firewall    firewall ID  both          Existence of a Firewall service
+network.services.firewall.create         Delta  firewall    firewall ID  notification  Creation of a Firewall service
+network.services.firewall.update         Delta  firewall    firewall ID  notification  Update of a Firewall service
+network.services.firewall.policy         Gauge  policy      policy ID    both          Existence of a Firewall Policy
+network.services.firewall.policy.create  Delta  policy      policy ID    notification  Creation of a Firewall Policy
+network.services.firewall.policy.update  Delta  policy      policy ID    notification  Update of a Firewall Policy
+network.services.firewall.rule           Gauge  rule        rule ID      notification  Existence of a Firewall Rule
+network.services.firewall.rule.create    Delta  rule        rule ID      notification  Creation of a Firewall Rule
+network.services.firewall.rule.update    Delta  rule        rule ID      notification  Update of a Firewall Rule
+=======================================  =====  ========    ===========  ============  ===============================
 
 
 Ironic Hardware IPMI Sensor Data
@@ -402,6 +460,43 @@ hardware.ipmi.node.power         Gauge       W       host ID         pollster   
 hardware.ipmi.node.temperature   Gauge       C       host ID         pollster      System Current Temperature
 ===============================  ==========  ======  ==============  ============  ==========================
 
+
+Generic Host
+================================
+
+These meters are generic host metrics getting from snmp. To enable these, snmpd
+agent should be running on the host from which the metrics are gathered.
+
+========================================  =====  =========  ========  ========  ====================================================
+Meter                                     Type*  Unit       Resource  Origin    Note
+========================================  =====  =========  ========  ========  ====================================================
+hardware.cpu.load.1min                    g      process    host ID   pollster  CPU load in the past 1 minute
+hardware.cpu.load.5min                    g      process    host ID   pollster  CPU load in the past 5 minutes
+hardware.cpu.load.15min                   g      process    host ID   pollster  CPU load in the past 15 minutes
+hardware.disk.size.total                  g      B          disk ID   pollster  Total disk size
+hardware.disk.size.used                   g      B          disk ID   pollster  Used disk size
+hardware.memory.total                     g      B          host ID   pollster  Total physical memory size
+hardware.memory.used                      g      B          host ID   pollster  Used physical memory size
+hardware.memory.swap.total                g      B          host ID   pollster  Total swap space size
+hardware.memory.swap.avail                g      B          host ID   pollster  Available swap space size
+hardware.network.incoming.bytes           c      B          iface ID  pollster  Bytes received by network interface
+hardware.network.outgoing.bytes           c      B          iface ID  pollster  Bytes sent by network interface
+hardware.network.outgoing.errors          c      packet     iface ID  pollster  Sending error of network interface
+hardware.network.ip.incoming.datagrams    c      datagrams  host ID   pollster  Number of received datagrams
+hardware.network.ip.outgoing.datagrams    c      datagrams  host ID   pollster  Number of sent datagrams
+hardware.system_stats.io.incoming.blocks  c      blocks     host ID   pollster  Aggregated number of blocks received to block device
+hardware.system_stats.io.outgoing.blocks  c      blocks     host ID   pollster  Aggregated number of blocks sent to block device
+hardware.system_stats.cpu.idle            g      %          host ID   pollster  CPU idle percentage
+========================================  =====  =========  ========  ========  ====================================================
+
+::
+
+  Legend:
+  *
+  [g]: gauge
+  [c]: cumulative
+
+
 Dynamically retrieving the Meters via ceilometer client
 =======================================================
 
@@ -435,11 +530,20 @@ User-defined sample metadata for Nova
 
 Users are allowed to add additional metadata to samples of nova meter.
 These additional metadata are stored in 'resource_metadata.user_metadata.*' of the sample.
-To do so, users should add nova user metadata prefixed with 'metering.':
+
+To do so, users can add nova user metadata prefixed with 'metering.':
 
 ::
 
    $ nova boot --meta metering.custom_metadata=a_value my_vm
+
+Or users can define metadata keys they cared without any prefix in ceilometer.conf.
+For example,if users need to add "fqdn" of metadata to samples,
+they can add or modify as below into ceilometer.conf in [DEFAULT] group:
+
+::
+
+   reserved_metadata_keys=fqdn
 
 Note: The name of the metadata shouldn't exceed 256 characters otherwise it will be cut off.
 Also, if it has '.', this will be replaced by a '_' in ceilometer.

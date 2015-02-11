@@ -2,10 +2,6 @@
 # Copyright 2013 eNovance
 # Copyright 2013 IBM Corp
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#         Julien Danjou <julien@danjou.info>
-#         Tong Li <litong01@us.ibm.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -28,8 +24,8 @@ import sys
 
 import bson.code
 import bson.objectid
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import pymongo
 import six
 
@@ -171,8 +167,10 @@ class Connection(pymongo_base.Connection):
             self.db.resource.insert({'_id': resource_id,
                                      'no_key': resource_id})
             meter_id = str(bson.objectid.ObjectId())
+            timestamp = timeutils.utcnow()
             self.db.meter.insert({'_id': meter_id,
-                                  'no_key': meter_id})
+                                  'no_key': meter_id,
+                                  'timestamp': timestamp})
 
             self.db.resource.ensure_index([
                 ('user_id', pymongo.ASCENDING),

@@ -2,9 +2,6 @@
 # Copyright 2012 eNovance <licensing@enovance.com>
 # Copyright 2012 Red Hat, Inc
 #
-# Author: Julien Danjou <julien@danjou.info>
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,6 +15,7 @@
 # under the License.
 
 import mock
+from oslo.config import fixture as fixture_config
 
 from ceilometer.agent import manager
 from ceilometer.compute.pollsters import instance as pollsters_instance
@@ -50,3 +48,30 @@ class TestInstancePollster(base.TestPollsterBase):
         samples = list(pollster.get_samples(mgr, {}, [self.instance]))
         self.assertEqual(1, len(samples))
         self.assertEqual('instance:m1.small', samples[0].name)
+
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
+    def test_get_reserved_metadata_with_keys(self):
+        self.CONF = self.useFixture(fixture_config.Config()).conf
+        self.CONF.set_override('reserved_metadata_keys', ['fqdn'])
+
+        mgr = manager.AgentManager()
+        pollster = pollsters_instance.InstancePollster()
+        samples = list(pollster.get_samples(mgr, {}, [self.instance]))
+        self.assertEqual({'fqdn': 'vm_fqdn',
+                          'stack': '2cadc4b4-8789-123c-b4eg-edd2f0a9c128'},
+                         samples[0].resource_metadata['user_metadata'])
+
+    @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
+    def test_get_reserved_metadata_with_namespace(self):
+        mgr = manager.AgentManager()
+        pollster = pollsters_instance.InstancePollster()
+        samples = list(pollster.get_samples(mgr, {}, [self.instance]))
+        self.assertEqual({'stack': '2cadc4b4-8789-123c-b4eg-edd2f0a9c128'},
+                         samples[0].resource_metadata['user_metadata'])
+
+        self.CONF = self.useFixture(fixture_config.Config()).conf
+        self.CONF.set_override('reserved_metadata_namespace', [])
+        mgr = manager.AgentManager()
+        pollster = pollsters_instance.InstancePollster()
+        samples = list(pollster.get_samples(mgr, {}, [self.instance]))
+        self.assertNotIn('user_metadata', samples[0].resource_metadata)

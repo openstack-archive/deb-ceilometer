@@ -15,13 +15,13 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo.config import cfg
+from oslo_config import cfg
+from oslo_context import context
 import six
 
 from ceilometer.alarm.storage import models
 from ceilometer.i18n import _
 from ceilometer import messaging
-from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 
 OPTS = [
@@ -65,6 +65,7 @@ class RPCAlarmNotifier(object):
                              'actions': actions,
                              'alarm_id': alarm.alarm_id,
                              'alarm_name': alarm.name,
+                             'severity': alarm.severity,
                              'previous': previous,
                              'current': alarm.state,
                              'reason': six.text_type(reason),

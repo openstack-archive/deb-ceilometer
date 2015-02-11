@@ -4,8 +4,6 @@
 # Copyright 2013 IBM Corp
 # All Rights Reserved.
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,8 +16,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 
 from ceilometer.agent import plugin_base
 from ceilometer.i18n import _
@@ -30,12 +28,11 @@ from ceilometer import sample
 
 LOG = log.getLogger(__name__)
 
-cfg.CONF.import_group('service_types', 'ceilometer.nova_client')
-
 
 class FloatingIPPollster(plugin_base.PollsterBase):
 
-    def _get_floating_ips(self, ksclient, endpoint):
+    @staticmethod
+    def _get_floating_ips(ksclient, endpoint):
         nv = nova_client.Client(
             auth_token=ksclient.auth_token, bypass_url=endpoint)
         return nv.floating_ip_get_all()

@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Rackspace Hosting.
 #
-# Author: Monsyne Dragon <mdragon@rackspace.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,8 +17,8 @@ import fnmatch
 import os
 
 import jsonpath_rw
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import six
 import yaml
 

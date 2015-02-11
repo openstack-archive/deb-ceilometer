@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Intel Corp.
 #
-# Author: Lianhao Lu <lianhao.lu@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,8 +14,6 @@
 # under the License.
 """Tests for ceilometer/central/manager.py
 """
-
-import itertools
 
 import mock
 from oslotest import base
@@ -39,8 +35,8 @@ class TestManager(base.BaseTestCase):
 
     def test_load_plugins_pollster_list(self):
         mgr = manager.AgentManager(pollster_list=['disk.*'])
-        # currently we do have 16 disk-related pollsters
-        self.assertEqual(16, len(list(mgr.extensions)))
+        # currently we do have 18 disk-related pollsters
+        self.assertEqual(18, len(list(mgr.extensions)))
 
     def test_load_plugins_no_intersection(self):
         # Let's test nothing will be polled if namespace and pollsters
@@ -91,8 +87,8 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         self.PollsterKeystone.resources = []
         super(TestRunTasks, self).tearDown()
 
-    def get_extension_list(self):
-        exts = super(TestRunTasks, self).get_extension_list()
+    def create_extension_list(self):
+        exts = super(TestRunTasks, self).create_extension_list()
         exts.append(extension.Extension('testkeystone',
                                         None,
                                         None,
@@ -122,10 +118,6 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         self.mgr.pipeline_manager = pipeline.PipelineManager(
             self.pipeline_cfg,
             self.transformer_manager)
-        self.mgr.extensions = itertools.chain(
-            self.mgr.extensions,
-            [extension.Extension('testkeystone', None, None,
-                                 self.PollsterKeystone())])
         polling_tasks = self.mgr.setup_polling_tasks()
         self.mgr.interval_task(polling_tasks.values()[0])
         self.assertFalse(self.PollsterKeystone.samples)

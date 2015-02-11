@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Intel
 #
-# Author: Shuangtai Tian <shuangtai.tian@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,7 +15,7 @@
 """Converters for producing compute CPU sample messages from notification
 events.
 """
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 
 from ceilometer.compute import notifications
 from ceilometer.i18n import _

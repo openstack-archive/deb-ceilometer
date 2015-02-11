@@ -1,8 +1,6 @@
 #
 # Copyright 2012 eNovance
 #
-# Author: Guillaume Pernot <gpernot@praksys.org>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -20,8 +18,8 @@
 from __future__ import absolute_import
 
 from keystoneclient import exceptions
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import six.moves.urllib.parse as urlparse
 from swiftclient import client as swift
 

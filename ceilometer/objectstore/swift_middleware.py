@@ -2,8 +2,6 @@
 #
 # Copyright 2012 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -42,11 +40,12 @@ before "proxy-server" and add the following filter in the file:
 from __future__ import absolute_import
 import logging
 
-from oslo.utils import timeutils
+from oslo_context import context
+from oslo_utils import timeutils
 import six
 import six.moves.urllib.parse as urlparse
 
-from ceilometer.openstack.common import context
+from ceilometer.openstack.common import versionutils
 from ceilometer import pipeline
 from ceilometer import sample
 from ceilometer import service
@@ -82,6 +81,8 @@ class InputProxy(object):
         return line
 
 
+@versionutils.deprecated(as_of=versionutils.deprecated.KILO,
+                         in_favor_of='ceilometermiddleware.swift:Swift')
 class CeilometerMiddleware(object):
     """Ceilometer middleware used for counting requests."""
 

@@ -2,8 +2,6 @@
 #
 # Copyright 2012 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -158,7 +156,7 @@ class BinApiTestCase(base.BaseTestCase):
 
         # create ceilometer.conf file
         self.api_port = random.randint(10000, 11000)
-        self.http = httplib2.Http()
+        self.http = httplib2.Http(proxy_info=None)
         pipeline_cfg_file = self.path_get('etc/ceilometer/pipeline.yaml')
         policy_file = self.path_get('etc/ceilometer/policy.json')
         content = ("[DEFAULT]\n"

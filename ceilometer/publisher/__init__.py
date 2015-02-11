@@ -2,9 +2,6 @@
 # Copyright 2013 Intel Corp.
 # Copyright 2013-2014 eNovance
 #
-# Author: Yunhong Jiang <yunhong.jiang@intel.com>
-#         Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,7 +16,7 @@
 
 import abc
 
-from oslo.utils import netutils
+from oslo_utils import netutils
 import six
 from stevedore import driver
 
@@ -37,7 +34,7 @@ def get_publisher(url, namespace='ceilometer.publisher'):
 
 @six.add_metaclass(abc.ABCMeta)
 class PublisherBase(object):
-    """Base class for plugins that publish the sampler."""
+    """Base class for plugins that publish data."""
 
     def __init__(self, parsed_url):
         pass
@@ -45,3 +42,7 @@ class PublisherBase(object):
     @abc.abstractmethod
     def publish_samples(self, context, samples):
         """Publish samples into final conduit."""
+
+    @abc.abstractmethod
+    def publish_events(self, context, events):
+        """Publish events into final conduit."""

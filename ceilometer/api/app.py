@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,7 +19,7 @@ import socket
 from wsgiref import simple_server
 
 import netaddr
-from oslo.config import cfg
+from oslo_config import cfg
 from paste import deploy
 import pecan
 
@@ -35,7 +33,6 @@ from ceilometer import storage
 LOG = log.getLogger(__name__)
 
 CONF = cfg.CONF
-CONF.import_opt('debug', 'ceilometer.openstack.common.log')
 
 OPTS = [
     cfg.StrOpt('api_paste_config',
@@ -81,8 +78,6 @@ def setup_app(pecan_config=None, extra_hooks=None):
 
     app = pecan.make_app(
         pecan_config.app.root,
-        static_root=pecan_config.app.static_root,
-        template_path=pecan_config.app.template_path,
         debug=CONF.api.pecan_debug,
         force_canonical=getattr(pecan_config.app, 'force_canonical', True),
         hooks=app_hooks,

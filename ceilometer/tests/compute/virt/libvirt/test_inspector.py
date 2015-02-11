@@ -2,8 +2,6 @@
 #
 # Copyright 2012 Red Hat, Inc
 #
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,7 +20,7 @@ import contextlib
 
 import fixtures
 import mock
-from oslo.utils import units
+from oslo_utils import units
 from oslotest import base
 
 from ceilometer.compute.virt import inspector as virt_inspector
@@ -34,7 +32,7 @@ class TestLibvirtInspection(base.BaseTestCase):
     def setUp(self):
         super(TestLibvirtInspection, self).setUp()
 
-        class VMInstance:
+        class VMInstance(object):
             id = 'ff58e738-12f4-4c58-acde-77617b68da56'
             name = 'instance-00000001'
         self.instance = VMInstance
@@ -44,28 +42,6 @@ class TestLibvirtInspection(base.BaseTestCase):
         libvirt_inspector.libvirt.VIR_DOMAIN_SHUTOFF = 5
         self.domain = mock.Mock()
         self.addCleanup(mock.patch.stopall)
-
-    def test_inspect_instances(self):
-        class FakeDomain(object):
-            def name(self):
-                return 'fake_name'
-
-            def UUIDString(self):
-                return 'uuid'
-
-        fake_domain = FakeDomain()
-        connection = self.inspector.connection
-        with contextlib.nested(mock.patch.object(connection, 'numOfDomains',
-                                                 return_value=1),
-                               mock.patch.object(connection, 'listDomainsID',
-                                                 return_value=[42]),
-                               mock.patch.object(connection, 'lookupByID',
-                                                 return_value=fake_domain)):
-            inspected_instances = list(self.inspector.inspect_instances())
-            self.assertEqual(1, len(inspected_instances))
-            inspected_instance = inspected_instances[0]
-            self.assertEqual('fake_name', inspected_instance.name)
-            self.assertEqual('uuid', inspected_instance.UUID)
 
     def test_inspect_cpus(self):
         with contextlib.nested(mock.patch.object(self.inspector.connection,
@@ -202,8 +178,9 @@ class TestLibvirtInspection(base.BaseTestCase):
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(5L, 0L, 0L,
                                                                2L, 999999L))):
-            interfaces = list(self.inspector.inspect_vnics(self.instance))
-            self.assertEqual([], interfaces)
+            inspect = self.inspector.inspect_vnics
+            self.assertRaises(virt_inspector.InstanceShutOffException,
+                              list, inspect(self.instance))
 
     def test_inspect_disks(self):
         dom_xml = """
@@ -250,8 +227,9 @@ class TestLibvirtInspection(base.BaseTestCase):
                                mock.patch.object(self.domain, 'info',
                                                  return_value=(5L, 0L, 0L,
                                                                2L, 999999L))):
-            disks = list(self.inspector.inspect_disks(self.instance))
-            self.assertEqual([], disks)
+            inspect = self.inspector.inspect_disks
+            self.assertRaises(virt_inspector.InstanceShutOffException,
+                              list, inspect(self.instance))
 
     def test_inspect_memory_usage(self):
         fake_memory_stats = {'available': 51200L, 'unused': 25600L}
@@ -274,9 +252,9 @@ class TestLibvirtInspection(base.BaseTestCase):
             with mock.patch.object(self.domain, 'info',
                                    return_value=(5L, 0L, 0L,
                                                  2L, 999999L)):
-                memory = self.inspector.inspect_memory_usage(
-                    self.instance)
-                self.assertIsNone(memory)
+                self.assertRaises(virt_inspector.InstanceShutOffException,
+                                  self.inspector.inspect_memory_usage,
+                                  self.instance)
 
     def test_inspect_memory_usage_with_empty_stats(self):
         connection = self.inspector.connection
@@ -287,9 +265,9 @@ class TestLibvirtInspection(base.BaseTestCase):
                                                  2L, 999999L)):
                 with mock.patch.object(self.domain, 'memoryStats',
                                        return_value={}):
-                    memory = self.inspector.inspect_memory_usage(
-                        self.instance)
-                    self.assertIsNone(memory)
+                    self.assertRaises(virt_inspector.NoDataException,
+                                      self.inspector.inspect_memory_usage,
+                                      self.instance)
 
 
 class TestLibvirtInspectionWithError(base.BaseTestCase):
@@ -307,6 +285,7 @@ class TestLibvirtInspectionWithError(base.BaseTestCase):
         libvirt_inspector.libvirt = mock.Mock()
         libvirt_inspector.libvirt.libvirtError = self.fakeLibvirtError
 
+    @staticmethod
     def _dummy_get_connection(*args, **kwargs):
         raise Exception('dummy')
 

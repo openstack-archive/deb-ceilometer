@@ -21,6 +21,7 @@ import ceilometer.api
 import ceilometer.api.app
 import ceilometer.api.controllers.v2
 import ceilometer.cmd.alarm
+import ceilometer.cmd.polling
 import ceilometer.collector
 import ceilometer.compute.discovery
 import ceilometer.compute.notifications
@@ -66,6 +67,7 @@ def list_opts():
     return [
         ('DEFAULT',
          itertools.chain(ceilometer.api.app.OPTS,
+                         ceilometer.cmd.polling.CLI_OPTS,
                          ceilometer.compute.notifications.OPTS,
                          ceilometer.compute.util.OPTS,
                          ceilometer.compute.virt.inspector.OPTS,
@@ -113,7 +115,7 @@ def list_opts():
         ('dispatcher_file', ceilometer.dispatcher.file.OPTS),
         ('event', ceilometer.event.converter.OPTS),
         ('hardware', ceilometer.hardware.discovery.OPTS),
-        ('impi', ceilometer.ipmi.platform.intel_node_manager.OPTS),
+        ('ipmi', ceilometer.ipmi.platform.intel_node_manager.OPTS),
         ('notification', ceilometer.notification.OPTS),
         ('polling', ceilometer.agent.manager.OPTS),
         ('publisher', ceilometer.publisher.utils.OPTS),

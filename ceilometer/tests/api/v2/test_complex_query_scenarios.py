@@ -20,7 +20,7 @@
 
 import datetime
 
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 
 from ceilometer.alarm.storage import models
 from ceilometer.publisher import utils
@@ -89,8 +89,7 @@ class TestQueryMetersController(tests_api.FunctionalTest,
                           source='test_source')]:
 
             msg = utils.meter_message_from_counter(
-                cnt,
-                self.CONF.publisher.metering_secret)
+                cnt, self.CONF.publisher.telemetry_secret)
             self.conn.record_metering_data(msg)
 
     def test_query_fields_are_optional(self):
@@ -351,7 +350,8 @@ class TestQueryAlarmsController(tests_api.FunctionalTest,
                                                            'project_id',
                                                            'op': 'eq',
                                                            'value':
-                                                           project_id}]))
+                                                           project_id}]),
+                                         severity='critical')
                     self.alarm_conn.update_alarm(alarm)
 
     def test_query_all(self):

@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,7 +17,7 @@
 import datetime
 import json
 
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 import webtest
 
 from ceilometer.api import app
@@ -103,8 +101,7 @@ class TestAPIACL(v2.FunctionalTest,
                                        'tag': 'self.sample4'},
                     source='test_source')]:
             msg = utils.meter_message_from_counter(
-                cnt,
-                self.CONF.publisher.metering_secret)
+                cnt, self.CONF.publisher.telemetry_secret)
             self.conn.record_metering_data(msg)
 
     def get_json(self, path, expect_errors=False, headers=None,

@@ -20,11 +20,12 @@
 import abc
 
 from ceilometerclient import client as ceiloclient
-from oslo.config import cfg
-from oslo.utils import netutils
+from oslo_config import cfg
+from oslo_utils import netutils
 import six
 from stevedore import extension
 
+from ceilometer import alarm as ceilometer_alarm
 from ceilometer.alarm.partition import coordination as alarm_coordination
 from ceilometer.alarm import rpc as rpc_alarm
 from ceilometer import coordination as coordination
@@ -45,12 +46,6 @@ OPTS = [
 ]
 
 cfg.CONF.register_opts(OPTS, group='alarm')
-cfg.CONF.import_opt('notifier_rpc_topic', 'ceilometer.alarm.rpc',
-                    group='alarm')
-cfg.CONF.import_opt('partition_rpc_topic', 'ceilometer.alarm.rpc',
-                    group='alarm')
-cfg.CONF.import_opt('heartbeat', 'ceilometer.coordination',
-                    group='coordination')
 cfg.CONF.import_opt('http_timeout', 'ceilometer.service')
 cfg.CONF.import_group('service_credentials', 'ceilometer.service')
 
@@ -60,8 +55,6 @@ LOG = log.getLogger(__name__)
 @six.add_metaclass(abc.ABCMeta)
 class AlarmService(object):
 
-    EXTENSIONS_NAMESPACE = "ceilometer.alarm.evaluator"
-
     def __init__(self):
         super(AlarmService, self).__init__()
         self._load_evaluators()
@@ -69,7 +62,7 @@ class AlarmService(object):
 
     def _load_evaluators(self):
         self.evaluators = extension.ExtensionManager(
-            namespace=self.EXTENSIONS_NAMESPACE,
+            namespace=ceilometer_alarm.EVALUATOR_EXTENSIONS_NAMESPACE,
             invoke_on_load=True,
             invoke_args=(rpc_alarm.RPCAlarmNotifier(),)
         )
@@ -113,7 +106,10 @@ class AlarmService(object):
             return
 
         LOG.debug(_('evaluating alarm %s') % alarm.alarm_id)
-        self.evaluators[alarm.type].obj.evaluate(alarm)
+        try:
+            self.evaluators[alarm.type].obj.evaluate(alarm)
+        except Exception:
+            LOG.exception(_('Failed to evaluate alarm %s'), alarm.alarm_id)
 
     @abc.abstractmethod
     def _assigned_alarms(self):
@@ -231,12 +227,6 @@ class PartitionedAlarmService(AlarmService, os_service.Service):
 
 class AlarmNotifierService(os_service.Service):
 
-    EXTENSIONS_NAMESPACE = "ceilometer.alarm.notifier"
-
-    notifiers = extension.ExtensionManager(EXTENSIONS_NAMESPACE,
-                                           invoke_on_load=True)
-    notifiers_schemas = notifiers.map(lambda x: x.name)
-
     def __init__(self):
         super(AlarmNotifierService, self).__init__()
         transport = messaging.get_transport()
@@ -253,8 +243,8 @@ class AlarmNotifierService(os_service.Service):
         self.rpc_server.stop()
         super(AlarmNotifierService, self).stop()
 
-    def _handle_action(self, action, alarm_id, alarm_name, previous,
-                       current, reason, reason_data):
+    def _handle_action(self, action, alarm_id, alarm_name, severity,
+                       previous, current, reason, reason_data):
         try:
             action = netutils.urlsplit(action)
         except Exception:
@@ -264,7 +254,7 @@ class AlarmNotifierService(os_service.Service):
             return
 
         try:
-            notifier = self.notifiers[action.scheme].obj
+            notifier = ceilometer_alarm.NOTIFIERS[action.scheme].obj
         except KeyError:
             scheme = action.scheme
             LOG.error(
@@ -276,8 +266,8 @@ class AlarmNotifierService(os_service.Service):
         try:
             LOG.debug(_("Notifying alarm %(id)s with action %(act)s") % (
                       {'id': alarm_id, 'act': action}))
-            notifier.notify(action, alarm_id, alarm_name, previous,
-                            current, reason, reason_data)
+            notifier.notify(action, alarm_id, alarm_name, severity,
+                            previous, current, reason, reason_data)
         except Exception:
             LOG.exception(_("Unable to notify alarm %s"), alarm_id)
             return
@@ -292,6 +282,7 @@ class AlarmNotifierService(os_service.Service):
                extensions automatically
              - alarm_id, the ID of the alarm that has been triggered
              - alarm_name, the name of the alarm that has been triggered
+             - severity, the level of the alarm that has been triggered
              - previous, the previous state of the alarm
              - current, the new state the alarm has transitioned to
              - reason, the reason the alarm changed its state
@@ -306,6 +297,7 @@ class AlarmNotifierService(os_service.Service):
             self._handle_action(action,
                                 data.get('alarm_id'),
                                 data.get('alarm_name'),
+                                data.get('severity'),
                                 data.get('previous'),
                                 data.get('current'),
                                 data.get('reason'),

@@ -1,9 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#         Angus Salkeld <asalkeld@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +15,7 @@
 
 import threading
 
-from oslo.config import cfg
+from oslo_config import cfg
 from pecan import hooks
 
 from ceilometer import pipeline
@@ -30,7 +27,8 @@ class ConfigHook(hooks.PecanHook):
     That allows controllers to get it.
     """
 
-    def before(self, state):
+    @staticmethod
+    def before(state):
         state.request.cfg = cfg.CONF
 
 

@@ -2,8 +2,6 @@
 #
 # Copyright 2012 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,7 +15,7 @@
 # under the License.
 
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from oslotest import mockpatch
 import six
 
@@ -72,7 +70,7 @@ class TestSwiftMiddleware(tests_base.BaseTestCase):
                 self.pipeline_manager = pipeline_manager
                 self.samples = []
 
-            def publish_samples(self, ctxt, samples):
+            def publish_data(self, ctxt, samples):
                 self.samples.extend(samples)
 
             def flush(self, context):

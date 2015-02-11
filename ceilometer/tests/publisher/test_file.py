@@ -1,8 +1,6 @@
 #
 # Copyright 2013-2014 eNovance
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,7 +20,7 @@ import logging.handlers
 import os
 import tempfile
 
-from oslo.utils import netutils
+from oslo_utils import netutils
 from oslotest import base
 
 from ceilometer.publisher import file

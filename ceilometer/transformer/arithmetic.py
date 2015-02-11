@@ -1,8 +1,6 @@
 #
 # Copyright 2014 Red Hat, Inc
 #
-# Author: Nejc Saje <nsaje@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -93,7 +91,7 @@ class ArithmeticTransformer(transformer.TransformerBase):
             )
         except Exception as e:
             LOG.warn(_('Unable to evaluate expression %(expr)s: %(exc)s'),
-                     {'expr': self.expr, 'exc': str(e)})
+                     {'expr': self.expr, 'exc': e})
 
     def handle_sample(self, context, _sample):
         self._update_cache(_sample)
@@ -121,7 +119,7 @@ class ArithmeticTransformer(transformer.TransformerBase):
                  the translation of meter names into Python identifiers
         """
 
-        class Replacer():
+        class Replacer(object):
             """Replaces matched meter names with escaped names.
 
             If the meter name is not followed by parameter access in the

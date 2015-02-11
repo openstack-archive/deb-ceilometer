@@ -1,8 +1,6 @@
 #
 # Copyright 2013-2014 eNovance
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,8 +19,8 @@ import datetime
 
 import mock
 import msgpack
-from oslo.config import fixture as fixture_config
-from oslo.utils import netutils
+from oslo_config import fixture as fixture_config
+from oslo_utils import netutils
 from oslotest import base
 
 from ceilometer.publisher import udp
@@ -97,7 +95,8 @@ class TestUDPPublisher(base.BaseTestCase):
         ),
     ]
 
-    def _make_fake_socket(self, published):
+    @staticmethod
+    def _make_fake_socket(published):
         def _fake_socket_socket(family, type):
             def record_data(msg, dest):
                 published.append((msg, dest))
@@ -111,7 +110,7 @@ class TestUDPPublisher(base.BaseTestCase):
     def setUp(self):
         super(TestUDPPublisher, self).setUp()
         self.CONF = self.useFixture(fixture_config.Config()).conf
-        self.CONF.publisher.metering_secret = 'not-so-secret'
+        self.CONF.publisher.telemetry_secret = 'not-so-secret'
 
     def test_published(self):
         self.data_sent = []

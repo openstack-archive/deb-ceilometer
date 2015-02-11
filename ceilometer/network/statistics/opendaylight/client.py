@@ -15,7 +15,7 @@
 
 import abc
 
-from oslo.config import cfg
+from oslo_config import cfg
 import requests
 from requests import auth
 import six
@@ -32,7 +32,7 @@ LOG = log.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)
-class _Base():
+class _Base(object):
     """Base class of OpenDaylight REST APIs Clients."""
 
     @abc.abstractproperty
@@ -154,7 +154,7 @@ class HostTrackerAPIClient(_Base):
         return self.request('/hosts/inactive', container_name)
 
 
-class Client():
+class Client(object):
 
     def __init__(self, endpoint, params):
         self.statistics = StatisticsAPIClient(self)

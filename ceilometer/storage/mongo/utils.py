@@ -21,8 +21,8 @@
 import time
 import weakref
 
-from oslo.config import cfg
-from oslo.utils import netutils
+from oslo_config import cfg
+from oslo_utils import netutils
 import pymongo
 import six
 from six.moves.urllib import parse

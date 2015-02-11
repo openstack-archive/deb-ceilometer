@@ -2,9 +2,6 @@
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 # Copyright 2013 eNovance
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#         Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -24,7 +21,7 @@ import warnings
 
 import fixtures
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from oslotest import mockpatch
 import six
 from six.moves.urllib import parse as urlparse
@@ -105,6 +102,24 @@ class MySQLManager(SQLManager):
         self._conn.execute('CREATE DATABASE %s;' % self._db_name)
 
 
+class ElasticSearchManager(fixtures.Fixture):
+    def __init__(self, url):
+        self.url = url
+
+    def setUp(self):
+        super(ElasticSearchManager, self).setUp()
+        self.connection = storage.get_connection(
+            'sqlite://', 'ceilometer.metering.storage')
+        self.alarm_connection = storage.get_connection(
+            'sqlite://', 'ceilometer.alarm.storage')
+        self.event_connection = storage.get_connection(
+            self.url, 'ceilometer.event.storage')
+        # prefix each test with unique index name
+        self.event_connection.index_name = 'events_%s' % uuid.uuid4().hex
+        # force index on write so data is queryable right away
+        self.event_connection._refresh_on_write = True
+
+
 class HBaseManager(fixtures.Fixture):
     def __init__(self, url):
         self._url = url
@@ -169,6 +184,7 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         'db2': MongoDbManager,
         'sqlite': SQLiteManager,
         'hbase': HBaseManager,
+        'es': ElasticSearchManager,
     }
 
     db_url = 'sqlite://'  # NOTE(Alexei_987) Set default db url
@@ -259,7 +275,7 @@ class MixinTestsWithBackendScenarios(object):
         ('sqlite', {'db_url': 'sqlite://'}),
     ]
 
-    for db in ('MONGODB', 'MYSQL', 'PGSQL', 'HBASE', 'DB2'):
+    for db in ('MONGODB', 'MYSQL', 'PGSQL', 'HBASE', 'DB2', 'ES'):
         if os.environ.get('CEILOMETER_TEST_%s_URL' % db):
             scenarios.append(
                 (db.lower(), {'db_url': os.environ.get(

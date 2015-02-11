@@ -29,8 +29,8 @@ import uuid
 
 import bson.code
 import bson.objectid
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import pymongo
 import six
 
@@ -43,9 +43,6 @@ from ceilometer.storage import models
 from ceilometer.storage.mongo import utils as pymongo_utils
 from ceilometer.storage import pymongo_base
 from ceilometer import utils
-
-cfg.CONF.import_opt('time_to_live', 'ceilometer.storage',
-                    group="database")
 
 LOG = log.getLogger(__name__)
 
@@ -333,7 +330,10 @@ class Connection(pymongo_base.Connection):
                res.duration_start = values[i].duration_start;
             if ( values[i].duration_end > res.duration_end )
                res.duration_end = values[i].duration_end;
-        }
+            if ( values[i].period_start < res.period_start )
+               res.period_start = values[i].period_start;
+            if ( values[i].period_end > res.period_end )
+               res.period_end = values[i].period_end;        }
         return res;
     }
     """)
@@ -342,8 +342,7 @@ class Connection(pymongo_base.Connection):
     function (key, value) {
         %(aggregate_val)s
         value.duration = (value.duration_end - value.duration_start) / 1000;
-        value.period = NumberInt((value.period_end - value.period_start)
-                                  / 1000);
+        value.period = NumberInt(%(period)d);
         return value;
     }""")
 
@@ -897,7 +896,8 @@ class Connection(pymongo_base.Connection):
         )
         reduce_stats = self.REDUCE_STATS % reduce_params
 
-        finalize_params = dict(aggregate_val=sub('finalize', aggregate))
+        finalize_params = dict(aggregate_val=sub('finalize', aggregate),
+                               period=(period if period else 0))
         finalize_stats = self.FINALIZE_STATS % finalize_params
 
         results = self.db.meter.map_reduce(

@@ -1,7 +1,5 @@
 # Copyright 2013 IBM Corp
 #
-# Author: Tong Li <litong01@us.ibm.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,7 +14,7 @@
 
 import json
 
-from oslo.config import cfg
+from oslo_config import cfg
 import requests
 
 from ceilometer import dispatcher
@@ -87,8 +85,7 @@ class HttpDispatcher(dispatcher.Base):
                     'timestamp': meter.get('timestamp', 'NO TIMESTAMP'),
                     'counter_volume': meter['counter_volume']}))
             if publisher_utils.verify_signature(
-                    meter,
-                    self.conf.publisher.metering_secret):
+                    meter, self.conf.publisher.telemetry_secret):
                 try:
                     if self.cadf_only:
                         # Only cadf messages are being wanted.

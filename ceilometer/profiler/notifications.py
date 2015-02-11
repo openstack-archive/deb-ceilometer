@@ -13,8 +13,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo.config import cfg
 import oslo.messaging
+from oslo_config import cfg
 
 from ceilometer.agent import plugin_base
 from ceilometer import sample
@@ -24,6 +24,9 @@ OPTS = [
     cfg.StrOpt('trove_control_exchange',
                default='trove',
                help="Exchange name for DBaaS notifications."),
+    cfg.StrOpt('zaqar_control_exchange',
+               default='zaqar',
+               help="Exchange name for Messaging service notifications."),
 ]
 
 cfg.CONF.register_opts(OPTS)
@@ -52,6 +55,7 @@ class ProfilerNotifications(plugin_base.NotificationBase):
             conf.keystone_control_exchange,
             conf.sahara_control_exchange,
             conf.trove_control_exchange,
+            conf.zaqar_control_exchange,
         ]
 
         for exchange in exchanges:

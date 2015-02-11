@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Rackspace Hosting.
 #
-# Author: Monsyne Dragon <mdragon@rackspace.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,7 +17,7 @@ import datetime
 
 import jsonpath_rw
 import mock
-from oslo.config import cfg as oslo_cfg
+from oslo_config import cfg as oslo_cfg
 import six
 
 from ceilometer.event import converter
@@ -28,7 +26,8 @@ from ceilometer.tests import base
 
 
 class ConverterBase(base.BaseTestCase):
-    def _create_test_notification(self, event_type, message_id, **kw):
+    @staticmethod
+    def _create_test_notification(event_type, message_id, **kw):
         return dict(event_type=event_type,
                     message_id=message_id,
                     priority="INFO",
@@ -546,7 +545,7 @@ class TestEventDefinition(ConverterBase):
         edef = converter.EventDefinition(cfg, self.fake_plugin_mgr)
         self.assertTrue(edef.is_catchall)
 
-    @mock.patch('oslo.utils.timeutils.utcnow')
+    @mock.patch('oslo_utils.timeutils.utcnow')
     def test_extract_when(self, mock_utcnow):
         now = datetime.datetime.utcnow()
         modified = now + datetime.timedelta(minutes=1)
@@ -623,7 +622,7 @@ class TestNotificationConverter(ConverterBase):
             host='cydonia')
         self.fake_plugin_mgr = {}
 
-    @mock.patch('oslo.utils.timeutils.utcnow')
+    @mock.patch('oslo_utils.timeutils.utcnow')
     def test_converter_missing_keys(self, mock_utcnow):
         # test a malformed notification
         now = datetime.datetime.utcnow()

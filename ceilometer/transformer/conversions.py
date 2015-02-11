@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Red Hat, Inc
 #
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +16,7 @@
 import collections
 import re
 
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 import six
 
 from ceilometer.i18n import _

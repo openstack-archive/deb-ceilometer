@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -47,8 +45,7 @@ class TestMaxProjectVolume(v2.FunctionalTest,
                 source='source1',
             )
             msg = utils.meter_message_from_counter(
-                s,
-                self.CONF.publisher.metering_secret,
+                s, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -145,8 +142,7 @@ class TestMaxResourceVolume(v2.FunctionalTest,
                 source='source1',
             )
             msg = utils.meter_message_from_counter(
-                s,
-                self.CONF.publisher.metering_secret,
+                s, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -275,8 +271,7 @@ class TestSumProjectVolume(v2.FunctionalTest,
                 source='source1',
             )
             msg = utils.meter_message_from_counter(
-                s,
-                self.CONF.publisher.metering_secret,
+                s, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -375,8 +370,7 @@ class TestSumResourceVolume(v2.FunctionalTest,
                 source='source1',
             )
             msg = utils.meter_message_from_counter(
-                s,
-                self.CONF.publisher.metering_secret,
+                s, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -532,8 +526,7 @@ class TestGroupByInstance(v2.FunctionalTest,
                 source=test_sample['source'],
             )
             msg = utils.meter_message_from_counter(
-                c,
-                self.CONF.publisher.metering_secret,
+                c, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -1283,8 +1276,7 @@ class TestGroupBySource(v2.FunctionalTest,
                 source=test_sample['source'],
             )
             msg = utils.meter_message_from_counter(
-                c,
-                self.CONF.publisher.metering_secret,
+                c, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -1385,8 +1377,7 @@ class TestSelectableAggregates(v2.FunctionalTest,
                 source=test_sample['source'],
             )
             msg = utils.meter_message_from_counter(
-                c,
-                self.CONF.publisher.metering_secret,
+                c, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -1484,8 +1475,7 @@ class TestSelectableAggregates(v2.FunctionalTest,
                 source='source',
             )
             msg = utils.meter_message_from_counter(
-                s,
-                self.CONF.publisher.metering_secret,
+                s, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -1637,8 +1627,7 @@ class TestUnparameterizedAggregates(v2.FunctionalTest,
                 source=test_sample['source'],
             )
             msg = utils.meter_message_from_counter(
-                c,
-                self.CONF.publisher.metering_secret,
+                c, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 

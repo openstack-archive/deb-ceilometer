@@ -1,8 +1,6 @@
 #
 # Copyright 2013 eNovance
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -25,11 +23,12 @@ class TestAlarmNotifier(notifier.AlarmNotifier):
     def __init__(self):
         self.notifications = []
 
-    def notify(self, action, alarm_id, alarm_name, previous, current,
-               reason, reason_data):
+    def notify(self, action, alarm_id, alarm_name, severity,
+               previous, current, reason, reason_data):
         self.notifications.append((action,
                                    alarm_id,
                                    alarm_name,
+                                   severity,
                                    previous,
                                    current,
                                    reason,

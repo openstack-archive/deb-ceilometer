@@ -1,7 +1,5 @@
 # Copyright (C) 2014 eNovance SAS <licensing@enovance.com>
 #
-# Author: Sylvain Afchain <sylvain.afchain@enovance.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +16,7 @@ import functools
 
 from neutronclient.common import exceptions
 from neutronclient.v2_0 import client as clientv20
-from oslo.config import cfg
+from oslo_config import cfg
 
 from ceilometer.openstack.common import log
 

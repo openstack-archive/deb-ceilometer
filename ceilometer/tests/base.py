@@ -2,8 +2,6 @@
 #
 # Copyright 2012 New Dream Network (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,7 +20,7 @@ import os.path
 
 import eventlet
 import oslo.messaging.conffixture
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 from oslotest import base
 from oslotest import mockpatch
 import six

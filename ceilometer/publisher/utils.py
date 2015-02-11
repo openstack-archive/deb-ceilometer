@@ -1,9 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#         Tyaptin Ilya <ityaptin@mirantis.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,20 +18,22 @@
 import hashlib
 import hmac
 
-from oslo.config import cfg
+from oslo_config import cfg
 import six
 
 from ceilometer import utils
 
 OPTS = [
-    cfg.StrOpt('metering_secret',
+    cfg.StrOpt('telemetry_secret',
                secret=True,
                default='change this or be hacked',
                help='Secret value for signing metering messages.',
                deprecated_opts=[cfg.DeprecatedOpt("metering_secret",
                                                   "DEFAULT"),
                                 cfg.DeprecatedOpt("metering_secret",
-                                                  "publisher_rpc")]
+                                                  "publisher_rpc"),
+                                cfg.DeprecatedOpt("metering_secret",
+                                                  "publisher")]
                ),
 ]
 cfg.CONF.register_opts(OPTS, group="publisher")
@@ -119,5 +118,15 @@ def meter_message_from_counter(sample, secret):
            'resource_metadata': sample.resource_metadata,
            'message_id': sample.id,
            }
+    msg['message_signature'] = compute_signature(msg, secret)
+    return msg
+
+
+def message_from_event(event, secret):
+    """Make an event message ready to be published or stored.
+
+    Returns a serialized model of Event containing an event message
+    """
+    msg = event.serialize()
     msg['message_signature'] = compute_signature(msg, secret)
     return msg

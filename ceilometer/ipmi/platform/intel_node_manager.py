@@ -1,9 +1,6 @@
 # Copyright 2014 Intel Corporation.
 # All Rights Reserved.
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-# Author: Gao Fengqian <fengqian.gao@intel.com>
-#
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -29,7 +26,7 @@ import collections
 import tempfile
 import time
 
-from oslo.config import cfg
+from oslo_config import cfg
 
 from ceilometer.i18n import _
 from ceilometer.ipmi.platform import exception as nmexcept

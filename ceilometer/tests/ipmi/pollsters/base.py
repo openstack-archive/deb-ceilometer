@@ -1,7 +1,5 @@
 # Copyright 2014 Intel
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -20,8 +18,8 @@ import mock
 from oslotest import mockpatch
 import six
 
-from ceilometer.ipmi import manager
-import ceilometer.tests.base as base
+from ceilometer.agent import manager
+from ceilometer.tests import base
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -44,9 +42,8 @@ class TestPollsterBase(base.BaseTestCase):
         nm.read_temperature_all.side_effect = self.fake_data
         nm.read_power_all.side_effect = self.fake_data
         nm.read_sensor_any.side_effect = self.fake_sensor_data
-
-        self.mgr = manager.AgentManager()
-
+        # We should mock the pollster first before initialize the Manager
+        # so that we don't trigger the sudo in pollsters' __init__().
         self.useFixture(mockpatch.Patch(
             'ceilometer.ipmi.platform.intel_node_manager.NodeManager',
             return_value=nm))
@@ -54,6 +51,8 @@ class TestPollsterBase(base.BaseTestCase):
         self.useFixture(mockpatch.Patch(
             'ceilometer.ipmi.platform.ipmi_sensor.IPMISensor',
             return_value=nm))
+
+        self.mgr = manager.AgentManager(['ipmi'])
 
         self.pollster = self.make_pollster()
 

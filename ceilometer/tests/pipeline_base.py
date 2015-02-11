@@ -22,7 +22,7 @@ import datetime
 import traceback
 
 import mock
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 from oslotest import base
 from oslotest import mockpatch
 import six
@@ -40,7 +40,8 @@ from ceilometer.transformer import conversions
 
 @six.add_metaclass(abc.ABCMeta)
 class BasePipelineTestCase(base.BaseTestCase):
-    def fake_tem_init(self):
+    @staticmethod
+    def fake_tem_init():
         """Fake a transformerManager for pipeline.
 
         The faked entry point setting is below:
@@ -77,7 +78,10 @@ class BasePipelineTestCase(base.BaseTestCase):
         return fake_drivers[url](url)
 
     class PublisherClassException(publisher.PublisherBase):
-        def publish_samples(self, ctxt, counters):
+        def publish_samples(self, ctxt, samples):
+            raise Exception()
+
+        def publish_events(self, ctxt, events):
             raise Exception()
 
     class TransformerClass(transformer.TransformerBase):
@@ -115,7 +119,8 @@ class BasePipelineTestCase(base.BaseTestCase):
             self.__class__.samples.append(counter)
 
     class TransformerClassException(object):
-        def handle_sample(self, ctxt, counter):
+        @staticmethod
+        def handle_sample(ctxt, counter):
             raise Exception()
 
     def setUp(self):
@@ -197,7 +202,7 @@ class BasePipelineTestCase(base.BaseTestCase):
 
     def test_no_transformers(self):
         self._unset_pipeline_cfg('transformers')
-        self._exception_create_pipelinemanager()
+        pipeline.PipelineManager(self.pipeline_cfg, self.transformer_manager)
 
     def test_no_name(self):
         self._unset_pipeline_cfg('name')
@@ -667,16 +672,16 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_sample(None, self.test_counter)
+        pipe.publish_data(None, self.test_counter)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(0, len(publisher.samples))
         pipe.flush(None)
         self.assertEqual(0, len(publisher.samples))
-        pipe.publish_sample(None, self.test_counter)
+        pipe.publish_data(None, self.test_counter)
         pipe.flush(None)
         self.assertEqual(0, len(publisher.samples))
         for i in range(CACHE_SIZE - 2):
-            pipe.publish_sample(None, self.test_counter)
+            pipe.publish_data(None, self.test_counter)
         pipe.flush(None)
         self.assertEqual(CACHE_SIZE, len(publisher.samples))
         self.assertEqual('a_update_new', getattr(publisher.samples[0], 'name'))
@@ -739,7 +744,7 @@ class BasePipelineTestCase(base.BaseTestCase):
         pipe = pipeline_manager.pipelines[0]
 
         publisher = pipe.publishers[0]
-        pipe.publish_sample(None, self.test_counter)
+        pipe.publish_data(None, self.test_counter)
         self.assertEqual(0, len(publisher.samples))
         pipe.flush(None)
         self.assertEqual(1, len(publisher.samples))
@@ -816,7 +821,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(1, len(publisher.samples))
         pipe.flush(None)
@@ -870,7 +875,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(2, len(publisher.samples))
         core_temp = publisher.samples[0]
@@ -960,7 +965,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(2, len(publisher.samples))
         pipe.flush(None)
@@ -1045,7 +1050,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(0, len(publisher.samples))
         pipe.flush(None)
@@ -1088,7 +1093,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                 )
                 counters.append(s)
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         publisher = pipe.publishers[0]
         self.assertEqual(2, len(publisher.samples))
         pipe.flush(None)
@@ -1217,7 +1222,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         pipe.flush(None)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(expected_length, len(publisher.samples))
@@ -1253,7 +1258,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         pipe.flush(None)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         actual = sorted(s.volume for s in publisher.samples)
@@ -1458,12 +1463,12 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, [counters[0]])
+        pipe.publish_data(None, [counters[0]])
         pipe.flush(None)
         publisher = pipe.publishers[0]
         self.assertEqual(0, len(publisher.samples))
 
-        pipe.publish_samples(None, [counters[1]])
+        pipe.publish_data(None, [counters[1]])
         pipe.flush(None)
         publisher = pipe.publishers[0]
         self.assertEqual(2, len(publisher.samples))
@@ -1496,7 +1501,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         pipe.flush(None)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(0, len(publisher.samples))
@@ -1544,12 +1549,12 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, [counters[0]])
+        pipe.publish_data(None, [counters[0]])
         pipe.flush(None)
         publisher = pipe.publishers[0]
         self.assertEqual(0, len(publisher.samples))
 
-        pipe.publish_samples(None, [counters[1]])
+        pipe.publish_data(None, [counters[1]])
         pipe.flush(None)
         publisher = pipe.publishers[0]
 
@@ -1633,7 +1638,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, counters)
+        pipe.publish_data(None, counters)
         publisher = pipeline_manager.pipelines[0].publishers[0]
         expected_len = len(test_resources) * len(expected)
         self.assertEqual(0, len(publisher.samples))
@@ -1754,7 +1759,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                     self.transformer_manager)
         pipe = pipeline_manager.pipelines[0]
 
-        pipe.publish_samples(None, [counter])
+        pipe.publish_data(None, [counter])
         publisher = pipeline_manager.pipelines[0].publishers[0]
         self.assertEqual(0, len(publisher.samples))
         pipe.flush(None)
@@ -1765,7 +1770,7 @@ class BasePipelineTestCase(base.BaseTestCase):
         self.assertEqual(1, len(publisher.samples))
 
         counter.volume = 2048.0
-        pipe.publish_samples(None, [counter])
+        pipe.publish_data(None, [counter])
         pipe.flush(None)
         self.assertEqual(2, len(publisher.samples))
         self.assertEqual(2050.0, publisher.samples[1].volume)

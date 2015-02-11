@@ -3,8 +3,6 @@
 #
 # Copyright 2012-2014 Julien Danjou
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -28,10 +26,10 @@ import eventlet
 # first read() or select(), thread need to be patched too, because
 # oslo.messaging use threading.local
 eventlet.monkey_patch(socket=True, select=True, thread=True)
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_context import context
+from oslo_utils import timeutils
 
-from ceilometer.openstack.common import context
 from ceilometer import pipeline
 from ceilometer import sample
 from ceilometer import service

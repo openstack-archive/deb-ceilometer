@@ -60,6 +60,74 @@
     audit_period_ending:
       type: datetime
       fields: payload.audit_period_ending
+- event_type: ['volume.exists', 'volume.create.*', 'volume.delete.*', 'volume.resize.*', 'volume.attach.*', 'volume.detach.*', 'volume.update.*', 'snapshot.exists', 'snapshot.create.*', 'snapshot.delete.*', 'snapshot.update.*']
+  traits: &cinder_traits
+    user_id:
+      fields: payload.user_id
+    project_id:
+      fields: payload.tenant_id
+    availability_zone:
+      fields: payload.availability_zone
+    display_name:
+      fields: payload.display_name
+    replication_status:
+      fields: payload.replication_status
+    status:
+      fields: payload.status
+    created_at:
+      fields: payload.created_at
+- event_type: ['volume.exists', 'volume.create.*', 'volume.delete.*', 'volume.resize.*', 'volume.attach.*', 'volume.detach.*', 'volume.update.*']
+  traits:
+    <<: *cinder_traits
+    resource_id:
+      fields: payload.volume_id
+    host:
+      fields: payload.host
+    size:
+      fields: payload.size
+    type:
+      fields: payload.volume_type
+    replication_status:
+      fields: payload.replication_status
+- event_type: ['snapshot.exists', 'snapshot.create.*', 'snapshot.delete.*', 'snapshot.update.*']
+  traits:
+    <<: *cinder_traits
+    resource_id:
+      fields: payload.snapshot_id
+    volume_id:
+      fields: payload.volume_id
+- event_type: ['image.update', 'image.upload', 'image.delete']
+  traits: &glance_crud
+    project_id:
+      fields: payload.owner
+    resource_id:
+      fields: payload.id
+    name:
+      fields: payload.name
+    status:
+      fields: payload.status
+    created_at:
+      fields: payload.created_at
+    user_id:
+      fields: payload.owner
+    deleted_at:
+      fields: payload.deleted_at
+    size:
+      fields: payload.size
+- event_type: image.send
+  traits: &glance_send
+    receiver_project:
+      fields: payload.receiver_tenant_id
+    receiver_user:
+      fields: payload.receiver_user_id
+    user_id:
+      fields: payload.owner_id
+    image_id:
+      fields: payload.image_id
+    destination_ip:
+      fields: payload.destination_ip
+    bytes_sent:
+      fields: payload.bytes_sent
 - event_type: orchestration.stack.*
   traits: &orchestration_crud
     project_id:
@@ -122,5 +190,41 @@
       fields: payload.target.id
     observer_typeURI:
       fields: payload.observer.typeURI
+    observer_id:
+      fields: payload.observer.id
+- event_type: objectstore.http.request
+  traits: &objectstore_request
+    typeURI:
+      fields: payload.typeURI
+    id:
+      fields: payload.id
+    action:
+      fields: payload.action
+    eventType:
+      fields: payload.eventType
+    eventTime:
+      fields: payload.eventTime
+    outcome:
+      fields: payload.outcome
+    initiator_typeURI:
+      fields: payload.initiator.typeURI
+    initiator_id:
+      fields: payload.initiator.id
+    initiator_project_id:
+      fields: payload.initiator.project_id
+    target_typeURI:
+      fields: payload.target.typeURI
+    target_id:
+      fields: payload.target.id
+    target_action:
+      fields: payload.target.action
+    target_metadata_path:
+      fields: payload.target.metadata.path
+    target_metadata_version:
+      fields: payload.target.metadata.version
+    target_metadata_container:
+      fields: payload.target.metadata.container
+    target_metadata_object:
+      fields: payload.target.metadata.object
     observer_id:
       fields: payload.observer.id

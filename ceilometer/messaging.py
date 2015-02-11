@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2013 eNovance <licensing@enovance.com>
 #
-# Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,11 +13,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo.config import cfg
 import oslo.messaging
 from oslo.serialization import jsonutils
-
-from ceilometer.openstack.common import context
+from oslo_config import cfg
+from oslo_context import context
 
 DEFAULT_URL = "__default__"
 TRANSPORTS = {}

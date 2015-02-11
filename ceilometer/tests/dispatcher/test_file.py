@@ -1,8 +1,6 @@
 #
 # Copyright 2013 IBM Corp
 #
-# Author: Tong Li <litong01@us.ibm.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +16,7 @@ import logging.handlers
 import os
 import tempfile
 
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from oslotest import base
 
 from ceilometer.dispatcher import file
@@ -54,8 +52,7 @@ class TestDispatcherFile(base.BaseTestCase):
                'counter_volume': 1,
                }
         msg['message_signature'] = utils.compute_signature(
-            msg,
-            self.CONF.publisher.metering_secret,
+            msg, self.CONF.publisher.telemetry_secret,
         )
 
         # The record_metering_data method should exist and not produce errors.
@@ -86,8 +83,7 @@ class TestDispatcherFile(base.BaseTestCase):
                'counter_volume': 1,
                }
         msg['message_signature'] = utils.compute_signature(
-            msg,
-            self.CONF.publisher.metering_secret,
+            msg, self.CONF.publisher.telemetry_secret,
         )
 
         # The record_metering_data method should exist and not produce errors.

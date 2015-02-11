@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,8 +17,8 @@
 
 """
 
-from oslo.config import cfg
 import oslo.messaging
+from oslo_config import cfg
 
 from ceilometer.agent import plugin_base
 from ceilometer.i18n import _
@@ -181,6 +179,7 @@ class Pool(NetworkNotificationBase):
     Handle pool.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'pool'
+    counter_name = 'network.services.lb.pool'
 
 
 class Vip(NetworkNotificationBase):
@@ -189,6 +188,7 @@ class Vip(NetworkNotificationBase):
     Handle vip.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'vip'
+    counter_name = 'network.services.lb.vip'
 
 
 class Member(NetworkNotificationBase):
@@ -197,6 +197,7 @@ class Member(NetworkNotificationBase):
     Handle member.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'member'
+    counter_name = 'network.services.lb.member'
 
 
 class HealthMonitor(NetworkNotificationBase):
@@ -206,6 +207,7 @@ class HealthMonitor(NetworkNotificationBase):
     from neutron.
     """
     resource_name = 'health_monitor'
+    counter_name = 'network.services.lb.health_monitor'
 
 
 class Firewall(NetworkNotificationBase):
@@ -214,6 +216,7 @@ class Firewall(NetworkNotificationBase):
     Handle firewall.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'firewall'
+    counter_name = 'network.services.firewall'
 
 
 class FirewallPolicy(NetworkNotificationBase):
@@ -223,6 +226,7 @@ class FirewallPolicy(NetworkNotificationBase):
     from neutron.
     """
     resource_name = 'firewall_policy'
+    counter_name = 'network.services.firewall.policy'
 
 
 class FirewallRule(NetworkNotificationBase):
@@ -232,6 +236,7 @@ class FirewallRule(NetworkNotificationBase):
     from neutron.
     """
     resource_name = 'firewall_rule'
+    counter_name = 'network.services.firewall.rule'
 
 
 class VPNService(NetworkNotificationBase):
@@ -240,6 +245,7 @@ class VPNService(NetworkNotificationBase):
     Handle vpnservice.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'vpnservice'
+    counter_name = 'network.services.vpn'
 
 
 class IPSecPolicy(NetworkNotificationBase):
@@ -248,6 +254,7 @@ class IPSecPolicy(NetworkNotificationBase):
     Handle pool.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'ipsecpolicy'
+    counter_name = 'network.services.vpn.ipsecpolicy'
 
 
 class IKEPolicy(NetworkNotificationBase):
@@ -256,6 +263,7 @@ class IKEPolicy(NetworkNotificationBase):
     Handle ikepolicy.{create.end|update.*|exists} notifications from neutron.
     """
     resource_name = 'ikepolicy'
+    counter_name = 'network.services.vpn.ikepolicy'
 
 
 class IPSecSiteConnection(NetworkNotificationBase):
@@ -265,3 +273,4 @@ class IPSecSiteConnection(NetworkNotificationBase):
     notifications from neutron.
     """
     resource_name = 'ipsec_site_connection'
+    counter_name = 'network.services.vpn.connections'

@@ -1,7 +1,5 @@
 # Copyright 2014 Intel
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -14,8 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 
 from ceilometer.agent import plugin_base
 from ceilometer.ipmi.notifications import ironic as parser
@@ -32,6 +30,8 @@ class InvalidSensorData(ValueError):
 
 class SensorPollster(plugin_base.PollsterBase):
 
+    no_resources = True
+
     METRIC = None
 
     def __init__(self):
@@ -41,7 +41,8 @@ class SensorPollster(plugin_base.PollsterBase):
     def default_discovery(self):
         return None
 
-    def _get_sensor_types(self, data, sensor_type):
+    @staticmethod
+    def _get_sensor_types(data, sensor_type):
         try:
             return (sensor_type_data for _, sensor_type_data
                     in data[sensor_type].items())

@@ -1,7 +1,5 @@
 # Copyright 2014 Intel Corp.
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -31,6 +29,12 @@ class TestNodeManager(base.BaseTestCase):
         utils.execute = mock.Mock(side_effect=fake_utils.execute_with_nm)
         self.nm = node_manager.NodeManager()
 
+    @classmethod
+    def tearDownClass(cls):
+        # reset inited to force an initialization of singleton for next test
+        node_manager.NodeManager()._inited = False
+        super(TestNodeManager, cls).tearDownClass()
+
     def test_read_power_all(self):
         power = self.nm.read_power_all()
 
@@ -54,7 +58,6 @@ class TestNodeManager(base.BaseTestCase):
         min_val = node_manager._hex(temperature["Minimum_value"])
         cur_val = node_manager._hex(temperature["Current_value"])
 
-        self.assertTrue(self.nm.nm_support)
         # see ipmi_test_data.py for raw data
         self.assertEqual(23, cur_val)
         self.assertEqual(22, min_val)
@@ -69,11 +72,17 @@ class TestNonNodeManager(base.BaseTestCase):
 
         utils.execute = mock.Mock(side_effect=fake_utils.execute_without_nm)
         self.nm = node_manager.NodeManager()
-        self.nm.nm_support = False
+
+    @classmethod
+    def tearDownClass(cls):
+        # reset inited to force an initialization of singleton for next test
+        node_manager.NodeManager()._inited = False
+        super(TestNonNodeManager, cls).tearDownClass()
 
     def test_read_power_all(self):
         power = self.nm.read_power_all()
 
+        self.assertFalse(self.nm.nm_support)
         # Non-Node Manager platform return empty data
         self.assertEqual({}, power)
 

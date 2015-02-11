@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Red Hat, Inc
 #
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,7 +15,7 @@
 """Tests for ceilometer.alarm.service.SingletonAlarmService.
 """
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from stevedore import extension
 
 from ceilometer.alarm import service
@@ -70,6 +68,19 @@ class TestSingletonAlarmService(tests_base.BaseTestCase):
                         return_value=self.api_client):
             self.singleton._evaluate_assigned_alarms()
             self.threshold_eval.evaluate.assert_called_once_with(alarm)
+
+    def test_evaluation_cycle_with_bad_alarm(self):
+        alarms = [
+            mock.Mock(type='threshold', name='bad'),
+            mock.Mock(type='threshold', name='good'),
+        ]
+        self.threshold_eval.evaluate.side_effect = [Exception('Boom!'), None]
+        self.api_client.alarms.list.return_value = alarms
+        with mock.patch('ceilometerclient.client.get_client',
+                        return_value=self.api_client):
+            self.singleton._evaluate_assigned_alarms()
+            self.assertEqual([mock.call(alarms[0]), mock.call(alarms[1])],
+                             self.threshold_eval.evaluate.call_args_list)
 
     def test_unknown_extension_skipped(self):
         alarms = [

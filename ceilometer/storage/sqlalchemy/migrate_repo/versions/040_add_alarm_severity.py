@@ -1,8 +1,4 @@
 #
-# Copyright 2013 Intel Corp.
-#
-# Author: Lianhao Lu <lianhao.lu@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,6 +11,21 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import gettext
+from sqlalchemy import Column
+from sqlalchemy import MetaData
+from sqlalchemy import String
+from sqlalchemy import Table
 
-gettext.install('nova', unicode=True)
+
+def upgrade(migrate_engine):
+    meta = MetaData(bind=migrate_engine)
+    alarm = Table('alarm', meta, autoload=True)
+    severity = Column('severity', String(50))
+    alarm.create_column(severity)
+
+
+def downgrade(migrate_engine):
+    meta = MetaData(bind=migrate_engine)
+    alarm = Table('alarm', meta, autoload=True)
+    severity = Column('severity', String(50))
+    alarm.drop_column(severity)

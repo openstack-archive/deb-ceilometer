@@ -2,8 +2,6 @@
 #
 # Copyright 2013-2014 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +16,7 @@
 
 import mock
 import novaclient
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from oslotest import base
 from oslotest import mockpatch
 

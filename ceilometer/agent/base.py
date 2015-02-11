@@ -22,23 +22,20 @@ import collections
 import fnmatch
 import itertools
 
-from oslo.config import cfg
+from oslo_config import cfg
+from oslo_context import context
 import six
 from six.moves.urllib import parse as urlparse
 from stevedore import extension
 
 from ceilometer import coordination
 from ceilometer.i18n import _
-from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
 from ceilometer import pipeline as publish_pipeline
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
-
-cfg.CONF.import_opt('heartbeat', 'ceilometer.coordination',
-                    group='coordination')
 
 
 class PollsterListForbidden(Exception):
@@ -128,6 +125,11 @@ class PollingTask(object):
                         self.resources[key].get(discovery_cache))
                     polling_resources = (source_resources or
                                          pollster_resources)
+                    if not polling_resources and not getattr(
+                            pollster.obj, 'no_resources', False):
+                        LOG.info(_("Skip polling pollster %s, no resources"
+                                   " found"), pollster.name)
+                        continue
 
                     try:
                         samples = list(pollster.obj.get_samples(

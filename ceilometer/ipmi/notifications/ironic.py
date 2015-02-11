@@ -1,8 +1,6 @@
 #
 # Copyright 2014 Red Hat
 #
-# Author: Chris Dent <chdent@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,8 +16,8 @@
 notification events.
 """
 
-from oslo.config import cfg
 from oslo import messaging
+from oslo_config import cfg
 
 from ceilometer.agent import plugin_base
 from ceilometer.openstack.common import log
@@ -95,7 +93,8 @@ class SensorNotification(plugin_base.NotificationBase):
         except KeyError:
             return []
 
-    def _package_payload(self, message, payload):
+    @staticmethod
+    def _package_payload(message, payload):
         # NOTE(chdent): How much of the payload should we keep?
         payload['node'] = message['payload']['node_uuid']
         info = {'publisher_id': message['publisher_id'],

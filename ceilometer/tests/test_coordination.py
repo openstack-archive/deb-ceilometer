@@ -1,8 +1,6 @@
 #
 # Copyright 2014 Red Hat, Inc.
 #
-# Author: Nejc Saje <nsaje@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +16,7 @@
 import logging
 
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 import tooz.coordination
 
 from ceilometer import coordination

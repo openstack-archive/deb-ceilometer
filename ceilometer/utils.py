@@ -27,10 +27,10 @@ import hashlib
 import multiprocessing
 import struct
 
-from oslo.config import cfg
-from oslo.utils import timeutils
-from oslo.utils import units
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_utils import timeutils
+from oslo_utils import units
 import six
 
 
@@ -249,3 +249,12 @@ class HashRing(object):
             return None
         pos = self._get_position_on_ring(key)
         return self._ring[self._sorted_keys[pos]]
+
+
+def kill_listeners(listeners):
+    # NOTE(gordc): correct usage of oslo.messaging listener is to stop(),
+    # which stops new messages, and wait(), which processes remaining
+    # messages and closes connection
+    for listener in listeners:
+        listener.stop()
+        listener.wait()

@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,7 +20,8 @@ from ceilometer.storage import impl_log
 
 
 class ConnectionTest(base.BaseTestCase):
-    def test_get_connection(self):
+    @staticmethod
+    def test_get_connection():
         conn = impl_log.Connection(None)
         conn.record_metering_data({'counter_name': 'test',
                                    'resource_id': __name__,

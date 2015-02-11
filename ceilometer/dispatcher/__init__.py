@@ -1,8 +1,6 @@
 #
 # Copyright 2013 IBM
 #
-# Author: Tong Li <litong01@us.ibm.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,7 +15,7 @@
 
 import abc
 
-from oslo.config import cfg
+from oslo_config import cfg
 import six
 from stevedore import named
 

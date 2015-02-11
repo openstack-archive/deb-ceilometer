@@ -2,8 +2,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -23,7 +21,8 @@ Usage:
 Generate testing data for e.g. for default time span
 
 source .tox/py27/bin/activate
-./tools/make_test_data.py --user 1 --project 1 1 cpu_util 20
+./tools/make_test_data.py --user 1 --project 1 --resource 1 --counter cpu_util
+--volume 20
 """
 from __future__ import print_function
 
@@ -32,19 +31,20 @@ import datetime
 import logging
 import random
 import sys
+import uuid
 
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer import storage
 
 
-def make_test_data(conn, name, meter_type, unit, volume, random_min,
+def make_test_data(name, meter_type, unit, volume, random_min,
                    random_max, user_id, project_id, resource_id, start,
-                   end, interval, resource_metadata={}, source='artificial',):
-
+                   end, interval, resource_metadata=None, source='artificial'):
+    resource_metadata = resource_metadata or {}
     # Compute start and end timestamps for the new data.
     if isinstance(start, datetime.datetime):
         timestamp = start
@@ -81,9 +81,9 @@ def make_test_data(conn, name, meter_type, unit, volume, random_min,
                           source=source,
                           )
         data = utils.meter_message_from_counter(
-            c,
-            cfg.CONF.publisher.metering_secret)
-        conn.record_metering_data(data)
+            c, cfg.CONF.publisher.telemetry_secret)
+
+        yield data
         n += 1
         timestamp = timestamp + increment
 
@@ -96,9 +96,12 @@ def make_test_data(conn, name, meter_type, unit, volume, random_min,
     print('Added %d new events for meter %s.' % (n, name))
 
 
-def main():
-    cfg.CONF([], project='ceilometer')
+def record_test_data(conn, *args, **kwargs):
+    for data in make_test_data(*args, **kwargs):
+        conn.record_metering_data(data)
 
+
+def get_parser():
     parser = argparse.ArgumentParser(
         description='generate metering data',
     )
@@ -111,17 +114,22 @@ def main():
     parser.add_argument(
         '--start',
         default=31,
-        help='The number of days in the past to start timestamps.',
+        help='Number of days to be stepped back from now or date in the past ('
+             '"YYYY-MM-DDTHH:MM:SS" format) to define timestamps start range.',
     )
     parser.add_argument(
         '--end',
+        type=int,
         default=2,
-        help='The number of days into the future to continue timestamps.',
+        help='Number of days to be stepped forward from now or date in the '
+             'future ("YYYY-MM-DDTHH:MM:SS" format) to define timestamps end '
+             'range.',
     )
     parser.add_argument(
         '--type',
         choices=('gauge', 'cumulative'),
         default='gauge',
+        dest='meter_type',
         help='Counter type.',
     )
     parser.add_argument(
@@ -131,10 +139,12 @@ def main():
     )
     parser.add_argument(
         '--project',
+        dest='project_id',
         help='Project id of owner.',
     )
     parser.add_argument(
         '--user',
+        dest='user_id',
         help='User id of owner.',
     )
     parser.add_argument(
@@ -150,20 +160,30 @@ def main():
         default=0,
     )
     parser.add_argument(
-        'resource',
+        '--resource',
+        dest='resource_id',
+        default=str(uuid.uuid4()),
         help='The resource id for the meter data.',
     )
     parser.add_argument(
-        'counter',
+        '--counter',
+        default='instance',
+        dest='name',
         help='The counter name for the meter data.',
     )
     parser.add_argument(
-        'volume',
+        '--volume',
         help='The amount to attach to the meter.',
         type=int,
         default=1,
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    cfg.CONF([], project='ceilometer')
+
+    args = get_parser().parse_args()
 
     # Set up logging to use the console
     console = logging.StreamHandler(sys.stderr)
@@ -178,34 +198,39 @@ def main():
     conn = storage.get_connection_from_config(cfg.CONF)
 
     # Find the user and/or project for a real resource
-    if not (args.user or args.project):
+    if not (args.user_id or args.project_id):
         for r in conn.get_resources():
-            if r.resource_id == args.resource:
-                args.user = r.user_id
-                args.project = r.project_id
+            if r.resource_id == args.resource_id:
+                args.user_id = r.user_id
+                args.project_id = r.project_id
                 break
 
     # Compute the correct time span
-    start = datetime.datetime.utcnow() - datetime.timedelta(days=args.start)
-    end = datetime.datetime.utcnow() + datetime.timedelta(days=args.end)
+    format = '%Y-%m-%dT%H:%M:%S'
 
-    make_test_data(conn=conn,
-                   name=args.counter,
-                   meter_type=args.type,
-                   unit=args.unit,
-                   volume=args.volume,
-                   random_min=args.random_min,
-                   random_max=args.random_max,
-                   user_id=args.user,
-                   project_id=args.project,
-                   resource_id=args.resource,
-                   start=start,
-                   end=end,
-                   interval=args.interval,
-                   resource_metadata={},
-                   source='artificial',)
+    try:
+        start = datetime.datetime.utcnow() - datetime.timedelta(
+            days=int(args.start))
+    except ValueError:
+        try:
+            start = datetime.datetime.strptime(args.start, format)
+        except ValueError:
+            raise
+
+    try:
+        end = datetime.datetime.utcnow() + datetime.timedelta(
+            days=int(args.end))
+    except ValueError:
+        try:
+            end = datetime.datetime.strptime(args.end, format)
+        except ValueError:
+            raise
+    args.start = start
+    args.end = end
+    record_test_data(conn=conn, **args.__dict__)
 
     return 0
+
 
 if __name__ == '__main__':
     main()

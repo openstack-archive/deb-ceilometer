@@ -1,8 +1,6 @@
 #
 # Copyright 2013-2014 eNovance
 #
-# Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,14 +15,14 @@
 """Rest alarm notifier."""
 
 import eventlet
-from oslo.config import cfg
 from oslo.serialization import jsonutils
+from oslo_config import cfg
+from oslo_context import context
 import requests
 import six.moves.urllib.parse as urlparse
 
 from ceilometer.alarm import notifier
 from ceilometer.i18n import _
-from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
@@ -57,8 +55,8 @@ class RestAlarmNotifier(notifier.AlarmNotifier):
     """Rest alarm notifier."""
 
     @staticmethod
-    def notify(action, alarm_id, alarm_name, previous, current, reason,
-               reason_data, headers=None):
+    def notify(action, alarm_id, alarm_name, severity, previous,
+               current, reason, reason_data, headers=None):
         headers = headers or {}
         if not headers.get('x-openstack-request-id'):
             headers['x-openstack-request-id'] = context.generate_request_id()
@@ -68,12 +66,13 @@ class RestAlarmNotifier(notifier.AlarmNotifier):
             "%(previous)s to %(current)s with action %(action)s because "
             "%(reason)s. request-id: %(request_id)s ") %
             ({'alarm_name': alarm_name, 'alarm_id': alarm_id,
-              'previous': previous, 'current': current,
-              'action': action, 'reason': reason,
+              'severity': severity, 'previous': previous,
+              'current': current, 'action': action, 'reason': reason,
               'request_id': headers['x-openstack-request-id']}))
         body = {'alarm_name': alarm_name, 'alarm_id': alarm_id,
-                'previous': previous, 'current': current,
-                'reason': reason, 'reason_data': reason_data}
+                'severity': severity, 'previous': previous,
+                'current': current, 'reason': reason,
+                'reason_data': reason_data}
         headers['content-type'] = 'application/json'
         kwargs = {'data': jsonutils.dumps(body),
                   'headers': headers}

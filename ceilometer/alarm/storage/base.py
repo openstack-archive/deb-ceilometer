@@ -1,9 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-# Author: Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -45,7 +42,7 @@ class Connection(object):
     @staticmethod
     def get_alarms(name=None, user=None, state=None, meter=None,
                    project=None, enabled=None, alarm_id=None, pagination=None,
-                   alarm_type=None):
+                   alarm_type=None, severity=None):
         """Yields a lists of alarms that match filters.
 
         :param name: Optional name for alarm.
@@ -57,6 +54,7 @@ class Connection(object):
         :param alarm_id: Optional alarm_id to return one alarm.
         :param pagination: Optional pagination query.
         :param alarm_type: Optional alarm type.
+        :parmr severity: Optional alarm severity
         """
         raise ceilometer.NotImplementedError('Alarms not implemented')
 
@@ -81,8 +79,9 @@ class Connection(object):
     @staticmethod
     def get_alarm_changes(alarm_id, on_behalf_of,
                           user=None, project=None, alarm_type=None,
-                          start_timestamp=None, start_timestamp_op=None,
-                          end_timestamp=None, end_timestamp_op=None):
+                          severity=None, start_timestamp=None,
+                          start_timestamp_op=None, end_timestamp=None,
+                          end_timestamp_op=None):
         """Yields list of AlarmChanges describing alarm history
 
         Changes are always sorted in reverse order of occurrence, given
@@ -101,6 +100,7 @@ class Connection(object):
         :param user: Optional ID of user to return changes for
         :param project: Optional ID of project to return changes for
         :param alarm_type: Optional change type
+        :param severity: Optional change severity
         :param start_timestamp: Optional modified timestamp start range
         :param start_timestamp_op: Optional timestamp start range operation
         :param end_timestamp: Optional modified timestamp end range

@@ -1,7 +1,5 @@
 # Copyright 2014 Intel Corp.
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,12 +13,11 @@
 # under the License.
 
 import mock
+from oslotest import base
 
 from ceilometer.ipmi.platform import ipmi_sensor
 from ceilometer.tests.ipmi.platform import fake_utils
 from ceilometer import utils
-
-from oslotest import base
 
 
 class TestIPMISensor(base.BaseTestCase):
@@ -31,9 +28,16 @@ class TestIPMISensor(base.BaseTestCase):
         utils.execute = mock.Mock(side_effect=fake_utils.execute_with_nm)
         self.ipmi = ipmi_sensor.IPMISensor()
 
+    @classmethod
+    def tearDownClass(cls):
+        # reset inited to force an initialization of singleton for next test
+        ipmi_sensor.IPMISensor()._inited = False
+        super(TestIPMISensor, cls).tearDownClass()
+
     def test_read_sensor_temperature(self):
         sensors = self.ipmi.read_sensor_any('Temperature')
 
+        self.assertTrue(self.ipmi.ipmi_support)
         # only temperature data returned.
         self.assertIn('Temperature', sensors)
         self.assertEqual(1, len(sensors))
@@ -91,11 +95,17 @@ class TestNonIPMISensor(base.BaseTestCase):
 
         utils.execute = mock.Mock(side_effect=fake_utils.execute_without_ipmi)
         self.ipmi = ipmi_sensor.IPMISensor()
-        self.ipmi.ipmi_support = False
+
+    @classmethod
+    def tearDownClass(cls):
+        # reset inited to force an initialization of singleton for next test
+        ipmi_sensor.IPMISensor()._inited = False
+        super(TestNonIPMISensor, cls).tearDownClass()
 
     def test_read_sensor_temperature(self):
         sensors = self.ipmi.read_sensor_any('Temperature')
 
+        self.assertFalse(self.ipmi.ipmi_support)
         # Non-IPMI platform return empty data
         self.assertEqual({}, sensors)
 

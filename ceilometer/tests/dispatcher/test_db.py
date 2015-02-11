@@ -1,8 +1,6 @@
 #
 # Copyright 2013 IBM Corp
 #
-# Author: Tong Li <litong01@us.ibm.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -18,7 +16,7 @@ import datetime
 import uuid
 
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from oslotest import base
 
 from ceilometer.dispatcher import database
@@ -50,8 +48,7 @@ class TestDispatcherDB(base.BaseTestCase):
                'counter_volume': 1,
                }
         msg['message_signature'] = utils.compute_signature(
-            msg,
-            self.CONF.publisher.metering_secret,
+            msg, self.CONF.publisher.telemetry_secret,
         )
 
         with mock.patch.object(self.dispatcher.meter_conn,
@@ -66,7 +63,7 @@ class TestDispatcherDB(base.BaseTestCase):
                'counter_volume': 1,
                'message_signature': 'invalid-signature'}
 
-        class ErrorConnection:
+        class ErrorConnection(object):
 
             called = False
 
@@ -87,8 +84,7 @@ class TestDispatcherDB(base.BaseTestCase):
                'timestamp': '2012-07-02T13:53:40Z',
                }
         msg['message_signature'] = utils.compute_signature(
-            msg,
-            self.CONF.publisher.metering_secret,
+            msg, self.CONF.publisher.telemetry_secret,
         )
 
         expected = msg.copy()
@@ -107,8 +103,7 @@ class TestDispatcherDB(base.BaseTestCase):
                'timestamp': '2012-09-30T15:31:50.262-08:00',
                }
         msg['message_signature'] = utils.compute_signature(
-            msg,
-            self.CONF.publisher.metering_secret,
+            msg, self.CONF.publisher.telemetry_secret,
         )
 
         expected = msg.copy()

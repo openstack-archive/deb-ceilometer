@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,8 +15,8 @@
 """Base classes for API tests.
 """
 
-from oslo.config import cfg
-from oslo.config import fixture as fixture_config
+from oslo_config import cfg
+from oslo_config import fixture as fixture_config
 import pecan
 import pecan.testing
 
@@ -50,15 +48,10 @@ class FunctionalTest(db_test_base.TestBase):
         self.app = self._make_app()
 
     def _make_app(self, enable_acl=False):
-        # Determine where we are so we can set up paths in the config
-        root_dir = self.path_get()
-
         self.config = {
             'app': {
                 'root': 'ceilometer.api.controllers.root.RootController',
                 'modules': ['ceilometer.api'],
-                'static_root': '%s/public' % root_dir,
-                'template_path': '%s/ceilometer/api/templates' % root_dir,
                 'enable_acl': enable_acl,
             },
             'wsme': {

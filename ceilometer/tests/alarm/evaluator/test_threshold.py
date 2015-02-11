@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Red Hat, Inc
 #
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,8 +20,8 @@ import uuid
 from ceilometerclient import exc
 from ceilometerclient.v2 import statistics
 import mock
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import pytz
 from six import moves
 
@@ -65,7 +63,8 @@ class TestEvaluate(base.TestEvaluatorBase):
                                      'value': 'cpu_util'},
                                     {'field': 'resource_id',
                                      'op': 'eq',
-                                     'value': 'my_instance'}])
+                                     'value': 'my_instance'}]),
+                         severity='critical'
                          ),
             models.Alarm(name='group_running_idle',
                          description='group_running_idle',
@@ -94,7 +93,8 @@ class TestEvaluate(base.TestEvaluatorBase):
                                      'value': 'cpu_util'},
                                     {'field': 'metadata.user_metadata.AS',
                                      'op': 'eq',
-                                     'value': 'my_group'}])
+                                     'value': 'my_group'}]),
+                         severity='critical'
                          ),
         ]
 
@@ -118,7 +118,7 @@ class TestEvaluate(base.TestEvaluatorBase):
             avgs = [self._get_stat('avg', self.alarms[0].rule['threshold'] - v)
                     for v in moves.xrange(5)]
             maxs = [self._get_stat('max', self.alarms[1].rule['threshold'] + v)
-                    for v in moves.xrange(1, 4)]
+                    for v in moves.xrange(1, 5)]
             self.api_client.statistics.list.side_effect = [broken,
                                                            broken,
                                                            avgs,
@@ -147,6 +147,32 @@ class TestEvaluate(base.TestEvaluatorBase):
                 self._reason_data('unknown',
                                   alarm.rule['evaluation_periods'],
                                   None))
+                for alarm in self.alarms]
+            self.assertEqual(expected, self.notifier.notify.call_args_list)
+
+    def test_less_insufficient_data(self):
+        self._set_all_alarms('ok')
+        with mock.patch('ceilometerclient.client.get_client',
+                        return_value=self.api_client):
+            avgs = [self._get_stat('avg', self.alarms[0].rule['threshold'] - v)
+                    for v in moves.xrange(4)]
+            maxs = [self._get_stat('max', self.alarms[1].rule['threshold'] - v)
+                    for v in moves.xrange(1, 4)]
+            self.api_client.statistics.list.side_effect = [avgs, maxs]
+            self._evaluate_all_alarms()
+            self._assert_all_alarms('insufficient data')
+            expected = [mock.call(alarm.alarm_id, state='insufficient data')
+                        for alarm in self.alarms]
+            update_calls = self.api_client.alarms.set_state.call_args_list
+            self.assertEqual(update_calls, expected)
+            expected = [mock.call(
+                alarm,
+                'ok',
+                ('%d datapoints are unknown'
+                 % alarm.rule['evaluation_periods']),
+                self._reason_data('unknown',
+                                  alarm.rule['evaluation_periods'],
+                                  alarm.rule['threshold'] - 3))
                 for alarm in self.alarms]
             self.assertEqual(expected, self.notifier.notify.call_args_list)
 

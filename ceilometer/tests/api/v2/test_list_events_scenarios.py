@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -20,7 +18,7 @@
 import datetime
 
 import mock
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 import six
 import webtest.app
 
@@ -56,8 +54,7 @@ class TestListEvents(v2.FunctionalTest,
             source='test_source',
         )
         msg = utils.meter_message_from_counter(
-            self.sample1,
-            self.CONF.publisher.metering_secret,
+            self.sample1, self.CONF.publisher.telemetry_secret,
         )
         self.conn.record_metering_data(msg)
 
@@ -76,8 +73,7 @@ class TestListEvents(v2.FunctionalTest,
             source='source2',
         )
         msg2 = utils.meter_message_from_counter(
-            self.sample2,
-            self.CONF.publisher.metering_secret,
+            self.sample2, self.CONF.publisher.telemetry_secret,
         )
         self.conn.record_metering_data(msg2)
 

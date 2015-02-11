@@ -1,9 +1,6 @@
 #
 # Copyright 2013 eNovance
 #
-# Author: Julien Danjou <julien@danjou.info>,
-#         Tyaptin Ilya <ityaptin@mirantis.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,9 +18,10 @@
 import socket
 
 import msgpack
-from oslo.config import cfg
-from oslo.utils import netutils
+from oslo_config import cfg
+from oslo_utils import netutils
 
+import ceilometer
 from ceilometer.i18n import _
 from ceilometer.openstack.common import log
 from ceilometer import publisher
@@ -52,8 +50,7 @@ class UDPPublisher(publisher.PublisherBase):
 
         for sample in samples:
             msg = utils.meter_message_from_counter(
-                sample,
-                cfg.CONF.publisher.metering_secret)
+                sample, cfg.CONF.publisher.telemetry_secret)
             host = self.host
             port = self.port
             LOG.debug(_("Publishing sample %(msg)s over UDP to "
@@ -65,3 +62,11 @@ class UDPPublisher(publisher.PublisherBase):
             except Exception as e:
                 LOG.warn(_("Unable to send sample over UDP"))
                 LOG.exception(e)
+
+    def publish_events(self, context, events):
+        """Send an event message for publishing
+
+        :param context: Execution context from the service or RPC call
+        :param events: events from pipeline after transformation
+        """
+        raise ceilometer.NotImplementedError

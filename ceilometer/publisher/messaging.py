@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,8 +19,8 @@ import abc
 import itertools
 import operator
 
-from oslo.config import cfg
 import oslo.messaging
+from oslo_config import cfg
 import six
 import six.moves.urllib.parse as urlparse
 
@@ -49,10 +47,16 @@ NOTIFIER_OPTS = [
                help='The topic that ceilometer uses for metering '
                'notifications.',
                ),
-    cfg.StrOpt('metering_driver',
+    cfg.StrOpt('event_topic',
+               default='event',
+               help='The topic that ceilometer uses for event '
+               'notifications.',
+               ),
+    cfg.StrOpt('telemetry_driver',
                default='messagingv2',
                help='The driver that ceilometer uses for metering '
                'notifications.',
+               deprecated_name='metering_driver',
                )
 ]
 
@@ -99,11 +103,9 @@ class MessagingPublisher(publisher.PublisherBase):
 
         meters = [
             utils.meter_message_from_counter(
-                sample,
-                cfg.CONF.publisher.metering_secret)
+                sample, cfg.CONF.publisher.telemetry_secret)
             for sample in samples
         ]
-
         topic = cfg.CONF.publisher_rpc.metering_topic
         self.local_queue.append((context, topic, meters))
 
@@ -143,24 +145,37 @@ class MessagingPublisher(publisher.PublisherBase):
 
     def _process_queue(self, queue, policy):
         while queue:
-            context, topic, meters = queue[0]
+            context, topic, data = queue[0]
             try:
-                self._send(context, topic, meters)
+                self._send(context, topic, data)
             except oslo.messaging.MessageDeliveryFailure:
-                samples = sum([len(m) for __, __, m in queue])
+                data = sum([len(m) for __, __, m in queue])
                 if policy == 'queue':
-                    LOG.warn(_("Failed to publish %d samples, queue them"),
-                             samples)
+                    LOG.warn(_("Failed to publish %d datapoints, queue them"),
+                             data)
                     return queue
                 elif policy == 'drop':
-                    LOG.warn(_("Failed to publish %d samples, dropping them"),
-                             samples)
+                    LOG.warn(_("Failed to publish %d datapoints, "
+                               "dropping them"), data)
                     return []
                 # default, occur only if rabbit_max_retries > 0
                 raise
             else:
                 queue.pop(0)
         return []
+
+    def publish_events(self, context, events):
+        """Send an event message for publishing
+
+        :param context: Execution context from the service or RPC call
+        :param events: events from pipeline after transformation
+        """
+        ev_list = [utils.message_from_event(
+            event, cfg.CONF.publisher.telemetry_secret) for event in events]
+
+        topic = cfg.CONF.publisher_notifier.event_topic
+        self.local_queue.append((context, topic, ev_list))
+        self.flush()
 
     @abc.abstractmethod
     def _send(self, context, topic, meters):
@@ -185,16 +200,28 @@ class RPCPublisher(MessagingPublisher):
 
 
 class NotifierPublisher(MessagingPublisher):
-    def __init__(self, parsed_url):
+    def __init__(self, parsed_url, topic):
         super(NotifierPublisher, self).__init__(parsed_url)
         self.notifier = oslo.messaging.Notifier(
             messaging.get_transport(),
-            driver=cfg.CONF.publisher_notifier.metering_driver,
-            publisher_id='metering.publisher.%s' % cfg.CONF.host,
-            topic=cfg.CONF.publisher_notifier.metering_topic,
+            driver=cfg.CONF.publisher_notifier.telemetry_driver,
+            publisher_id='telemetry.publisher.%s' % cfg.CONF.host,
+            topic=topic,
             retry=self.retry
         )
 
-    def _send(self, context, event_type, meters):
+    def _send(self, context, event_type, data):
         self.notifier.sample(context.to_dict(), event_type=event_type,
-                             payload=meters)
+                             payload=data)
+
+
+class SampleNotifierPublisher(NotifierPublisher):
+    def __init__(self, parsed_url):
+        super(SampleNotifierPublisher, self).__init__(
+            parsed_url, cfg.CONF.publisher_notifier.metering_topic)
+
+
+class EventNotifierPublisher(NotifierPublisher):
+    def __init__(self, parsed_url):
+        super(EventNotifierPublisher, self).__init__(
+            parsed_url, cfg.CONF.publisher_notifier.event_topic)

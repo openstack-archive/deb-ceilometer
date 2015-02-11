@@ -1,8 +1,6 @@
 #
 # Copyright 2012 New Dream Network, LLC (DreamHost)
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,13 +14,13 @@
 # under the License.
 
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
+from oslo_context import context
 from oslotest import base
 from oslotest import mockpatch
 
 from ceilometer.agent import manager
 from ceilometer.image import glance
-from ceilometer.openstack.common import context
 
 IMAGE_LIST = [
     type('Image', (object,),
@@ -127,7 +125,8 @@ class TestManager(manager.AgentManager):
 
 class TestImagePollsterPageSize(base.BaseTestCase):
 
-    def fake_get_glance_client(self, ksclient, endpoint):
+    @staticmethod
+    def fake_get_glance_client(ksclient, endpoint):
         glanceclient = FakeGlanceClient()
         glanceclient.images.list = mock.MagicMock(return_value=IMAGE_LIST)
         return glanceclient
@@ -165,7 +164,8 @@ class TestImagePollsterPageSize(base.BaseTestCase):
 
 class TestImagePollster(base.BaseTestCase):
 
-    def fake_get_glance_client(self, ksclient, endpoint):
+    @staticmethod
+    def fake_get_glance_client(ksclient, endpoint):
         glanceclient = _BaseObject()
         setattr(glanceclient, "images", _BaseObject())
         setattr(glanceclient.images,

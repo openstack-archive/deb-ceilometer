@@ -1,7 +1,5 @@
 # Copyright 2013 Cloudbase Solutions Srl
 #
-# Author: Alessandro Pilotti <apilotti@cloudbasesolutions.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -34,6 +32,28 @@ class TestUtilsV2(base.BaseTestCase):
         self._utils._conn_cimv2 = mock.MagicMock()
 
         super(TestUtilsV2, self).setUp()
+
+    @mock.patch.object(utilsv2.UtilsV2, '_get_metrics')
+    @mock.patch.object(utilsv2.UtilsV2, '_get_metric_def')
+    @mock.patch.object(utilsv2.UtilsV2, '_lookup_vm')
+    def test_get_memory_metrics(self, mock_lookup_vm, mock_get_metric_def,
+                                mock_get_metrics):
+        mock_vm = mock_lookup_vm.return_value
+
+        mock_metric_def = mock_get_metric_def.return_value
+
+        metric_memory = mock.MagicMock()
+        metric_memory.MetricValue = 3
+        mock_get_metrics.return_value = [metric_memory]
+
+        response = self._utils.get_memory_metrics(mock.sentinel._FAKE_INSTANCE)
+
+        mock_lookup_vm.assert_called_once_with(mock.sentinel._FAKE_INSTANCE)
+        mock_get_metric_def.assert_called_once_with(
+            self._utils._MEMORY_METRIC_NAME)
+        mock_get_metrics.assert_called_once_with(mock_vm, mock_metric_def)
+
+        self.assertEqual(3, response)
 
     def test_get_host_cpu_info(self):
         _fake_clock_speed = 1000
@@ -151,6 +171,27 @@ class TestUtilsV2(base.BaseTestCase):
         self.assertEqual(fake_write_mb, disk_metrics[0]['write_mb'])
         self.assertEqual(fake_instance_id, disk_metrics[0]['instance_id'])
         self.assertEqual(fake_host_resource, disk_metrics[0]['host_resource'])
+
+    def test_get_disk_latency(self):
+        fake_vm_name = mock.sentinel.VM_NAME
+        fake_instance_id = mock.sentinel.FAKE_INSTANCE_ID
+        fake_latency = mock.sentinel.FAKE_LATENCY
+
+        self._utils._lookup_vm = mock.MagicMock()
+
+        mock_disk = mock.MagicMock()
+        mock_disk.InstanceID = fake_instance_id
+        self._utils._get_vm_resources = mock.MagicMock(
+            return_value=[mock_disk])
+
+        self._utils._get_metric_values = mock.MagicMock(
+            return_value=[fake_latency])
+
+        disk_metrics = list(self._utils.get_disk_latency_metrics(fake_vm_name))
+
+        self.assertEqual(1, len(disk_metrics))
+        self.assertEqual(fake_latency, disk_metrics[0]['disk_latency'])
+        self.assertEqual(fake_instance_id, disk_metrics[0]['instance_id'])
 
     def test_get_metric_value_instances(self):
         mock_el1 = mock.MagicMock()

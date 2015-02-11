@@ -217,9 +217,9 @@ Installing the notification agent
          not yet been tested with ZeroMQ. We recommend using Rabbit or
          qpid for now.
 
-   2. Set the ``metering_secret`` value.
+   2. Set the ``telemetry_secret`` value.
 
-      Set the ``metering_secret`` value to a large, random, value. Use
+      Set the ``telemetry_secret`` value to a large, random, value. Use
       the same value in all ceilometer configuration files, on all
       nodes, so that messages passing between the nodes can be
       validated.
@@ -289,9 +289,9 @@ Installing the collector
          not yet been tested with ZeroMQ. We recommend using Rabbit or
          qpid for now.
 
-   2. Set the ``metering_secret`` value.
+   2. Set the ``telemetry_secret`` value.
 
-      Set the ``metering_secret`` value to a large, random, value. Use
+      Set the ``telemetry_secret`` value to a large, random, value. Use
       the same value in all ceilometer configuration files, on all
       nodes, so that messages passing between the nodes can be
       validated.
@@ -331,7 +331,6 @@ Installing the Compute Agent
       instance_usage_audit_period=hour
       notify_on_state_change=vm_and_task_state
       notification_driver=nova.openstack.common.notifier.rpc_notifier
-      notification_driver=ceilometer.compute.nova_notifier
 
 2. Clone the ceilometer git repository to the server::
 
@@ -373,9 +372,9 @@ Installing the Compute Agent
          not yet been tested with ZeroMQ. We recommend using Rabbit or
          qpid for now.
 
-   2. Set the ``metering_secret`` value.
+   2. Set the ``telemetry_secret`` value.
 
-      Set the ``metering_secret`` value to a large, random, value. Use
+      Set the ``telemetry_secret`` value to a large, random, value. Use
       the same value in all ceilometer configuration files, on all
       nodes, so that messages passing between the nodes can be
       validated.
@@ -447,9 +446,9 @@ Installing the Central Agent
          not yet been tested with ZeroMQ. We recommend using Rabbit or
          qpid for now.
 
-   2. Set the ``metering_secret`` value.
+   2. Set the ``telemetry_secret`` value.
 
-      Set the ``metering_secret`` value to a large, random, value. Use
+      Set the ``telemetry_secret`` value to a large, random, value. Use
       the same value in all ceilometer configuration files, on all
       nodes, so that messages passing between the nodes can be
       validated.
@@ -603,6 +602,19 @@ Also you need to configure RPC-related options correctly as written above
 for other parts of installation guide. Refer to :doc:`/configuration` for
 details about any other options you might want to modify before starting
 the service.
+
+
+Configuring MagnetoDB to send notifications
+===========================================
+
+Configure the driver in ``magnetodb-async-task-executor.conf``
+
+   ::
+
+        notification_driver=messaging
+
+You also would need to restart the service magnetodb-async-task-executor
+(if it's already running) after changing the above configuration file.
 
 
 Notifications queues

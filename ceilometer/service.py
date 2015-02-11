@@ -2,8 +2,6 @@
 #
 # Copyright 2012-2014 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -20,8 +18,8 @@ import os
 import socket
 import sys
 
-from oslo.config import cfg
 from oslo import i18n
+from oslo_config import cfg
 
 from ceilometer.i18n import _
 from ceilometer import messaging
@@ -90,9 +88,6 @@ CLI_OPTS = [
                      'SSL connection to Identity Service is established.'),
 ]
 cfg.CONF.register_cli_opts(CLI_OPTS, group="service_credentials")
-
-cfg.CONF.import_opt('default_log_levels',
-                    'ceilometer.openstack.common.log')
 
 LOG = log.getLogger(__name__)
 

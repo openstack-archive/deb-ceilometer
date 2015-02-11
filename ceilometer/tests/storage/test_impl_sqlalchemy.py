@@ -1,7 +1,3 @@
-#
-# Author: John Tran <jhtran@att.com>
-#         Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -26,7 +22,7 @@ import datetime
 import repr
 
 import mock
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 
 from ceilometer.alarm.storage import impl_sqlalchemy as impl_sqla_alarm
 from ceilometer.event.storage import impl_sqlalchemy as impl_sqla_event

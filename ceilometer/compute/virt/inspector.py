@@ -1,9 +1,6 @@
 #
 # Copyright 2012 Red Hat, Inc
 #
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#         Doug Hellmann <doug.hellmann@dreamhost.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,7 +16,7 @@
 
 import collections
 
-from oslo.config import cfg
+from oslo_config import cfg
 from stevedore import driver
 
 import ceilometer
@@ -131,6 +128,13 @@ DiskRateStats = collections.namedtuple('DiskRateStats',
                                         'write_bytes_rate',
                                         'write_requests_rate'])
 
+# Named tuple representing disk latency statistics.
+#
+# disk_latency: average disk latency
+#
+DiskLatencyStats = collections.namedtuple('DiskLatencyStats',
+                                          ['disk_latency'])
+
 
 # Exception types
 #
@@ -143,13 +147,17 @@ class InstanceNotFoundException(InspectorException):
     pass
 
 
+class InstanceShutOffException(InspectorException):
+    pass
+
+
+class NoDataException(InspectorException):
+    pass
+
+
 # Main virt inspector abstraction layering over the hypervisor API.
 #
 class Inspector(object):
-
-    def inspect_instances(self):
-        """List the instances on the current host."""
-        raise ceilometer.NotImplementedError
 
     def inspect_cpus(self, instance):
         """Inspect the CPU statistics for an instance.
@@ -216,6 +224,14 @@ class Inspector(object):
                inspected
         :return: for each disk, the number of bytes & operations
                  read and written per second, with the error count
+        """
+        raise ceilometer.NotImplementedError
+
+    def inspect_disk_latency(self, instance):
+        """Inspect the disk statistics as rates for an instance.
+
+        :param instance: the target instance
+        :return: for each disk, the average disk latency
         """
         raise ceilometer.NotImplementedError
 

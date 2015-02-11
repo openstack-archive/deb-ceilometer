@@ -1,8 +1,6 @@
 #
 # Copyright 2013 eNovance <licensing@enovance.com>
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,7 +14,7 @@
 # under the License.
 
 import mock
-from oslo.config import fixture as fixture_config
+from oslo_config import fixture as fixture_config
 from oslotest import base
 
 from ceilometer.agent import plugin_base
@@ -96,7 +94,8 @@ class NotificationBaseTestCase(base.BaseTestCase):
             'compute.instance.start', ['compute.*.*.foobar', 'compute.*']))
 
     class FakePlugin(plugin_base.NotificationBase):
-        def get_exchange_topics(self, conf):
+        @staticmethod
+        def get_exchange_topics(conf):
             return [plugin_base.ExchangeTopics(exchange="exchange1",
                                                topics=["t1", "t2"]),
                     plugin_base.ExchangeTopics(exchange="exchange2",

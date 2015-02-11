@@ -1,8 +1,6 @@
 #
 # Copyright 2014 Red Hat, Inc.
 #
-# Author: Nejc Saje <nsaje@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -17,7 +15,7 @@
 
 import uuid
 
-from oslo.config import cfg
+from oslo_config import cfg
 import tooz.coordination
 
 from ceilometer.i18n import _LE, _LI

@@ -1,8 +1,6 @@
 #
 # Copyright (c) 2014 Cisco Systems, Inc
 #
-# Author:Pradeep Kilambi <pkilambi@cisco.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,13 +13,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo.config import cfg
+from oslo_config import cfg
 
 from ceilometer.agent import plugin_base
 from ceilometer import neutron_client
-
-
-cfg.CONF.import_group('service_types', 'ceilometer.neutron_client')
 
 
 class _BaseServicesDiscovery(plugin_base.DiscoveryBase):

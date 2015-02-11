@@ -1,10 +1,6 @@
 #
 # Copyright 2013 Intel Corp.
 #
-# Author: Lianhao Lu <lianhao.lu@intel.com>
-#         Shane Wang <shane.wang@intel.com>
-#         Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -23,8 +19,8 @@ import datetime
 import operator
 
 import mock
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import pymongo
 
 import ceilometer
@@ -55,7 +51,7 @@ class DBTestBase(tests_db.TestBase):
             resource_metadata=metadata, source=source
         )
         msg = utils.meter_message_from_counter(
-            s, self.CONF.publisher.metering_secret
+            s, self.CONF.publisher.telemetry_secret
         )
         self.conn.record_metering_data(msg)
         return msg
@@ -1182,6 +1178,10 @@ class StatisticsTest(DBTestBase,
         self.assertEqual(10, results.max)
         self.assertEqual(27, results.sum)
         self.assertEqual(9, results.avg)
+        self.assertEqual(datetime.datetime(2012, 9, 25, 10, 30),
+                         results.period_start)
+        self.assertEqual(datetime.datetime(2012, 9, 25, 12, 32),
+                         results.period_end)
 
     def test_by_user(self):
         f = storage.SampleFilter(
@@ -1409,8 +1409,7 @@ class StatisticsGroupByTest(DBTestBase,
                 source=test_sample['source'],
             )
             msg = utils.meter_message_from_counter(
-                c,
-                self.CONF.publisher.metering_secret,
+                c, self.CONF.publisher.telemetry_secret,
             )
             self.conn.record_metering_data(msg)
 
@@ -2608,8 +2607,7 @@ class CounterDataTypeTest(DBTestBase,
             source='test-1',
         )
         msg = utils.meter_message_from_counter(
-            c,
-            self.CONF.publisher.metering_secret,
+            c, self.CONF.publisher.telemetry_secret,
         )
 
         self.conn.record_metering_data(msg)
@@ -2627,8 +2625,7 @@ class CounterDataTypeTest(DBTestBase,
             source='test-1',
         )
         msg = utils.meter_message_from_counter(
-            c,
-            self.CONF.publisher.metering_secret,
+            c, self.CONF.publisher.telemetry_secret,
         )
         self.conn.record_metering_data(msg)
 
@@ -2645,8 +2642,7 @@ class CounterDataTypeTest(DBTestBase,
             source='test-1',
         )
         msg = utils.meter_message_from_counter(
-            c,
-            self.CONF.publisher.metering_secret,
+            c, self.CONF.publisher.telemetry_secret,
         )
         self.conn.record_metering_data(msg)
 
@@ -3492,7 +3488,7 @@ class BigIntegerTest(tests_db.TestBase,
                           timestamp=datetime.datetime.utcnow(),
                           resource_metadata=metadata)
         msg = utils.meter_message_from_counter(
-            s, self.CONF.publisher.metering_secret)
+            s, self.CONF.publisher.telemetry_secret)
         self.conn.record_metering_data(msg)
 
 

@@ -1,7 +1,5 @@
 # Copyright 2014 Intel
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -16,8 +14,8 @@
 
 import abc
 
-from oslo.config import cfg
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import six
 
 from ceilometer.agent import plugin_base
@@ -30,6 +28,9 @@ CONF.import_opt('host', 'ceilometer.service')
 
 @six.add_metaclass(abc.ABCMeta)
 class _Base(plugin_base.PollsterBase):
+
+    no_resources = True
+
     def __init__(self):
         self.nodemanager = node_manager.NodeManager()
 

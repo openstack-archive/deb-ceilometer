@@ -2,9 +2,6 @@
 # Copyright 2012 eNovance <licensing@enovance.com>
 # Copyright 2012 Red Hat, Inc
 #
-# Author: Julien Danjou <julien@danjou.info>
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,14 +16,14 @@
 
 import copy
 
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 
 import ceilometer
 from ceilometer.compute import pollsters
 from ceilometer.compute.pollsters import util
 from ceilometer.compute import util as compute_util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.i18n import _
+from ceilometer.i18n import _, _LW
 from ceilometer.openstack.common import log
 from ceilometer import sample
 
@@ -107,6 +104,11 @@ class _Base(pollsters.BaseComputePollster):
             except virt_inspector.InstanceNotFoundException as err:
                 # Instance was deleted while getting samples. Ignore it.
                 LOG.debug(_('Exception while getting samples %s'), err)
+            except virt_inspector.InstanceShutOffException as e:
+                LOG.warn(_LW('Instance %(instance_id)s was shut off while '
+                             'getting samples of %(pollster)s: %(exc)s'),
+                         {'instance_id': instance.id,
+                          'pollster': self.__class__.__name__, 'exc': e})
             except ceilometer.NotImplementedError:
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '

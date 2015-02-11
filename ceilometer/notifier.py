@@ -1,8 +1,6 @@
 #
 # Copyright 2013 eNovance
 #
-# Author: Julien Danjou <julien@danjou.info>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,10 +13,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from oslo_context import context as req_context
 from stevedore import extension
 
 from ceilometer.i18n import _
-from ceilometer.openstack.common import context as req_context
 from ceilometer.openstack.common import log as logging
 from ceilometer import pipeline
 from ceilometer import transformer

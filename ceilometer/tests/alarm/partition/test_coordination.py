@@ -1,8 +1,6 @@
 #
 # Copyright 2013 Red Hat, Inc
 #
-# Author: Eoghan Glynn <eglynn@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -21,8 +19,8 @@ import logging
 import uuid
 
 import mock
-from oslo.config import fixture as fixture_config
-from oslo.utils import timeutils
+from oslo_config import fixture as fixture_config
+from oslo_utils import timeutils
 from six import moves
 
 from ceilometer.alarm.partition import coordination
@@ -123,6 +121,7 @@ class TestCoordinate(tests_base.BaseTestCase):
                             alarm_actions=[],
                             insufficient_data_actions=[],
                             alarm_id=uuid,
+                            severity='critical',
                             time_constraints=[],
                             rule=dict(
                                 statistic='avg',

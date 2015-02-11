@@ -1,7 +1,5 @@
 # Copyright 2014 Intel Corp.
 #
-# Author: Zhai Edwin <edwin.zhai@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -15,7 +13,7 @@
 # under the License.
 
 import mock
-from oslo.config import cfg
+from oslo_config import cfg
 
 from ceilometer.ipmi.pollsters import node
 from ceilometer.tests.ipmi.pollsters import base

@@ -37,10 +37,11 @@ import uuid
 
 import croniter
 import jsonschema
-from oslo.config import cfg
-from oslo.utils import netutils
-from oslo.utils import strutils
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_context import context
+from oslo_utils import netutils
+from oslo_utils import strutils
+from oslo_utils import timeutils
 import pecan
 from pecan import rest
 import pytz
@@ -50,13 +51,12 @@ from wsme import types as wtypes
 import wsmeext.pecan as wsme_pecan
 
 import ceilometer
-from ceilometer.alarm import service as alarm_service
+from ceilometer import alarm as ceilometer_alarm
 from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.api import rbac
 from ceilometer.event.storage import models as event_models
 from ceilometer.i18n import _
 from ceilometer import messaging
-from ceilometer.openstack.common import context
 from ceilometer.openstack.common import log
 from ceilometer import sample
 from ceilometer import storage
@@ -86,6 +86,8 @@ state_kind = ["ok", "alarm", "insufficient data"]
 state_kind_enum = wtypes.Enum(str, *state_kind)
 operation_kind = ('lt', 'le', 'eq', 'ne', 'ge', 'gt')
 operation_kind_enum = wtypes.Enum(str, *operation_kind)
+severity_kind = ["low", "moderate", "critical"]
+severity_kind_enum = wtypes.Enum(str, *severity_kind)
 
 
 class ClientSideError(wsme.exc.ClientSideError):
@@ -1540,7 +1542,8 @@ class Resource(_Base):
 class ResourcesController(rest.RestController):
     """Works on resources."""
 
-    def _resource_links(self, resource_id, meter_links=1):
+    @staticmethod
+    def _resource_links(resource_id, meter_links=1):
         links = [_make_link('self', pecan.request.host_url, 'resources',
                             resource_id)]
         if meter_links:
@@ -1831,6 +1834,10 @@ class Alarm(_Base):
     state_timestamp = datetime.datetime
     "The date of the last alarm state changed"
 
+    severity = AdvEnum('severity', str, *severity_kind,
+                       default='low')
+    "The severity of the alarm"
+
     def __init__(self, rule=None, time_constraints=None, **kwargs):
         super(Alarm, self).__init__(**kwargs)
 
@@ -1888,7 +1895,7 @@ class Alarm(_Base):
 
     @staticmethod
     def check_alarm_actions(alarm):
-        actions_schema = alarm_service.AlarmNotifierService.notifiers_schemas
+        actions_schema = ceilometer_alarm.NOTIFIER_SCHEMAS
         for state in state_kind:
             actions_name = state.replace(" ", "_") + '_actions'
             actions = getattr(alarm, actions_name)
@@ -1919,6 +1926,7 @@ class Alarm(_Base):
                    enabled=True,
                    timestamp=datetime.datetime.utcnow(),
                    state="ok",
+                   severity="moderate",
                    state_timestamp=datetime.datetime.utcnow(),
                    ok_actions=["http://site:8000/ok"],
                    alarm_actions=["http://site:8000/alarm"],
@@ -2050,6 +2058,7 @@ class AlarmController(rest.RestController):
         now = timeutils.utcnow()
 
         data.alarm_id = self._id
+
         user, project = rbac.get_limited_to(pecan.request.headers)
         if user:
             data.user_id = user
@@ -2064,7 +2073,7 @@ class AlarmController(rest.RestController):
             data.state_timestamp = now
         else:
             data.state_timestamp = alarm_in.state_timestamp
-
+        alarm_in.severity = data.severity
         # make sure alarms are unique by name per project.
         if alarm_in.name != data.name:
             alarms = list(self.conn.get_alarms(name=data.name,
@@ -2175,7 +2184,8 @@ class AlarmsController(rest.RestController):
     def _lookup(self, alarm_id, *remainder):
         return AlarmController(alarm_id), remainder
 
-    def _record_creation(self, conn, data, alarm_id, now):
+    @staticmethod
+    def _record_creation(conn, data, alarm_id, now):
         if not cfg.CONF.alarm.record_history:
             return
         type = alarm_models.AlarmChange.CREATION
@@ -2308,6 +2318,13 @@ class EventQuery(Query):
                                              self._get_value_as_type(),
                                              self.type)
 
+    @classmethod
+    def sample(cls):
+        return cls(field="event_type",
+                   type="string",
+                   op="eq",
+                   value="compute.instance.create.start")
+
 
 class Trait(_Base):
     """A Trait associated with an event."""
@@ -2372,12 +2389,15 @@ class Event(_Base):
     def sample(cls):
         return cls(
             event_type='compute.instance.update',
-            generated='2013-11-11T20:00:00',
+            generated=datetime.datetime(2015, 1, 1, 12, 30, 59, 123456),
             message_id='94834db1-8f1b-404d-b2ec-c35901f1b7f0',
             traits={
-                'request_id': 'req-4e2d67b8-31a4-48af-bb2f-9df72a353a72',
-                'service': 'conductor.tem-devstack-01',
-                'tenant_id': '7f13f2b17917463b9ee21aa92c4b36d6'
+                Trait(name='request_id',
+                      value='req-4e2d67b8-31a4-48af-bb2f-9df72a353a72'),
+                Trait(name='service',
+                      value='conductor.tem-devstack-01'),
+                Trait(name='tenant_id',
+                      value='7f13f2b17917463b9ee21aa92c4b36d6')
             }
         )
 
@@ -2463,8 +2483,13 @@ class EventTypesController(rest.RestController):
 
     traits = TraitsController()
 
-    @pecan.expose()
+    @requires_admin
+    @wsme_pecan.wsexpose(None, wtypes.text)
     def get_one(self, event_type):
+        """Unused API, will always return 404.
+
+        :param event_type: A event type
+        """
         pecan.abort(404)
 
     @requires_admin

@@ -1,6 +1,3 @@
-#
-# Author: John Tran <jhtran@att.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -19,7 +16,7 @@ SQLAlchemy models for Ceilometer data.
 import hashlib
 import json
 
-from oslo.utils import timeutils
+from oslo_utils import timeutils
 import six
 from sqlalchemy import (Column, Integer, String, ForeignKey, Index,
                         UniqueConstraint, BigInteger)
@@ -41,12 +38,14 @@ class JSONEncodedDict(TypeDecorator):
 
     impl = String
 
-    def process_bind_param(self, value, dialect):
+    @staticmethod
+    def process_bind_param(value, dialect):
         if value is not None:
             value = json.dumps(value)
         return value
 
-    def process_result_value(self, value, dialect):
+    @staticmethod
+    def process_result_value(value, dialect):
         if value is not None:
             value = json.loads(value)
         return value
@@ -64,14 +63,16 @@ class PreciseTimestamp(TypeDecorator):
                                                    asdecimal=True))
         return self.impl
 
-    def process_bind_param(self, value, dialect):
+    @staticmethod
+    def process_bind_param(value, dialect):
         if value is None:
             return value
         elif dialect.name == 'mysql':
             return utils.dt_to_decimal(value)
         return value
 
-    def process_result_value(self, value, dialect):
+    @staticmethod
+    def process_result_value(value, dialect):
         if value is None:
             return value
         elif dialect.name == 'mysql':
@@ -258,6 +259,7 @@ class Alarm(Base):
     enabled = Column(Boolean)
     name = Column(Text)
     type = Column(String(50))
+    severity = Column(String(50))
     description = Column(Text)
     timestamp = Column(PreciseTimestamp, default=lambda: timeutils.utcnow())
 
