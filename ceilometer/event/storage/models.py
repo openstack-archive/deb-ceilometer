@@ -13,6 +13,7 @@
 """Model classes for use in the events storage API.
 """
 from oslo_utils import timeutils
+import six
 
 from ceilometer.storage import base
 
@@ -30,8 +31,9 @@ class Event(base.Model):
 
     DUPLICATE = 1
     UNKNOWN_PROBLEM = 2
+    INCOMPATIBLE_TRAIT = 3
 
-    def __init__(self, message_id, event_type, generated, traits):
+    def __init__(self, message_id, event_type, generated, traits, raw):
         """Create a new event.
 
         :param message_id:  Unique ID for the message this event
@@ -41,9 +43,10 @@ class Event(base.Model):
         :param event_type:  The type of the event.
         :param generated:   UTC time for when the event occurred.
         :param traits:      list of Traits on this Event.
+        :param raw:         Unindexed raw notification details.
         """
         base.Model.__init__(self, message_id=message_id, event_type=event_type,
-                            generated=generated, traits=traits)
+                            generated=generated, traits=traits, raw=raw)
 
     def append_trait(self, trait_model):
         self.traits.append(trait_model)
@@ -51,7 +54,7 @@ class Event(base.Model):
     def __repr__(self):
         trait_list = []
         if self.traits:
-            trait_list = [str(trait) for trait in self.traits]
+            trait_list = [six.text_type(trait) for trait in self.traits]
         return ("<Event: %s, %s, %s, %s>" %
                 (self.message_id, self.event_type, self.generated,
                  " ".join(trait_list)))
@@ -60,7 +63,8 @@ class Event(base.Model):
         return {'message_id': self.message_id,
                 'event_type': self.event_type,
                 'generated': serialize_dt(self.generated),
-                'traits': [trait.serialize() for trait in self.traits]}
+                'traits': [trait.serialize() for trait in self.traits],
+                'raw': self.raw}
 
 
 class Trait(base.Model):
@@ -117,4 +121,4 @@ class Trait(base.Model):
             return float(value)
         if trait_type is cls.DATETIME_TYPE:
             return timeutils.normalize_time(timeutils.parse_isotime(value))
-        return str(value)
+        return six.text_type(value)

@@ -16,8 +16,8 @@ import operator
 
 import elasticsearch as es
 from elasticsearch import helpers
-from oslo.utils import netutils
-from oslo.utils import timeutils
+from oslo_utils import netutils
+from oslo_utils import timeutils
 import six
 
 from ceilometer.event.storage import base
@@ -90,7 +90,8 @@ class Connection(base.Connection):
                        '_type': ev.event_type,
                        '_id': ev.message_id,
                        '_source': {'timestamp': ev.generated.isoformat(),
-                                   'traits': traits}}
+                                   'traits': traits,
+                                   'raw': ev.raw}}
 
         problem_events = []
         for ok, result in helpers.streaming_bulk(
@@ -196,7 +197,8 @@ class Connection(base.Connection):
                                    generated=gen_ts,
                                    traits=sorted(
                                        trait_list,
-                                       key=operator.attrgetter('dtype')))
+                                       key=operator.attrgetter('dtype')),
+                                   raw=record['_source']['raw'])
 
     def get_event_types(self):
         iclient = es.client.IndicesClient(self.conn)

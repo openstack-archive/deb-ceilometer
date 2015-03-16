@@ -28,6 +28,7 @@ from ceilometer.compute.notifications import instance
 from ceilometer import messaging
 from ceilometer import notification
 from ceilometer.openstack.common import fileutils
+import ceilometer.openstack.common.service
 from ceilometer.publisher import test as test_publisher
 from ceilometer.tests import base as tests_base
 
@@ -90,6 +91,8 @@ class TestNotification(tests_base.BaseTestCase):
         self.CONF = self.useFixture(fixture_config.Config()).conf
         self.CONF.set_override("connection", "log://", group='database')
         self.CONF.set_override("store_events", False, group="notification")
+        self.CONF.set_override("disable_non_metric_meters", False,
+                               group="notification")
         self.setup_messaging(self.CONF)
         self.srv = notification.NotificationService()
 
@@ -186,6 +189,8 @@ class BaseRealNotification(tests_base.BaseTestCase):
         self.CONF.set_override("pipeline_cfg_file", pipeline_cfg_file)
 
         self.CONF.set_override("store_events", True, group="notification")
+        self.CONF.set_override("disable_non_metric_meters", False,
+                               group="notification")
         ev_pipeline = yaml.dump({
             'sources': [{
                 'name': 'test_event',
@@ -220,7 +225,7 @@ class BaseRealNotification(tests_base.BaseTestCase):
                     len(self.publisher.events) >= self.expected_events):
                 break
             eventlet.sleep(0)
-
+        self.assertNotEqual(self.srv.listeners, self.srv.pipeline_listeners)
         self.srv.stop()
 
         resources = list(set(s.resource_id for s in self.publisher.samples))
@@ -240,6 +245,32 @@ class TestRealNotification(BaseRealNotification):
         fake_publisher_cls.return_value = self.publisher
         self._check_notification_service()
 
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_notification_service_error_topic(self, fake_publisher_cls):
+        fake_publisher_cls.return_value = self.publisher
+        self.srv.start()
+        notifier = messaging.get_notifier(self.transport,
+                                          'compute.vagrant-precise')
+        notifier.error(context.RequestContext(), 'compute.instance.error',
+                       TEST_NOTICE_PAYLOAD)
+        start = timeutils.utcnow()
+        while timeutils.delta_seconds(start, timeutils.utcnow()) < 600:
+            if len(self.publisher.events) >= self.expected_events:
+                break
+            eventlet.sleep(0)
+        self.srv.stop()
+        self.assertEqual(self.expected_events, len(self.publisher.events))
+
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_notification_disable_non_metrics(self, fake_publisher_cls):
+        self.CONF.set_override("disable_non_metric_meters", True,
+                               group="notification")
+        # instance is a not a metric. we should only get back memory
+        self.expected_samples = 1
+        fake_publisher_cls.return_value = self.publisher
+        self._check_notification_service()
+        self.assertEqual('memory', self.publisher.samples[0].name)
+
     @mock.patch('ceilometer.coordination.PartitionCoordinator')
     @mock.patch('ceilometer.publisher.test.TestPublisher')
     def test_ha_configured_agent_coord_disabled(self, fake_publisher_cls,
@@ -249,6 +280,14 @@ class TestRealNotification(BaseRealNotification):
         fake_coord1.extract_my_subset.side_effect = lambda x, y: y
         fake_coord.return_value = fake_coord1
         self._check_notification_service()
+
+    @mock.patch.object(ceilometer.openstack.common.service.Service, 'stop')
+    def test_notification_service_start_abnormal(self, mocked):
+        try:
+            self.srv.stop()
+        except Exception:
+            pass
+        self.assertEqual(1, mocked.call_count)
 
 
 class TestRealNotificationHA(BaseRealNotification):

@@ -35,7 +35,8 @@ class EventTestBase(v2.FunctionalTest,
     def _generate_models(self):
         event_models = []
         base = 0
-        self.s_time = self.trait_time = datetime.datetime(2013, 12, 31, 5, 0)
+        self.s_time = datetime.datetime(2013, 12, 31, 5, 0)
+        self.trait_time = datetime.datetime(2013, 12, 31, 5, 0)
         for event_type in ['Foo', 'Bar', 'Zoo']:
             trait_models = [models.Trait(name, type, value)
                             for name, type, value in [
@@ -57,7 +58,8 @@ class EventTestBase(v2.FunctionalTest,
                 models.Event(message_id=str(base),
                              event_type=event_type,
                              generated=self.trait_time,
-                             traits=trait_models))
+                             traits=trait_models,
+                             raw={'status': {'nested': 'started'}}))
             base += 100
             self.trait_time += datetime.timedelta(days=1)
         self.event_conn.record_events(event_models)
@@ -139,6 +141,7 @@ class TestEventAPI(EventTestBase):
             expected_generated = trait_time.isoformat()
             self.assertIn(event['event_type'], ['Foo', 'Bar', 'Zoo'])
             self.assertEqual(4, len(event['traits']))
+            self.assertEqual({'status': {'nested': 'started'}}, event['raw']),
             self.assertEqual(expected_generated, event['generated'])
             for trait_name in ['trait_A', 'trait_B',
                                'trait_C', 'trait_D']:
@@ -175,6 +178,34 @@ class TestEventAPI(EventTestBase):
                              q=[{'field': 'event_type',
                                  'value': 'Foo'}])
         self.assertEqual(1, len(data))
+
+    def test_get_events_filter_trait_no_type(self):
+        data = self.get_json(self.PATH, headers=headers,
+                             q=[{'field': 'trait_A',
+                                 'value': 'my_Foo_text'}])
+        self.assertEqual(1, len(data))
+        self.assertEqual('Foo', data[0]['event_type'])
+
+    def test_get_events_filter_trait_empty_type(self):
+        return
+        data = self.get_json(self.PATH, headers=headers,
+                             q=[{'field': 'trait_A',
+                                 'value': 'my_Foo_text',
+                                 'type': ''}])
+        self.assertEqual(1, len(data))
+        self.assertEqual('Foo', data[0]['event_type'])
+
+    def test_get_events_filter_trait_invalid_type(self):
+        resp = self.get_json(self.PATH, headers=headers,
+                             q=[{'field': 'trait_A',
+                                 'value': 'my_Foo_text',
+                                 'type': 'whats-up'}],
+                             expect_errors=True)
+        self.assertEqual(400, resp.status_code)
+        self.assertEqual("The data type whats-up is not supported. The "
+                         "supported data type list is: [\'integer\', "
+                         "\'float\', \'string\', \'datetime\']",
+                         resp.json['error_message']['faultstring'])
 
     def test_get_events_filter_text_trait(self):
         data = self.get_json(self.PATH, headers=headers,

@@ -31,8 +31,8 @@ LOG = logging.getLogger(__name__)
 OPTS = [
     cfg.StrOpt('libvirt_type',
                default='kvm',
-               help='Libvirt domain type (valid options are: '
-                    'kvm, lxc, qemu, uml, xen).'),
+               choices=['kvm', 'lxc', 'qemu', 'uml', 'xen'],
+               help='Libvirt domain type.'),
     cfg.StrOpt('libvirt_uri',
                default='',
                help='Override the default libvirt URI '
@@ -95,7 +95,7 @@ class LibvirtInspector(virt_inspector.Inspector):
                                           libvirt.VIR_FROM_RPC)):
                 raise
             msg = _("Error from libvirt while looking up instance "
-                    "<name=%(name)s, id=%(id)>: "
+                    "<name=%(name)s, id=%(id)s>: "
                     "[Error Code %(error_code)s] "
                     "%(ex)s") % {'name': instance_name,
                                  'id': instance.id,
@@ -196,3 +196,19 @@ class LibvirtInspector(virt_inspector.Inspector):
                     'can not get info from libvirt: %(error)s') % {
                 'instance_uuid': instance.id, 'error': e}
             raise virt_inspector.NoDataException(msg)
+
+    def inspect_disk_info(self, instance):
+        domain = self._get_domain_not_shut_off_or_raise(instance)
+
+        tree = etree.fromstring(domain.XMLDesc(0))
+        for device in filter(
+                bool,
+                [target.get("dev")
+                 for target in tree.findall('devices/disk/target')]):
+            disk = virt_inspector.Disk(device=device)
+            block_info = domain.blockInfo(device)
+            info = virt_inspector.DiskInfo(capacity=block_info[0],
+                                           allocation=block_info[1],
+                                           physical=block_info[2])
+
+            yield (disk, info)

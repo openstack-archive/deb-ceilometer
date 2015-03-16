@@ -21,6 +21,7 @@
 import collections
 import fnmatch
 import itertools
+import random
 
 from oslo_config import cfg
 from oslo_context import context
@@ -28,6 +29,7 @@ import six
 from six.moves.urllib import parse as urlparse
 from stevedore import extension
 
+from ceilometer.agent import plugin_base
 from ceilometer import coordination
 from ceilometer.i18n import _
 from ceilometer.openstack.common import log
@@ -36,6 +38,16 @@ from ceilometer import pipeline as publish_pipeline
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
+
+OPTS = [
+    cfg.IntOpt('shuffle_time_before_polling_task',
+               default=0,
+               help='To reduce large requests at same time to Nova or other '
+                    'components from different compute agents, shuffle '
+                    'start time of polling task.'),
+]
+
+cfg.CONF.register_opts(OPTS)
 
 
 class PollsterListForbidden(Exception):
@@ -52,6 +64,8 @@ class Resources(object):
         self.agent_manager = agent_manager
         self._resources = []
         self._discovery = []
+        self.blacklist = []
+        self.last_dup = []
 
     def setup(self, pipeline):
         self._resources = pipeline.resources
@@ -116,17 +130,45 @@ class PollingTask(object):
                     LOG.info(_("Polling pollster %(poll)s in the context of "
                                "%(src)s"),
                              dict(poll=pollster.name, src=source_name))
-                    pollster_resources = None
+                    pollster_resources = []
                     if pollster.obj.default_discovery:
                         pollster_resources = self.manager.discover(
                             [pollster.obj.default_discovery], discovery_cache)
                     key = Resources.key(source_name, pollster)
                     source_resources = list(
                         self.resources[key].get(discovery_cache))
-                    polling_resources = (source_resources or
-                                         pollster_resources)
-                    if not polling_resources and not getattr(
-                            pollster.obj, 'no_resources', False):
+                    candidate_res = (source_resources or
+                                     pollster_resources)
+
+                    # Remove duplicated resources and black resources. Using
+                    # set() requires well defined __hash__ for each resource.
+                    # Since __eq__ is defined, 'not in' is safe here.
+                    seen = []
+                    duplicated = []
+                    polling_resources = []
+                    black_res = self.resources[key].blacklist
+                    for x in candidate_res:
+                        if x not in seen:
+                            seen.append(x)
+                            if x not in black_res:
+                                polling_resources.append(x)
+                        else:
+                            duplicated.append(x)
+
+                    # Warn duplicated resources for the 1st time
+                    if self.resources[key].last_dup != duplicated:
+                        self.resources[key].last_dup = duplicated
+                        LOG.warning(_(
+                            'Found following duplicated resoures for '
+                            '%(name)s in context of %(source)s:%(list)s. '
+                            'Check pipeline configuration.')
+                            % ({'name': pollster.name,
+                                'source': source_name,
+                                'list': duplicated
+                                }))
+
+                    # If no resources, skip for this pollster
+                    if not polling_resources:
                         LOG.info(_("Skip polling pollster %s, no resources"
                                    " found"), pollster.name)
                         continue
@@ -138,6 +180,12 @@ class PollingTask(object):
                             resources=polling_resources
                         ))
                         publisher(samples)
+                    except plugin_base.PollsterPermanentError as err:
+                        LOG.error(_(
+                            'Prevent pollster %(name)s for '
+                            'polling source %(source)s anymore!')
+                            % ({'name': pollster.name, 'source': source_name}))
+                        self.resources[key].blacklist.append(err.fail_res)
                     except Exception as err:
                         LOG.warning(_(
                             'Continue after error from %(name)s: %(error)s')
@@ -188,9 +236,25 @@ class AgentManager(os_service.Service):
     def _extensions(category, agent_ns=None):
         namespace = ('ceilometer.%s.%s' % (category, agent_ns) if agent_ns
                      else 'ceilometer.%s' % category)
+
+        def _catch_extension_load_error(mgr, ep, exc):
+            # Extension raising ExtensionLoadError can be ignored,
+            # and ignore anything we can't import as a safety measure.
+            if isinstance(exc, plugin_base.ExtensionLoadError):
+                LOG.error(_("Skip loading extension for %s") % ep.name)
+                return
+            if isinstance(exc, ImportError):
+                LOG.error(
+                    _("Failed to import extension for %(name)s: %(error)s"),
+                    {'name': ep.name, 'error': exc},
+                )
+                return
+            raise exc
+
         return extension.ExtensionManager(
             namespace=namespace,
             invoke_on_load=True,
+            on_load_failure_callback=_catch_extension_load_error,
         )
 
     def join_partitioning_groups(self):
@@ -237,13 +301,24 @@ class AgentManager(os_service.Service):
         # allow time for coordination if necessary
         delay_start = self.partition_coordinator.is_active()
 
+        # set shuffle time before polling task if necessary
+        delay_polling_time = random.randint(
+            0, cfg.CONF.shuffle_time_before_polling_task)
+
         for interval, task in six.iteritems(self.setup_polling_tasks()):
+            delay_time = (interval + delay_polling_time if delay_start
+                          else delay_polling_time)
             self.tg.add_timer(interval,
                               self.interval_task,
-                              initial_delay=interval if delay_start else None,
+                              initial_delay=delay_time,
                               task=task)
         self.tg.add_timer(cfg.CONF.coordination.heartbeat,
                           self.partition_coordinator.heartbeat)
+
+    def stop(self):
+        if self.partition_coordinator:
+            self.partition_coordinator.stop()
+        super(AgentManager, self).stop()
 
     @staticmethod
     def interval_task(task):

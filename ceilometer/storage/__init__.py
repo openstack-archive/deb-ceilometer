@@ -40,10 +40,16 @@ cfg.CONF.register_opts(OLD_OPTS)
 
 
 OPTS = [
-    cfg.IntOpt('time_to_live',
+    cfg.IntOpt('metering_time_to_live',
                default=-1,
                help="Number of seconds that samples are kept "
-               "in the database for (<= 0 means forever)."),
+               "in the database for (<= 0 means forever).",
+               deprecated_opts=[cfg.DeprecatedOpt('time_to_live',
+                                                  'database')]),
+    cfg.IntOpt('event_time_to_live',
+               default=-1,
+               help=("Number of seconds that events are kept "
+                     "in the database for (<= 0 means forever).")),
     cfg.StrOpt('metering_connection',
                default=None,
                help='The connection string used to connect to the metering '
@@ -70,6 +76,17 @@ OPTS = [
 
 cfg.CONF.register_opts(OPTS, group='database')
 
+CLI_OPTS = [
+    cfg.BoolOpt('sql-expire-samples-only',
+                default=False,
+                help="Indicates if expirer expires only samples. If set true,"
+                     " expired samples will be deleted, but residual"
+                     " resource and meter definition data will remain.",
+                ),
+]
+
+cfg.CONF.register_cli_opts(CLI_OPTS)
+
 db_options.set_defaults(cfg.CONF)
 
 
@@ -82,21 +99,22 @@ class StorageBadAggregate(Exception):
     code = 400
 
 
-# Convert retry_interval secs to msecs for retry decorator
-@retrying.retry(wait_fixed=cfg.CONF.database.retry_interval * 1000,
-                stop_max_attempt_number=cfg.CONF.database.max_retries
-                if cfg.CONF.database.max_retries >= 0
-                else None)
-def get_connection_from_config(conf, purpose=None):
-    if conf.database_connection:
-        conf.set_override('connection', conf.database_connection,
-                          group='database')
-    namespace = 'ceilometer.metering.storage'
-    url = conf.database.connection
-    if purpose:
+def get_connection_from_config(conf, purpose='metering'):
+    retries = conf.database.max_retries
+
+    # Convert retry_interval secs to msecs for retry decorator
+    @retrying.retry(wait_fixed=conf.database.retry_interval * 1000,
+                    stop_max_attempt_number=retries if retries >= 0 else None)
+    def _inner():
+        if conf.database_connection:
+            conf.set_override('connection', conf.database_connection,
+                              group='database')
         namespace = 'ceilometer.%s.storage' % purpose
-        url = getattr(conf.database, '%s_connection' % purpose) or url
-    return get_connection(url, namespace)
+        url = (getattr(conf.database, '%s_connection' % purpose) or
+               conf.database.connection)
+        return get_connection(url, namespace)
+
+    return _inner()
 
 
 def get_connection(url, namespace):

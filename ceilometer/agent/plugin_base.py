@@ -187,9 +187,57 @@ class NotificationBase(PluginBase):
                 p(list(self.process_notification(notification)))
 
 
+class NonMetricNotificationBase(object):
+    """Use to mark non-measurement meters
+
+    There are a number of historical non-measurement meters that should really
+    be captured as events. This common base allows us to disable these invalid
+    meters.
+    """
+    pass
+
+
+class ExtensionLoadError(Exception):
+    """Error of loading pollster plugin.
+
+    PollsterBase provides a hook, setup_environment, called in pollster loading
+    to setup required HW/SW dependency. Any exception from it would be
+    propagated as ExtensionLoadError, then skip loading this pollster.
+    """
+    pass
+
+
+class PollsterPermanentError(Exception):
+    """Permenant error when polling.
+
+    When unrecoverable error happened in polling, pollster can raise this
+    exception with failed resource to prevent itself from polling any more.
+    Resource is one of parameter resources from get_samples that cause polling
+    error.
+    """
+
+    def __init__(self, resource):
+        self.fail_res = resource
+
+
 @six.add_metaclass(abc.ABCMeta)
 class PollsterBase(PluginBase):
     """Base class for plugins that support the polling API."""
+
+    def setup_environment(self):
+        """Setup required environment for pollster.
+
+        Each subclass could overwrite it for specific usage. Any exception
+        raised in this function would prevent pollster being loaded.
+        """
+        pass
+
+    def __init__(self):
+        super(PollsterBase, self).__init__()
+        try:
+            self.setup_environment()
+        except Exception as err:
+            raise ExtensionLoadError(err)
 
     @abc.abstractproperty
     def default_discovery(self):

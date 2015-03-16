@@ -56,12 +56,13 @@ class BinTestCase(base.BaseTestCase):
         self.assertEqual(0, subp.poll())
         self.assertIn("Nothing to clean", err)
 
-    def test_run_expirer_ttl_enabled(self):
+    def _test_run_expirer_ttl_enabled(self, metering_ttl_name):
         content = ("[DEFAULT]\n"
                    "rpc_backend=fake\n"
                    "[database]\n"
-                   "time_to_live=1\n"
-                   "connection=log://localhost\n")
+                   "%s=1\n"
+                   "event_time_to_live=1\n"
+                   "connection=log://localhost\n" % metering_ttl_name)
         self.tempfile = fileutils.write_to_tempfile(content=content,
                                                     prefix='ceilometer',
                                                     suffix='.conf')
@@ -71,7 +72,14 @@ class BinTestCase(base.BaseTestCase):
                                 stderr=subprocess.PIPE)
         __, err = subp.communicate()
         self.assertEqual(0, subp.poll())
-        self.assertIn("Dropping data with TTL 1", err)
+        self.assertIn("Dropping metering data with TTL 1", err)
+        self.assertIn("Dropping event data with TTL 1", err)
+
+    def test_run_expirer_ttl_enabled(self):
+        self._test_run_expirer_ttl_enabled('metering_time_to_live')
+
+    def test_run_expirer_ttl_enabled_with_deprecated_opt_name(self):
+        self._test_run_expirer_ttl_enabled('time_to_live')
 
 
 class BinSendSampleTestCase(base.BaseTestCase):
@@ -203,3 +211,33 @@ class BinApiTestCase(base.BaseTestCase):
         response, content = self.get_response('v2/meters')
         self.assertEqual(200, response.status)
         self.assertEqual([], json.loads(content))
+
+
+class BinCeilometerPollingServiceTestCase(base.BaseTestCase):
+    def setUp(self):
+        super(BinCeilometerPollingServiceTestCase, self).setUp()
+        content = ("[DEFAULT]\n"
+                   "rpc_backend=fake\n"
+                   "[database]\n"
+                   "connection=log://localhost\n")
+        self.tempfile = fileutils.write_to_tempfile(content=content,
+                                                    prefix='ceilometer',
+                                                    suffix='.conf')
+        self.subp = None
+
+    def tearDown(self):
+        super(BinCeilometerPollingServiceTestCase, self).tearDown()
+        if self.subp:
+            self.subp.kill()
+        os.remove(self.tempfile)
+
+    def test_starting_with_duplication_namespaces(self):
+        self.subp = subprocess.Popen(['ceilometer-polling',
+                                      "--config-file=%s" % self.tempfile,
+                                      "--polling-namespaces",
+                                      "compute",
+                                      "compute"],
+                                     stderr=subprocess.PIPE)
+        out = self.subp.stderr.read(1024)
+        self.assertIn('Duplicated values: [\'compute\', \'compute\'] '
+                      'found in CLI options, auto de-duplidated', out)

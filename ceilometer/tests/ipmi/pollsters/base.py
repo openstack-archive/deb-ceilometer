@@ -25,13 +25,13 @@ from ceilometer.tests import base
 @six.add_metaclass(abc.ABCMeta)
 class TestPollsterBase(base.BaseTestCase):
 
-    @abc.abstractmethod
     def fake_data(self):
         """Fake data used for test."""
+        return None
 
-    @abc.abstractmethod
     def fake_sensor_data(self, sensor_type):
         """Fake sensor data used for test."""
+        return None
 
     @abc.abstractmethod
     def make_pollster(self):
@@ -39,8 +39,12 @@ class TestPollsterBase(base.BaseTestCase):
 
     def _test_get_samples(self):
         nm = mock.Mock()
-        nm.read_temperature_all.side_effect = self.fake_data
+        nm.read_inlet_temperature.side_effect = self.fake_data
+        nm.read_outlet_temperature.side_effect = self.fake_data
         nm.read_power_all.side_effect = self.fake_data
+        nm.read_airflow.side_effect = self.fake_data
+        nm.read_cups_index.side_effect = self.fake_data
+        nm.read_cups_utilization.side_effect = self.fake_data
         nm.read_sensor_any.side_effect = self.fake_sensor_data
         # We should mock the pollster first before initialize the Manager
         # so that we don't trigger the sudo in pollsters' __init__().
@@ -58,7 +62,7 @@ class TestPollsterBase(base.BaseTestCase):
 
     def _verify_metering(self, length, expected_vol=None, node=None):
         cache = {}
-        resources = {}
+        resources = ['local_host']
 
         samples = list(self.pollster.get_samples(self.mgr, cache, resources))
         self.assertEqual(length, len(samples))

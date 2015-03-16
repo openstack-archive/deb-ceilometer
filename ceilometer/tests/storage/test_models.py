@@ -16,6 +16,7 @@
 import datetime
 
 from oslotest import base as testbase
+import six
 
 from ceilometer.alarm.storage import models as alarm_models
 from ceilometer.event.storage import models as event_models
@@ -57,7 +58,7 @@ class ModelTest(testbase.BaseTestCase):
                          d)
 
     def test_event_repr_no_traits(self):
-        x = event_models.Event("1", "name", "now", None)
+        x = event_models.Event("1", "name", "now", None, {})
         self.assertEqual("<Event: 1, name, now, >", repr(x))
 
     def test_get_field_names_of_sample(self):
@@ -109,7 +110,7 @@ class TestTraitModel(testbase.BaseTestCase):
         v = event_models.Trait.convert_value(
             event_models.Trait.TEXT_TYPE, 10)
         self.assertEqual("10", v)
-        self.assertIsInstance(v, str)
+        self.assertIsInstance(v, six.text_type)
 
 
 class TestClassModel(testbase.BaseTestCase):

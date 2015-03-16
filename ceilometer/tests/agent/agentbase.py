@@ -446,6 +446,10 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             self.assertEqual(set(self.Discovery.resources),
                              set(self.Pollster.resources))
 
+        # Make sure no duplicated resource from discovery
+        for x in self.Pollster.resources:
+            self.assertEqual(1, self.Pollster.resources.count(x))
+
     def test_per_pollster_discovery(self):
         self._do_test_per_pollster_discovery(['discovered_1', 'discovered_2'],
                                              [])
@@ -454,6 +458,14 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         # ensure static+per_source_discovery overrides per_pollster_discovery
         self._do_test_per_pollster_discovery(['discovered_1', 'discovered_2'],
                                              ['static_1', 'static_2'])
+
+    def test_per_pollster_discovery_duplicated(self):
+        self._do_test_per_pollster_discovery(['dup', 'discovered_1', 'dup'],
+                                             [])
+
+    def test_per_pollster_discovery_overridden_by_duplicated_static(self):
+        self._do_test_per_pollster_discovery(['discovered_1', 'discovered_2'],
+                                             ['static_1', 'dup', 'dup'])
 
     def test_per_pollster_discovery_caching(self):
         # ensure single discovery associated with multiple pollsters
@@ -492,6 +504,10 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         self.assertEqual(set(static_resources + discovery),
                          set(self.Pollster.resources))
 
+        # Make sure no duplicated resource from discovery
+        for x in self.Pollster.resources:
+            self.assertEqual(1, self.Pollster.resources.count(x))
+
     def test_per_pipeline_discovery_discovered_only(self):
         self._do_test_per_pipeline_discovery(['discovered_1', 'discovered_2'],
                                              [])
@@ -503,6 +519,10 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
     def test_per_pipeline_discovery_discovered_augmented_by_static(self):
         self._do_test_per_pipeline_discovery(['discovered_1', 'discovered_2'],
                                              ['static_1', 'static_2'])
+
+    def test_per_pipeline_discovery_discovered_duplicated_static(self):
+        self._do_test_per_pipeline_discovery(['discovered_1', 'pud'],
+                                             ['dup', 'static_1', 'dup'])
 
     def test_multiple_pipelines_different_static_resources(self):
         # assert that the individual lists of static and discovered resources
@@ -703,15 +723,3 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         LOG.info.assert_called_with(
             'Skip polling pollster %s, no resources found', pollster.name)
         self.assertEqual(0, get_samples._mock_call_count)
-
-        setattr(pollster.obj, 'no_resources', False)
-        polling_task.poll_and_publish()
-        LOG.info.assert_called_with(
-            'Skip polling pollster %s, no resources found', pollster.name)
-        self.assertEqual(0, get_samples._mock_call_count)
-
-        setattr(pollster.obj, 'no_resources', True)
-        polling_task.poll_and_publish()
-        LOG.info.not_assert_called_with(
-            'Skip polling pollster %s, no resources found', pollster.name)
-        self.assertEqual(1, get_samples._mock_call_count)

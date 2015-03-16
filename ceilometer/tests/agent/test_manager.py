@@ -26,6 +26,10 @@ from ceilometer import pipeline
 from ceilometer.tests.agent import agentbase
 
 
+class PollingException(Exception):
+    pass
+
+
 class TestManager(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
@@ -35,8 +39,8 @@ class TestManager(base.BaseTestCase):
 
     def test_load_plugins_pollster_list(self):
         mgr = manager.AgentManager(pollster_list=['disk.*'])
-        # currently we do have 18 disk-related pollsters
-        self.assertEqual(18, len(list(mgr.extensions)))
+        # currently we do have 26 disk-related pollsters
+        self.assertEqual(26, len(list(mgr.extensions)))
 
     def test_load_plugins_no_intersection(self):
         # Let's test nothing will be polled if namespace and pollsters
@@ -44,6 +48,61 @@ class TestManager(base.BaseTestCase):
         mgr = manager.AgentManager(namespaces=['compute'],
                                    pollster_list=['storage.*'])
         self.assertEqual(0, len(list(mgr.extensions)))
+
+    # Test plugin load behavior based on Node Manager pollsters.
+    # pollster_list is just a filter, so sensor pollsters under 'ipmi'
+    # namespace would be also instanced. Still need mock __init__ for it.
+    @mock.patch('ceilometer.ipmi.pollsters.node._Base.__init__',
+                mock.Mock(return_value=None))
+    @mock.patch('ceilometer.ipmi.pollsters.sensor.SensorPollster.__init__',
+                mock.Mock(return_value=None))
+    def test_load_normal_plugins(self):
+        mgr = manager.AgentManager(namespaces=['ipmi'],
+                                   pollster_list=['hardware.ipmi.node.*'])
+        # 8 pollsters for Node Manager
+        self.assertEqual(8, len(mgr.extensions))
+
+    # Skip loading pollster upon ExtensionLoadError
+    @mock.patch('ceilometer.ipmi.pollsters.node._Base.__init__',
+                mock.Mock(side_effect=plugin_base.ExtensionLoadError))
+    @mock.patch('ceilometer.ipmi.pollsters.sensor.SensorPollster.__init__',
+                mock.Mock(return_value=None))
+    @mock.patch('ceilometer.agent.base.LOG')
+    def test_load_failed_plugins(self, LOG):
+        mgr = manager.AgentManager(namespaces=['ipmi'],
+                                   pollster_list=['hardware.ipmi.node.*'])
+        # 0 pollsters
+        self.assertEqual(0, len(mgr.extensions))
+
+        err_msg = 'Skip loading extension for hardware.ipmi.node.%s'
+        pollster_names = [
+            'power', 'inlet_temperature', 'outlet_temperature',
+            'airflow', 'cups', 'cpu_util', 'mem_util', 'io_util']
+        calls = [mock.call(err_msg % n) for n in pollster_names]
+        LOG.error.assert_has_calls(calls=calls,
+                                   any_order=True)
+
+    # Skip loading pollster upon ImportError
+    @mock.patch('ceilometer.ipmi.pollsters.node._Base.__init__',
+                mock.Mock(side_effect=ImportError))
+    @mock.patch('ceilometer.ipmi.pollsters.sensor.SensorPollster.__init__',
+                mock.Mock(return_value=None))
+    def test_import_error_in_plugin(self):
+        mgr = manager.AgentManager(namespaces=['ipmi'],
+                                   pollster_list=['hardware.ipmi.node.*'])
+        # 0 pollsters
+        self.assertEqual(0, len(mgr.extensions))
+
+    # Exceptions other than ExtensionLoadError are propagated
+    @mock.patch('ceilometer.ipmi.pollsters.node._Base.__init__',
+                mock.Mock(side_effect=PollingException))
+    @mock.patch('ceilometer.ipmi.pollsters.sensor.SensorPollster.__init__',
+                mock.Mock(return_value=None))
+    def test_load_exceptional_plugins(self):
+        self.assertRaises(PollingException,
+                          manager.AgentManager,
+                          ['ipmi'],
+                          ['hardware.ipmi.node.*'])
 
 
 class TestPollsterKeystone(agentbase.TestPollster):
@@ -55,6 +114,23 @@ class TestPollsterKeystone(agentbase.TestPollster):
                     resources=resources)
 
 
+class TestPollsterPollingException(agentbase.TestPollster):
+    polling_failures = 0
+
+    def get_samples(self, manager, cache, resources):
+        func = super(TestPollsterPollingException, self).get_samples
+        sample = func(manager=manager,
+                      cache=cache,
+                      resources=resources)
+
+        # Raise polling exception after 2 times
+        self.polling_failures += 1
+        if self.polling_failures > 2:
+            raise plugin_base.PollsterPermanentError(resources[0])
+
+        return sample
+
+
 class TestRunTasks(agentbase.BaseAgentManagerTestCase):
 
     class PollsterKeystone(TestPollsterKeystone):
@@ -62,6 +138,20 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         resources = []
         test_data = agentbase.TestSample(
             name='testkeystone',
+            type=agentbase.default_test_data.type,
+            unit=agentbase.default_test_data.unit,
+            volume=agentbase.default_test_data.volume,
+            user_id=agentbase.default_test_data.user_id,
+            project_id=agentbase.default_test_data.project_id,
+            resource_id=agentbase.default_test_data.resource_id,
+            timestamp=agentbase.default_test_data.timestamp,
+            resource_metadata=agentbase.default_test_data.resource_metadata)
+
+    class PollsterPollingException(TestPollsterPollingException):
+        samples = []
+        resources = []
+        test_data = agentbase.TestSample(
+            name='testpollingexception',
             type=agentbase.default_test_data.type,
             unit=agentbase.default_test_data.unit,
             volume=agentbase.default_test_data.volume,
@@ -85,14 +175,20 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
     def tearDown(self):
         self.PollsterKeystone.samples = []
         self.PollsterKeystone.resources = []
+        self.PollsterPollingException.samples = []
+        self.PollsterPollingException.resources = []
         super(TestRunTasks, self).tearDown()
 
     def create_extension_list(self):
         exts = super(TestRunTasks, self).create_extension_list()
-        exts.append(extension.Extension('testkeystone',
-                                        None,
-                                        None,
-                                        self.PollsterKeystone(),))
+        exts.extend([extension.Extension('testkeystone',
+                                         None,
+                                         None,
+                                         self.PollsterKeystone(), ),
+                     extension.Extension('testpollingexception',
+                                         None,
+                                         None,
+                                         self.PollsterPollingException(), )])
         return exts
 
     def test_get_sample_resources(self):
@@ -126,3 +222,32 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         super(TestRunTasks, self).test_interval_exception_isolation()
         self.assertEqual(1, len(self.PollsterException.samples))
         self.assertEqual(1, len(self.PollsterExceptionAnother.samples))
+
+    @mock.patch('ceilometer.agent.base.LOG')
+    def test_polling_exception(self, LOG):
+        source_name = 'test_pollingexception'
+        self.pipeline_cfg = [
+            {
+                'name': source_name,
+                'interval': 10,
+                'counters': ['testpollingexception'],
+                'resources': ['test://'] if self.source_resources else [],
+                'transformers': [],
+                'publishers': ["test"],
+            },
+        ]
+        self.mgr.pipeline_manager = pipeline.PipelineManager(
+            self.pipeline_cfg,
+            self.transformer_manager)
+        polling_task = self.mgr.setup_polling_tasks().values()[0]
+        pollster = list(polling_task.pollster_matches[source_name])[0]
+
+        # 2 samples after 4 pollings, as pollster got disabled unpon exception
+        for x in range(0, 4):
+            self.mgr.interval_task(polling_task)
+        pub = self.mgr.pipeline_manager.pipelines[0].publishers[0]
+        self.assertEqual(2, len(pub.samples))
+        LOG.error.assert_called_once_with((
+            'Prevent pollster %(name)s for '
+            'polling source %(source)s anymore!')
+            % ({'name': pollster.name, 'source': source_name}))

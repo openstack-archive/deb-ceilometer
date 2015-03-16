@@ -18,9 +18,10 @@ from oslo_config import cfg
 from oslo_context import context
 from stevedore import extension
 
+from ceilometer.agent import plugin_base as base
 from ceilometer import coordination
 from ceilometer.event import endpoint as event_endpoint
-from ceilometer.i18n import _
+from ceilometer.i18n import _, _LW
 from ceilometer import messaging
 from ceilometer.openstack.common import log
 from ceilometer.openstack.common import service as os_service
@@ -40,6 +41,14 @@ OPTS = [
                 deprecated_group='collector',
                 default=False,
                 help='Save event details.'),
+    cfg.BoolOpt('disable_non_metric_meters',
+                default=False,
+                help='WARNING: Ceilometer historically offered the ability to '
+                     'store events as meters. This usage is NOT advised as it '
+                     'can flood the metering database and cause performance '
+                     'degradation. This option disables the collection of '
+                     'non-metric meters and will be the default behavior in '
+                     'Liberty.'),
     cfg.BoolOpt('workload_partitioning',
                 default=False,
                 help='Enable workload partitioning, allowing multiple '
@@ -69,6 +78,12 @@ class NotificationService(os_service.Service):
 
     NOTIFICATION_NAMESPACE = 'ceilometer.notification'
     NOTIFICATION_IPC = 'ceilometer-pipe'
+
+    def __init__(self, *args, **kwargs):
+        super(NotificationService, self).__init__(*args, **kwargs)
+        self.partition_coordinator = None
+        self.listeners, self.pipeline_listeners = [], []
+        self.group_id = None
 
     @classmethod
     def _get_notifications_manager(cls, transporter):
@@ -121,7 +136,7 @@ class NotificationService(os_service.Service):
                 event_transporter = self.event_pipeline_manager
             self.group_id = None
 
-        self.listeners = self.pipeline_listeners = []
+        self.listeners, self.pipeline_listeners = [], []
         self._configure_main_queue_listeners(transporter, event_transporter)
 
         if cfg.CONF.notification.workload_partitioning:
@@ -135,6 +150,10 @@ class NotificationService(os_service.Service):
             self.tg.add_timer(cfg.CONF.coordination.check_watchers,
                               self.partition_coordinator.run_watchers)
 
+        if not cfg.CONF.notification.disable_non_metric_meters:
+            LOG.warning(_LW('Non-metric meters may be collected. It is highly '
+                            'advisable to disable these meters using '
+                            'ceilometer.conf or the pipeline.yaml'))
         # Add a dummy thread to have wait() working
         self.tg.add_timer(604800, lambda: None)
 
@@ -154,6 +173,9 @@ class NotificationService(os_service.Service):
         targets = []
         for ext in notification_manager:
             handler = ext.obj
+            if (cfg.CONF.notification.disable_non_metric_meters and
+                    isinstance(handler, base.NonMetricNotificationBase)):
+                continue
             LOG.debug(_('Event types from %(name)s: %(type)s'
                         ' (ack_on_error=%(error)s)') %
                       {'name': ext.name,
@@ -201,6 +223,7 @@ class NotificationService(os_service.Service):
             self.pipeline_listeners.append(listener)
 
     def stop(self):
-        self.partition_coordinator.leave_group(self.group_id)
+        if self.partition_coordinator:
+            self.partition_coordinator.stop()
         utils.kill_listeners(self.listeners + self.pipeline_listeners)
         super(NotificationService, self).stop()

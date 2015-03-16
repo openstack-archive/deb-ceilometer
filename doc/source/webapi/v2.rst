@@ -7,37 +7,37 @@
 Resources
 =========
 
-.. rest-controller:: ceilometer.api.controllers.v2:ResourcesController
+.. rest-controller:: ceilometer.api.controllers.v2.resources:ResourcesController
    :webprefix: /v2/resources
 
-.. autotype:: ceilometer.api.controllers.v2.Resource
+.. autotype:: ceilometer.api.controllers.v2.resources.Resource
    :members:
 
 Meters
 ======
 
-.. rest-controller:: ceilometer.api.controllers.v2:MetersController
+.. rest-controller:: ceilometer.api.controllers.v2.meters:MetersController
    :webprefix: /v2/meters
 
-.. rest-controller:: ceilometer.api.controllers.v2:MeterController
+.. rest-controller:: ceilometer.api.controllers.v2.meters:MeterController
    :webprefix: /v2/meters
 
-.. autotype:: ceilometer.api.controllers.v2.Meter
+.. autotype:: ceilometer.api.controllers.v2.meters.Meter
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.OldSample
+.. autotype:: ceilometer.api.controllers.v2.meters.OldSample
    :members:
 
 Samples and Statistics
 ======================
 
-.. rest-controller:: ceilometer.api.controllers.v2:SamplesController
+.. rest-controller:: ceilometer.api.controllers.v2.samples:SamplesController
    :webprefix: /v2/samples
 
-.. autotype:: ceilometer.api.controllers.v2.Sample
+.. autotype:: ceilometer.api.controllers.v2.samples.Sample
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.Statistics
+.. autotype:: ceilometer.api.controllers.v2.meters.Statistics
    :members:
 
 When a simple statistics request is invoked (using GET /v2/meters/<meter_name>/statistics), it will return the standard set of *Statistics*: *avg*, *sum*,
@@ -61,7 +61,7 @@ are, on the other hand, both allowed by the API and supported by the storage dri
 
 .. note:: Currently only *cardinality* needs aggregate.param to be specified.
 
-.. autotype:: ceilometer.api.controllers.v2.Aggregate
+.. autotype:: ceilometer.api.controllers.v2.meters.Aggregate
    :members:
 
 Capabilities
@@ -74,10 +74,10 @@ returns a flattened dictionary of properties with associated boolean values -
 a 'False' or absent value means that the corresponding feature is not
 available in the backend.
 
-.. rest-controller:: ceilometer.api.controllers.v2:CapabilitiesController
+.. rest-controller:: ceilometer.api.controllers.v2.capabilities:CapabilitiesController
    :webprefix: /v2/capabilities
 
-.. autotype:: ceilometer.api.controllers.v2.Capabilities
+.. autotype:: ceilometer.api.controllers.v2.capabilities.Capabilities
    :members:
 
 .. _alarms-api:
@@ -85,46 +85,52 @@ available in the backend.
 Alarms
 ======
 
-.. rest-controller:: ceilometer.api.controllers.v2:AlarmsController
+.. rest-controller:: ceilometer.api.controllers.v2.alarms:AlarmsController
    :webprefix: /v2/alarms
 
-.. rest-controller:: ceilometer.api.controllers.v2:AlarmController
+.. rest-controller:: ceilometer.api.controllers.v2.alarms:AlarmController
    :webprefix: /v2/alarms
 
-.. autotype:: ceilometer.api.controllers.v2.Alarm
+.. autotype:: ceilometer.api.controllers.v2.alarms.Alarm
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.AlarmThresholdRule
+.. autotype:: ceilometer.api.controllers.v2.alarm_rules.threshold.AlarmThresholdRule
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.AlarmCombinationRule
+.. autotype:: ceilometer.api.controllers.v2.alarm_rules.combination.AlarmCombinationRule
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.AlarmTimeConstraint
+.. autotype:: ceilometer.api.controllers.v2.alarm_rules.gnocchi.AlarmGnocchiMetricOfResourcesThresholdRule
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.AlarmChange
+.. autotype:: ceilometer.api.controllers.v2.alarm_rules.gnocchi.AlarmGnocchiMetricsThresholdRule
+   :members:
+
+.. autotype:: ceilometer.api.controllers.v2.alarms.AlarmTimeConstraint
+   :members:
+
+.. autotype:: ceilometer.api.controllers.v2.alarms.AlarmChange
    :members:
 
 Events and Traits
 =================
 
-.. rest-controller:: ceilometer.api.controllers.v2:EventTypesController
+.. rest-controller:: ceilometer.api.controllers.v2.events:EventTypesController
    :webprefix: /v2/event_types
 
-.. rest-controller:: ceilometer.api.controllers.v2:TraitsController
+.. rest-controller:: ceilometer.api.controllers.v2.events:TraitsController
    :webprefix: /v2/event_types/(event_type)/traits
 
-.. rest-controller:: ceilometer.api.controllers.v2:EventsController
+.. rest-controller:: ceilometer.api.controllers.v2.events:EventsController
    :webprefix: /v2/events
 
-.. autotype:: ceilometer.api.controllers.v2.Event
+.. autotype:: ceilometer.api.controllers.v2.events.Event
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.Trait
+.. autotype:: ceilometer.api.controllers.v2.events.Trait
    :members:
 
-.. autotype:: ceilometer.api.controllers.v2.TraitDescription
+.. autotype:: ceilometer.api.controllers.v2.events.TraitDescription
    :members:
 
 Filtering Queries
@@ -155,9 +161,9 @@ should be a list of Query data structures. Whatever the endpoint you
 want to apply a filter on, you always filter on the fields of the *Sample*
 type (for example, if you apply a filter on a query for statistics,
 you won't target *duration_start* field of *Statistics*, but *timestamp*
-field of *Sample*).
+field of *Sample*). See :ref:`api-queries` for how to query the API.
 
-.. autotype:: ceilometer.api.controllers.v2.Query
+.. autotype:: ceilometer.api.controllers.v2.base.Query
    :members:
 
 Event Query
@@ -168,9 +174,9 @@ a subclass of Query, so EventQuery has every attribute Query has.
 But there are some differences. If a field is one of the following:
 event_type, message_id, start_timestamp, end_timestamp, then this field
 will be applied on event, otherwise it will be treated as trait name and
-applied on trait.
+applied on trait. See :ref:`api-queries` for how to query the API.
 
-.. autotype:: ceilometer.api.controllers.v2.EventQuery
+.. autotype:: ceilometer.api.controllers.v2.events.EventQuery
    :members:
 
 Complex Query
@@ -180,7 +186,7 @@ The filter expressions of the Complex Query feature operate on the fields
 of *Sample*, *Alarm* and *AlarmChange*. The following comparison operators are
 supported: *=*, *!=*, *<*, *<=*, *>*, *>=* and *in*; and the following logical
 operators can be used: *and* *or* and *not*. The field names are validated
-against the database models.
+against the database models. See :ref:`api-queries` for how to query the API.
 
 .. note:: The *not* operator has different meaning in Mongo DB and in SQL DB engine.
    If the *not* operator is applied on a non existent metadata field then
@@ -188,8 +194,8 @@ against the database models.
    {"not": {"metadata.nonexistent_field" : "some value"}} filter is used in a query
    the Mongo DB will return every Sample object as *not* operator evaluated true
    for every Sample where the given field does not exists. See more in the Mongod DB doc.
-   In the other hand SQL based DB engine will return empty result as the join operation
-   on the metadata table will return zero row as the on clause of the join which
+   On the other hand SQL based DB engine will return empty result as the join operation
+   on the metadata table will return zero rows as the on clause of the join which
    tries to match on the metadata field name is never fulfilled.
 
 Complex Query supports defining the list of orderby expressions in the form
@@ -199,22 +205,22 @@ The number of the returned items can be bounded using the *limit* option.
 
 The *filter*, *orderby* and *limit* are all optional fields in a query.
 
-.. rest-controller:: ceilometer.api.controllers.v2:QuerySamplesController
+.. rest-controller:: ceilometer.api.controllers.v2.query:QuerySamplesController
    :webprefix: /v2/query/samples
 
-.. rest-controller:: ceilometer.api.controllers.v2:QueryAlarmsController
+.. rest-controller:: ceilometer.api.controllers.v2.query:QueryAlarmsController
    :webprefix: /v2/query/alarms
 
-.. rest-controller:: ceilometer.api.controllers.v2:QueryAlarmHistoryController
+.. rest-controller:: ceilometer.api.controllers.v2.query:QueryAlarmHistoryController
    :webprefix: /v2/query/alarms/history
 
-.. autotype:: ceilometer.api.controllers.v2.ComplexQuery
+.. autotype:: ceilometer.api.controllers.v2.query.ComplexQuery
    :members:
 
 Links
 =====
 
-.. autotype:: ceilometer.api.controllers.v2.Link
+.. autotype:: ceilometer.api.controllers.v2.base.Link
    :members:
 
 API and CLI query examples
@@ -229,6 +235,8 @@ Ceilometer CLI Commands::
 
 .. note:: The *username*, *password*, and *tenant-name* options are required to be present in these commands or specified via environment variables. Note that the in-line commands will override the environment variables.
 
+
+.. _api-queries:
 
 API Queries
 +++++++++++
@@ -347,7 +355,7 @@ Get the list of samples about instances with *m1.tiny* flavor running for June
 
 Now you may want to have statistics on the meters you are targeting.
 Consider the following example where you are getting the list of samples
-about CPU utilisation of a given instance (identified by its *resource_id*)
+about CPU utilization of a given instance (identified by its *resource_id*)
 running for June 2013::
 
     GET /v2/meters/cpu_util

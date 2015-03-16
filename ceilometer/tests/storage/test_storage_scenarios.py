@@ -659,7 +659,7 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_samples(f))
         self.assertEqual(2, len(results))
 
-    @tests_db.run_with('sqlite', 'hbase', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'hbase', 'db2')
     def test_clear_metering_data(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
@@ -672,7 +672,7 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_resources())
         self.assertEqual(5, len(results))
 
-    @tests_db.run_with('sqlite', 'hbase', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'hbase', 'db2')
     def test_clear_metering_data_no_data_to_remove(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
@@ -685,7 +685,19 @@ class RawSampleTest(DBTestBase,
         results = list(self.conn.get_resources())
         self.assertEqual(10, len(results))
 
-    @tests_db.run_with('sqlite', 'hbase', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql')
+    def test_clear_metering_data_expire_samples_only(self):
+
+        cfg.CONF.set_override('sql_expire_samples_only', True)
+        self.mock_utcnow.return_value = datetime.datetime(2012, 7, 2, 10, 45)
+        self.conn.clear_expired_metering_data(4 * 60)
+        f = storage.SampleFilter(meter='instance')
+        results = list(self.conn.get_samples(f))
+        self.assertEqual(7, len(results))
+        results = list(self.conn.get_resources())
+        self.assertEqual(6, len(results))
+
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'hbase', 'db2')
     def test_clear_metering_data_with_alarms(self):
         # NOTE(jd) Override this test in MongoDB because our code doesn't clear
         # the collections, this is handled by MongoDB TTL feature.
@@ -780,6 +792,32 @@ class ComplexSampleQueryTest(DBTestBase,
             d = sample_item.as_dict()
             del d['recorded_at']
             self.assertIn(d, self.msgs)
+
+    def test_query_complex_filter_with_regexp(self):
+        self._create_samples()
+        complex_regex_filter = {"and": [
+            {"=~": {"resource_id": "resource-id.*"}},
+            {"=": {"counter_volume": 0.4}}]}
+        results = list(
+            self.conn.query_samples(filter_expr=complex_regex_filter))
+        self.assertEqual(3, len(results))
+        for sample_item in results:
+            self.assertIn(sample_item.resource_id,
+                          set(["resource-id-42",
+                               "resource-id-43",
+                               "resource-id-44"]))
+
+    def test_query_complex_filter_with_regexp_metadata(self):
+        self._create_samples()
+        complex_regex_filter = {"and": [
+            {"=~": {"resource_metadata.a_string_key": "meta-value.*"}},
+            {"=": {"counter_volume": 0.4}}]}
+        results = list(
+            self.conn.query_samples(filter_expr=complex_regex_filter))
+        self.assertEqual(3, len(results))
+        for sample_item in results:
+            self.assertEqual("meta-value0.4",
+                             sample_item.resource_metadata['a_string_key'])
 
     def test_no_filter_with_zero_limit(self):
         limit = 0
@@ -2598,7 +2636,7 @@ class CounterDataTypeTest(DBTestBase,
             'dummyBigCounter',
             sample.TYPE_CUMULATIVE,
             unit='',
-            volume=3372036854775807,
+            volume=337203685477580,
             user_id='user-id',
             project_id='project-id',
             resource_id='resource-id',
@@ -2616,7 +2654,7 @@ class CounterDataTypeTest(DBTestBase,
             'dummySmallCounter',
             sample.TYPE_CUMULATIVE,
             unit='',
-            volume=-3372036854775807,
+            volume=-337203685477580,
             user_id='user-id',
             project_id='project-id',
             resource_id='resource-id',
@@ -2651,13 +2689,13 @@ class CounterDataTypeTest(DBTestBase,
             meter='dummyBigCounter',
         )
         results = list(self.conn.get_samples(f))
-        self.assertEqual(3372036854775807, results[0].counter_volume)
-
+        self.assertEqual(337203685477580, results[0].counter_volume)
         f = storage.SampleFilter(
             meter='dummySmallCounter',
         )
         results = list(self.conn.get_samples(f))
-        self.assertEqual(-3372036854775807, results[0].counter_volume)
+        observed_num = long(results[0].counter_volume)
+        self.assertEqual(-337203685477580, observed_num)
 
     def test_storage_can_handle_float_values(self):
         f = storage.SampleFilter(
@@ -2939,6 +2977,19 @@ class ComplexAlarmQueryTest(AlarmTestBase,
             self.assertIn(a.name, set(["yellow-alert", "red-alert"]))
             self.assertTrue(a.enabled)
 
+    def test_filter_with_regexp(self):
+        self.add_some_alarms()
+        filter_expr = {"and":
+                       [{"or": [{"=": {"name": "yellow-alert"}},
+                                {"=": {"name": "red-alert"}}]},
+                        {"=~": {"description": "yel.*"}}]}
+
+        result = list(self.alarm_conn.query_alarms(filter_expr=filter_expr))
+
+        self.assertEqual(1, len(result))
+        for a in result:
+            self.assertEqual("yellow", a.description)
+
     def test_filter_for_alarm_id(self):
         self.add_some_alarms()
         filter_expr = {"=": {"alarm_id": "0r4ng3"}}
@@ -3053,6 +3104,14 @@ class ComplexAlarmHistoryQueryTest(AlarmTestBase,
             self.alarm_conn.query_alarm_history(filter_expr=self.filter_expr))
         self.assertEqual(2, len(history))
 
+    def test_alarm_history_with_regexp(self):
+        filter_expr = {"and":
+                       [{"=~": {"type": "(rule)|(state)"}},
+                        {"=": {"alarm_id": "0r4ng3"}}]}
+        history = list(
+            self.alarm_conn.query_alarm_history(filter_expr=filter_expr))
+        self.assertEqual(2, len(history))
+
     def test_alarm_history_with_filter_and_orderby(self):
         history = list(
             self.alarm_conn.query_alarm_history(filter_expr=self.filter_expr,
@@ -3102,24 +3161,6 @@ class EventTestBase(tests_db.TestBase,
         self.prepare_data()
 
     def prepare_data(self):
-        # Add some data ...
-        pass
-
-
-class EventTest(EventTestBase):
-    @tests_db.run_with('sqlite', 'mongodb', 'db2')
-    def test_duplicate_message_id(self):
-        now = datetime.datetime.utcnow()
-        m = [event_models.Event("1", "Foo", now, None),
-             event_models.Event("1", "Zoo", now, [])]
-        problem_events = self.event_conn.record_events(m)
-        self.assertEqual(1, len(problem_events))
-        bad = problem_events[0]
-        self.assertEqual(event_models.Event.DUPLICATE, bad[0])
-
-
-class GetEventTest(EventTestBase):
-    def prepare_data(self):
         self.event_models = []
         base = 0
         self.start = datetime.datetime(2013, 12, 31, 5, 0)
@@ -3137,12 +3178,47 @@ class GetEventTest(EventTestBase):
                                     now)]]
             self.event_models.append(
                 event_models.Event("id_%s_%d" % (event_type, base),
-                                   event_type, now, trait_models))
+                                   event_type, now, trait_models,
+                                   {'status': {'nested': 'started'}}))
             base += 100
             now = now + datetime.timedelta(hours=1)
         self.end = now
 
         self.event_conn.record_events(self.event_models)
+
+
+@tests_db.run_with('sqlite', 'mysql', 'pgsql')
+class EventTTLTest(EventTestBase):
+
+    @mock.patch.object(timeutils, 'utcnow')
+    def test_clear_expired_event_data(self, mock_utcnow):
+        mock_utcnow.return_value = datetime.datetime(2013, 12, 31, 10, 0)
+        self.event_conn.clear_expired_event_data(3600)
+
+        events = list(self.event_conn.get_events(storage.EventFilter()))
+        self.assertEqual(2, len(events))
+        event_types = list(self.event_conn.get_event_types())
+        self.assertEqual(['Bar', 'Zoo'], event_types)
+        for event_type in event_types:
+            trait_types = list(self.event_conn.get_trait_types(event_type))
+            self.assertEqual(4, len(trait_types))
+            traits = list(self.event_conn.get_traits(event_type))
+            self.assertEqual(4, len(traits))
+
+
+@tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'db2')
+class EventTest(EventTestBase):
+    def test_duplicate_message_id(self):
+        now = datetime.datetime.utcnow()
+        m = [event_models.Event("1", "Foo", now, None, {}),
+             event_models.Event("1", "Zoo", now, [], {})]
+        problem_events = self.event_conn.record_events(m)
+        self.assertEqual(1, len(problem_events))
+        bad = problem_events[0]
+        self.assertEqual(event_models.Event.DUPLICATE, bad[0])
+
+
+class GetEventTest(EventTestBase):
 
     def test_generated_is_datetime(self):
         event_filter = storage.EventFilter(self.start, self.end)
@@ -3444,7 +3520,7 @@ class GetEventTest(EventTestBase):
 
     def test_simple_get_event_no_traits(self):
         new_events = [event_models.Event("id_notraits", "NoTraits",
-                      self.start, [])]
+                      self.start, [], {})]
         bad_events = self.event_conn.record_events(new_events)
         event_filter = storage.EventFilter(self.start, self.end, "NoTraits")
         events = [event for event in self.event_conn.get_events(event_filter)]
@@ -3463,7 +3539,7 @@ class GetEventTest(EventTestBase):
         new_events = [event_models.Event("id_testid",
                                          "MessageIDTest",
                                          self.start,
-                                         [])]
+                                         [], {})]
 
         bad_events = self.event_conn.record_events(new_events)
         event_filter = storage.EventFilter(message_id="id_testid")
@@ -3472,6 +3548,12 @@ class GetEventTest(EventTestBase):
         self.assertEqual(1, len(events))
         event = events[0]
         self.assertEqual("id_testid", event.message_id)
+
+    def test_simple_get_raw(self):
+        event_filter = storage.EventFilter()
+        events = [event for event in self.event_conn.get_events(event_filter)]
+        self.assertTrue(events)
+        self.assertEqual({'status': {'nested': 'started'}}, events[0].raw)
 
 
 class BigIntegerTest(tests_db.TestBase,
@@ -3581,7 +3663,7 @@ class MongoAutoReconnectTest(DBTestBase,
 class MongoTimeToLiveTest(DBTestBase, tests_db.MixinTestsWithBackendScenarios):
 
     def test_ensure_index(self):
-        cfg.CONF.set_override('time_to_live', 5, group='database')
+        cfg.CONF.set_override('metering_time_to_live', 5, group='database')
         self.conn.upgrade()
         self.assertEqual(5, self.conn.db.resource.index_information()
                          ['resource_ttl']['expireAfterSeconds'])
@@ -3589,9 +3671,9 @@ class MongoTimeToLiveTest(DBTestBase, tests_db.MixinTestsWithBackendScenarios):
                          ['meter_ttl']['expireAfterSeconds'])
 
     def test_modification_of_index(self):
-        cfg.CONF.set_override('time_to_live', 5, group='database')
+        cfg.CONF.set_override('metering_time_to_live', 5, group='database')
         self.conn.upgrade()
-        cfg.CONF.set_override('time_to_live', 15, group='database')
+        cfg.CONF.set_override('metering_time_to_live', 15, group='database')
         self.conn.upgrade()
         self.assertEqual(15, self.conn.db.resource.index_information()
                          ['resource_ttl']['expireAfterSeconds'])

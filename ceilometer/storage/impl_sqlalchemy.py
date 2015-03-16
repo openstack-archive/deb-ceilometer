@@ -20,8 +20,8 @@ import os
 
 from oslo.db import exception as dbexc
 from oslo.db.sqlalchemy import session as db_session
-from oslo.serialization import jsonutils
 from oslo_config import cfg
+from oslo_serialization import jsonutils
 from oslo_utils import timeutils
 import six
 import sqlalchemy as sa
@@ -221,11 +221,9 @@ class Connection(base.Connection):
         # to retry making the db connection retried max_retries ^ 2 times
         # in failure case and db reconnection has already been implemented
         # in storage.__init__.get_connection_from_config function
-        cfg.CONF.set_override('max_retries', 0, group='database')
-        self._engine_facade = db_session.EngineFacade(
-            url,
-            **dict(cfg.CONF.database.items())
-        )
+        options = dict(cfg.CONF.database.items())
+        options['max_retries'] = 0
+        self._engine_facade = db_session.EngineFacade(url, **options)
 
     def upgrade(self):
         # NOTE(gordc): to minimise memory, only import migration when needed
@@ -357,23 +355,28 @@ class Connection(base.Connection):
             end = timeutils.utcnow() - datetime.timedelta(seconds=ttl)
             sample_q = (session.query(models.Sample)
                         .filter(models.Sample.timestamp < end))
-
-            sample_subq = sample_q.subquery()
-            for table in [models.MetaText, models.MetaBigInt,
-                          models.MetaFloat, models.MetaBool]:
-                (session.query(table)
-                 .join(sample_subq, sample_subq.c.id == table.id)
-                 .delete())
-
             rows = sample_q.delete()
-            # remove Meter definitions with no matching samples
-            (session.query(models.Meter)
-             .filter(~models.Meter.samples.any())
-             .delete(synchronize_session='fetch'))
-            (session.query(models.Resource)
-             .filter(~models.Resource.samples.any())
-             .delete(synchronize_session='fetch'))
             LOG.info(_("%d samples removed from database"), rows)
+
+            if not cfg.CONF.sql_expire_samples_only:
+                # remove Meter definitions with no matching samples
+                (session.query(models.Meter)
+                 .filter(~models.Meter.samples.any())
+                 .delete(synchronize_session=False))
+
+                # remove resources with no matching samples
+                resource_q = (session.query(models.Resource.internal_id)
+                              .filter(~models.Resource.samples.any()))
+                resource_subq = resource_q.subquery()
+                # remove metadata of cleaned resources
+                for table in [models.MetaText, models.MetaBigInt,
+                              models.MetaFloat, models.MetaBool]:
+                    (session.query(table)
+                     .filter(table.id.in_(resource_subq))
+                     .delete(synchronize_session=False))
+                resource_q.delete(synchronize_session=False)
+                LOG.info(_("Expired residual resource and"
+                           " meter definition data"))
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
@@ -577,8 +580,10 @@ class Connection(base.Connection):
             return []
 
         session = self._engine_facade.get_session()
+        engine = self._engine_facade.get_engine()
         query = session.query(models.FullSample)
-        transformer = sql_utils.QueryTransformer(models.FullSample, query)
+        transformer = sql_utils.QueryTransformer(models.FullSample, query,
+                                                 dialect=engine.dialect.name)
         if filter_expr is not None:
             transformer.apply_filter(filter_expr)
 

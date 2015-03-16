@@ -18,7 +18,7 @@
 import datetime
 import uuid
 
-from oslo.utils import netutils
+from oslo_utils import netutils
 
 from ceilometer.event.storage import models as event
 from ceilometer.publisher import direct
@@ -89,7 +89,7 @@ class TestEventDirectPublisher(tests_db.TestBase,
     test_data = [event.Event(message_id=str(uuid.uuid4()),
                              event_type='event_%d' % i,
                              generated=datetime.datetime.utcnow(),
-                             traits=[])
+                             traits=[], raw={})
                  for i in range(0, 5)]
 
     def test_direct_publisher(self, ):
@@ -99,4 +99,5 @@ class TestEventDirectPublisher(tests_db.TestBase,
 
         e_types = list(self.event_conn.get_event_types())
         self.assertEqual(5, len(e_types))
-        self.assertEqual(['event_%d' % i for i in range(0, 5)], e_types)
+        self.assertEqual(['event_%d' % i for i in range(0, 5)],
+                         sorted(e_types))
