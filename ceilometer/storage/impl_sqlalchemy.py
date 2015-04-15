@@ -18,6 +18,7 @@ import datetime
 import hashlib
 import os
 
+from oslo.db import api
 from oslo.db import exception as dbexc
 from oslo.db.sqlalchemy import session as db_session
 from oslo_config import cfg
@@ -72,7 +73,6 @@ AVAILABLE_CAPABILITIES = {
     'resources': {'query': {'simple': True,
                             'metadata': True}},
     'samples': {'pagination': True,
-                'groupby': True,
                 'query': {'simple': True,
                           'metadata': True,
                           'complex': True}},
@@ -316,6 +316,9 @@ class Connection(base.Connection):
 
         return internal_id
 
+    @api.wrap_db_retry(retry_interval=cfg.CONF.database.retry_interval,
+                       max_retries=cfg.CONF.database.max_retries,
+                       retry_on_deadlock=True)
     def record_metering_data(self, data):
         """Write the data to the backend storage system.
 

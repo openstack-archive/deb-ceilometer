@@ -100,7 +100,7 @@ class TestCollector(tests_base.BaseTestCase):
         plugin = mock.MagicMock()
         fake_dispatcher = extension.ExtensionManager.make_test_instance([
             extension.Extension('test', None, None, plugin,),
-        ])
+        ], propagate_map_exceptions=True)
         self.useFixture(mockpatch.Patch(
             'ceilometer.dispatcher.load_dispatcher_manager',
             return_value=fake_dispatcher))
@@ -141,13 +141,26 @@ class TestCollector(tests_base.BaseTestCase):
 
         udp_socket = self._make_fake_socket(self.counter)
 
-        with mock.patch('socket.socket', return_value=udp_socket):
+        with mock.patch('socket.socket') as mock_socket:
+            mock_socket.return_value = udp_socket
             self.srv.start()
+            mock_socket.assert_called_with(socket.AF_INET, socket.SOCK_DGRAM)
 
         self._verify_udp_socket(udp_socket)
 
         mock_dispatcher.record_metering_data.assert_called_once_with(
             self.counter)
+
+    def test_udp_socket_ipv6(self):
+        self._setup_messaging(False)
+        self.CONF.set_override('udp_address', '::1', group='collector')
+        self._setup_fake_dispatcher()
+        sock = self._make_fake_socket('data')
+
+        with mock.patch.object(socket, 'socket') as mock_socket:
+            mock_socket.return_value = sock
+            self.srv.start()
+            mock_socket.assert_called_with(socket.AF_INET6, socket.SOCK_DGRAM)
 
     def test_udp_receive_storage_error(self):
         self._setup_messaging(False)
@@ -231,13 +244,17 @@ class TestCollector(tests_base.BaseTestCase):
             'metering data test for test_run_tasks: 1')
 
     def _test_collector_requeue(self, listener):
+
+        mock_dispatcher = self._setup_fake_dispatcher()
+        self.srv.dispatcher_manager = dispatcher.load_dispatcher_manager()
+        mock_dispatcher.record_metering_data.side_effect = Exception('boom')
+        mock_dispatcher.record_events.side_effect = Exception('boom')
+
         self.srv.start()
-        with mock.patch.object(self.srv.dispatcher_manager, 'map_method',
-                               side_effect=Exception('boom')):
-            endp = getattr(self.srv, listener).dispatcher.endpoints[0]
-            ret = endp.sample({}, 'pub_id', 'event', {}, {})
-            self.assertEqual(oslo.messaging.NotificationResult.REQUEUE,
-                             ret)
+        endp = getattr(self.srv, listener).dispatcher.endpoints[0]
+        ret = endp.sample({}, 'pub_id', 'event', {}, {})
+        self.assertEqual(oslo.messaging.NotificationResult.REQUEUE,
+                         ret)
 
     @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start',
                        mock.Mock())
@@ -257,12 +274,17 @@ class TestCollector(tests_base.BaseTestCase):
         self._test_collector_requeue('event_listener')
 
     def _test_collector_no_requeue(self, listener):
+        mock_dispatcher = self._setup_fake_dispatcher()
+        self.srv.dispatcher_manager = dispatcher.load_dispatcher_manager()
+        mock_dispatcher.record_metering_data.side_effect = (FakeException
+                                                            ('boom'))
+        mock_dispatcher.record_events.side_effect = (FakeException
+                                                     ('boom'))
+
         self.srv.start()
-        with mock.patch.object(self.srv.dispatcher_manager, 'map_method',
-                               side_effect=FakeException('boom')):
-            endp = getattr(self.srv, listener).dispatcher.endpoints[0]
-            self.assertRaises(FakeException, endp.sample, {}, 'pub_id',
-                              'event', {}, {})
+        endp = getattr(self.srv, listener).dispatcher.endpoints[0]
+        self.assertRaises(FakeException, endp.sample, {}, 'pub_id',
+                          'event', {}, {})
 
     @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start',
                        mock.Mock())
