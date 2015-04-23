@@ -6,7 +6,7 @@ set -e
 
 #PKGOS-INCLUDE#
 
-pkgos_rabbit_read_conf /etc/ceilometer/ceilometer.conf DEFAULT ceilometer
+pkgos_rabbit_read_conf /etc/ceilometer/ceilometer.conf oslo_messaging_rabbit ceilometer
 pkgos_read_admin_creds /etc/ceilometer/ceilometer.conf keystone_authtoken ceilometer
 
 exit 0

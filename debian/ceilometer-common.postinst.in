@@ -42,7 +42,7 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 	adduser ceilometer nova || true
 	adduser ceilometer ${LIBVIRT_GROUP} || true
 	pkgos_write_new_conf ceilometer ceilometer.conf
-	pkgos_rabbit_write_conf /etc/ceilometer/ceilometer.conf DEFAULT ceilometer
+	pkgos_rabbit_write_conf /etc/ceilometer/ceilometer.conf oslo_messaging_rabbit ceilometer
 	pkgos_write_admin_creds /etc/ceilometer/ceilometer.conf keystone_authtoken ceilometer
 	ceilometer-dbsync || true
 fi
