@@ -24,6 +24,7 @@ override_dh_install:
 		--namespace ceilometer \
 		--namespace oslo.db \
 		--namespace oslo.messaging \
+		--namespace oslo.policy \
 		--namespace keystonemiddleware.auth_token
 	sed -i 's|[# \t]*auth_protocol[\t ]*=.*|auth_protocol=http|' $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
 	chmod 0644 $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
