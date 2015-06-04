@@ -12,8 +12,6 @@
 ### END INIT INFO
 
 # Author: Thomas Goirand <zigo@debian.org>
-
-PATH=/sbin:/usr/sbin:/bin:/usr/bin
-DESC="Ceilometer Agent Central"
+DESC="OpenStack Ceilometer Agent Central"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-agent-central

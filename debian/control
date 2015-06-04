@@ -189,6 +189,24 @@ Description: OpenStack efficient metering counters system - collector service
  .
  This package contains the collector service.
 
+Package: ceilometer-polling
+Architecture: all
+Depends:
+ ceilometer-common (= ${binary:Version}),
+ ${misc:Depends},
+ ${ostack-lsb-base},
+ ${python:Depends}
+Suggests: mongodb
+Description: OpenStack efficient metering counters system - polling service
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, across
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the polling service.
+
 Package: ceilometer-api
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
@@ -242,6 +260,40 @@ Description: OpenStack efficient metering counters system - central agent
  .
  This package contains the central agent.
 
+Package: ceilometer-agent-ipmi
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends},
+Description: OpenStack efficient metering counters system - IPMI agent
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, across
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the IPMI agent daemon.
+
+Package: ceilometer-agent-notification
+Architecture: all
+Pre-Depends: dpkg (>= 1.15.6~)
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends},
+Description: OpenStack efficient metering counters system - agent notification
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, across
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the notification agent daemon.
+
 Package: ceilometer-alarm-evaluator
 Architecture: all
 Pre-Depends: dpkg (>= 1.15.6~)
@@ -275,37 +327,3 @@ Description: OpenStack efficient metering counters system - alarm notifier
  overall system.
  .
  This package contains the alarm notifier daemon.
-
-Package: ceilometer-agent-notification
-Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ceilometer-common (= ${binary:Version}),
-         ${misc:Depends},
-         ${ostack-lsb-base},
-         ${python:Depends},
-Description: OpenStack efficient metering counters system - agent notification
- Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, across
- all current and future OpenStack components. The delivery of counters must be
- traceable and auditable, the counters must be easily extensible to support new
- projects, and agents doing data collections should be independent of the
- overall system.
- .
- This package contains the notification agent daemon.
-
-Package: ceilometer-agent-ipmi
-Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
-Depends: ceilometer-common (= ${binary:Version}),
-         ${misc:Depends},
-         ${ostack-lsb-base},
-         ${python:Depends},
-Description: OpenStack efficient metering counters system - IPMI agent
- Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, across
- all current and future OpenStack components. The delivery of counters must be
- traceable and auditable, the counters must be easily extensible to support new
- projects, and agents doing data collections should be independent of the
- overall system.
- .
- This package contains the IPMI agent daemon.

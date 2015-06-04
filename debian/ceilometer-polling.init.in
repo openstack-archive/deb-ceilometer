@@ -1,17 +1,17 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          ceilometer-agent-compute
+# Provides:          ceilometer-polling
 # Required-Start:    $network $local_fs $remote_fs $syslog
 # Required-Stop:     $remote_fs
 # Should-Start:      mongodb rabbitmq-server
 # Should-Stop:       mongodb rabbitmq-server
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: ceilometer central compute
-# Description:       ceilometer central compute
+# Short-Description: ceilometer polling
+# Description:       ceilometer polling
 ### END INIT INFO
 
 # Author: Thomas Goirand <zigo@debian.org>
-DESC="OpenStack Ceilometer Agent Compute"
+DESC="OpenStack Ceilometer Polling"
 PROJECT_NAME=ceilometer
-NAME=${PROJECT_NAME}-agent-compute
+NAME=${PROJECT_NAME}-polling

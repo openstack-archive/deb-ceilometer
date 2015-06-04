@@ -12,9 +12,6 @@
 ### END INIT INFO
 
 # Author: Thomas Goirand <zigo@debian.org>
-# License: Apache-2
-
-PATH=/sbin:/usr/sbin:/bin:/usr/bin
-DESC="Ceilometer Collector"
+DESC="OpenStack Ceilometer Collector"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-collector

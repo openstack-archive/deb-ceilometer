@@ -12,8 +12,6 @@
 ### END INIT INFO
 
 # Author: Thomas Goirand <zigo@debian.org>
-
-PATH=/sbin:/usr/sbin:/bin:/usr/bin
-DESC="Ceilometer Alarm Notifier"
+DESC="OpenStack Ceilometer Alarm Notifier"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-alarm-notifier
