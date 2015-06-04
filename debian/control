@@ -317,3 +317,17 @@ Description: OpenStack efficient metering counters system - alarm notifier
  overall system.
  .
  This package contains the alarm notifier daemon.
+
+Package: ceilometer-doc
+Architecture: all
+Depends: ${misc:Depends},
+         ${sphinxdoc:Depends},
+Description: OpenStack efficient metering counters system - doc
+ Ceilometer aims to deliver a Single Point Of Contact for billing systems,
+ providing all the counters they need to establish customer billing, across
+ all current and future OpenStack components. The delivery of counters must be
+ traceable and auditable, the counters must be easily extensible to support new
+ projects, and agents doing data collections should be independent of the
+ overall system.
+ .
+ This package contains the documentation.

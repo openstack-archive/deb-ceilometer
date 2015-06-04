@@ -1,0 +1,9 @@
+Document: ceilometer-doc
+Title: Ceilometer Documentation
+Author: OpenStack
+Abstract: Sphinx documentation for Ceilometer
+Section: Programming/Python
+
+Format: HTML
+Index: /usr/share/doc/ceilometer-doc/html/index.html
+Files: /usr/share/doc/ceilometer-doc/html/*

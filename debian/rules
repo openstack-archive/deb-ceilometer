@@ -7,7 +7,7 @@ include /usr/share/openstack-pkg-tools/pkgos.make
 export OSLO_PACKAGE_VERSION=$(VERSION)
 
 %:
-	dh $@  --with python2,systemd
+	dh $@  --with python2,systemd,sphinxdoc
 
 override_dh_clean:
 	dh_clean
@@ -53,4 +53,12 @@ ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats ; \
 		rm -f $$TEMP_REZ ;
 	testr slowest
+endif
+
+override_dh_sphinxdoc:
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+	PYTHONPATH=. sphinx-build -b html doc/source $(CURDIR)/debian/ceilometer-doc/usr/share/doc/ceilometer-doc/html
+	mkdir -p $(CURDIR)/debian/ceilometer-doc/usr/share/doc/ceilometer-doc/html/_static
+	touch $(CURDIR)/debian/ceilometer-doc/usr/share/doc/ceilometer-doc/html/_static/toggle.js
+	dh_sphinxdoc -O--buildsystem=python_distutils
 endif
