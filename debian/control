@@ -90,7 +90,6 @@ Homepage: http://wiki.openstack.org/Ceilometer
 Package: python-ceilometer
 Section: python
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: alembic (>= 0.7.2),
          libjs-jquery,
          python-ceilometerclient (>= 1.0.13),
@@ -155,7 +154,6 @@ Description: OpenStack efficient metering counters system - Python libraries
 
 Package: ceilometer-common
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: adduser,
          dpkg-dev,
          python-ceilometer (= ${binary:Version}),
@@ -174,7 +172,6 @@ Description: OpenStack efficient metering counters system - common files
 
 Package: ceilometer-collector
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
@@ -209,7 +206,6 @@ Description: OpenStack efficient metering counters system - polling service
 
 Package: ceilometer-api
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: adduser,
          ceilometer-common (= ${binary:Version}),
          debconf,
@@ -228,7 +224,6 @@ Description: OpenStack efficient metering counters system (API service)
 
 Package: ceilometer-agent-compute
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
@@ -245,7 +240,6 @@ Description: OpenStack efficient metering counters system - compute agent
 
 Package: ceilometer-agent-central
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
@@ -262,7 +256,6 @@ Description: OpenStack efficient metering counters system - central agent
 
 Package: ceilometer-agent-ipmi
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
@@ -279,7 +272,6 @@ Description: OpenStack efficient metering counters system - IPMI agent
 
 Package: ceilometer-agent-notification
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
@@ -296,7 +288,6 @@ Description: OpenStack efficient metering counters system - agent notification
 
 Package: ceilometer-alarm-evaluator
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
@@ -313,7 +304,6 @@ Description: OpenStack efficient metering counters system - alarm evaluator
 
 Package: ceilometer-alarm-notifier
 Architecture: all
-Pre-Depends: dpkg (>= 1.15.6~)
 Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},

@@ -1,6 +1,7 @@
 ceilometer (2015.1.0-3) unstable; urgency=medium
 
   * Added ceilometer-polling as new package.
+  * Removed Pre-Depends on dpkg.
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 04 Jun 2015 11:10:31 +0200
 
