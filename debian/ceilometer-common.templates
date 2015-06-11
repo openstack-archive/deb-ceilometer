@@ -7,6 +7,17 @@
 # Even minor modifications require translation updates and such
 # changes should be coordinated with translators and reviewers.
 
+Template: ceilometer/configure_db
+Type: boolean
+Default: false
+_Description: Perform automatic dbsync for Ceilometer?
+ Ceilometer can automatically run ceilometer-dbsync after installation. For it
+ to work, you need an up and running mongodb-server.
+ .
+ You can change this setting later on by running "dpkg-reconfigure -plow
+ ceilometer".
+
+
 Template: ceilometer/rabbit_host
 Type: string
 Default: localhost

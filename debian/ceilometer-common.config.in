@@ -6,6 +6,8 @@ set -e
 
 #PKGOS-INCLUDE#
 
+db_input high ceilometer/configure_db || true
+db_go || true
 pkgos_rabbit_read_conf /etc/ceilometer/ceilometer.conf oslo_messaging_rabbit ceilometer
 pkgos_read_admin_creds /etc/ceilometer/ceilometer.conf keystone_authtoken ceilometer
 
