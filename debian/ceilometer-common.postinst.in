@@ -51,3 +51,5 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 fi
 
 #DEBHELPER#
+
+exit 0
