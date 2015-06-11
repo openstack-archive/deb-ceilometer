@@ -319,6 +319,7 @@ Description: OpenStack efficient metering counters system - alarm notifier
  This package contains the alarm notifier daemon.
 
 Package: ceilometer-doc
+Section: doc
 Architecture: all
 Depends: ${misc:Depends},
          ${sphinxdoc:Depends},

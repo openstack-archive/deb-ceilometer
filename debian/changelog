@@ -1,6 +1,7 @@
 ceilometer (2015.1.0-5) unstable; urgency=medium
 
   * Added debconf screen to ask if dbsync should be done (Closes: #787536).
+  * Put ceilometer-doc in the doc section.
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 11 Jun 2015 09:18:13 +0200
 
