@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer 2014.1-7\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
-"POT-Creation-Date: 2013-10-28 22:32+0800\n"
+"POT-Creation-Date: 2015-06-26 13:18+0000\n"
 "PO-Revision-Date: 2014-06-04 14:37+0100\n"
 "Last-Translator: Chris Leick <c.leick@vollbio.de>\n"
 "Language-Team: German <debian-l10n-german@lists.debian.org>\n"
@@ -124,9 +124,31 @@ msgstr ""
 "Region einen Ort darstellt. Geben Sie bitte die Zone an, die Sie bei der "
 "Registrierung des Endpunkts verwenden wollen."
 
-#. Type: string
+#. Type: boolean
 #. Description
 #: ../ceilometer-common.templates:2001
+msgid "Perform automatic dbsync for Ceilometer?"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-common.templates:2001
+msgid ""
+"Ceilometer can automatically run ceilometer-dbsync after installation. For "
+"it to work, you need an up and running mongodb-server."
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-common.templates:2001
+msgid ""
+"You can change this setting later on by running \"dpkg-reconfigure -plow "
+"ceilometer\"."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../ceilometer-common.templates:3001
 msgid "IP address of your RabbitMQ host:"
 msgstr "IP-Adresse Ihres RabbitMQ-Rechners:"
 
@@ -136,8 +158,8 @@ msgstr "IP-Adresse Ihres RabbitMQ-Rechners:"
 #. Description
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:2001 ../ceilometer-common.templates:3001
-#: ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:3001 ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:5001
 msgid ""
 "In order to interoperate with other components of OpenStack, this package "
 "needs to connect to a central RabbitMQ server."
@@ -147,19 +169,19 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:2001
+#: ../ceilometer-common.templates:3001
 msgid "Please specify the IP address of that server."
 msgstr "Geben Sie bitte die IP-Adresse dieses Servers an."
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:3001
+#: ../ceilometer-common.templates:4001
 msgid "Username for connection to the RabbitMQ server:"
 msgstr "Benutzername für die Verbindung mit dem RabbitMQ-Server:"
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:3001
+#: ../ceilometer-common.templates:4001
 msgid "Please specify the username used to connect to the RabbitMQ server."
 msgstr ""
 "Bitte geben Sie den Benutzernamen ein, den Sie zum Verbinden mit dem "
@@ -167,35 +189,35 @@ msgstr ""
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:5001
 msgid "Password for connection to the RabbitMQ server:"
 msgstr "Passwort für die Verbindung mit dem RabbitMQ-Server:"
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:5001
 msgid "Please specify the password used to connect to the RabbitMQ server."
 msgstr ""
-"Bitte geben Sie das Passwort ein, das Sie zum Verbinden mit dem "
-"RabbitMQ-Server verwenden."
+"Bitte geben Sie das Passwort ein, das Sie zum Verbinden mit dem RabbitMQ-"
+"Server verwenden."
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:5001
+#: ../ceilometer-common.templates:6001
 msgid "Authentication server hostname:"
 msgstr "Rechnername des Authentifizierungsservers:"
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:5001
+#: ../ceilometer-common.templates:6001
 msgid ""
 "Please specify the hostname of the authentication server for Ceilometer. "
 "Typically this is also the hostname of the OpenStack Identity Service "
 "(Keystone)."
 msgstr ""
 "Bitte geben Sie den Rechnernamen Ihres Ceilometer-Authentifizierungsservers "
-"an. Typischerweise ist das gleichzeitig der Rechnername Ihres "
-"OpenStack-Identitätsdienstes (Keystone)."
+"an. Typischerweise ist das gleichzeitig der Rechnername Ihres OpenStack-"
+"Identitätsdienstes (Keystone)."
 
 #. Type: string
 #. Description
@@ -206,7 +228,7 @@ msgstr ""
 #. You're advised to either keep "tenant" without translating it
 #. or keep it parenthezised. Example for French:
 #. locataire ("tenant")
-#: ../ceilometer-common.templates:6001
+#: ../ceilometer-common.templates:7001
 msgid "Authentication server tenant name:"
 msgstr "Tenant-Name des Authentifizierungsservers:"
 
@@ -219,19 +241,19 @@ msgstr "Tenant-Name des Authentifizierungsservers:"
 #. You're advised to either keep "tenant" without translating it
 #. or keep it parenthezised. Example for French:
 #. locataire ("tenant")
-#: ../ceilometer-common.templates:6001
+#: ../ceilometer-common.templates:7001
 msgid "Please specify the authentication server tenant name."
 msgstr "Bitte geben Sie den Tenant-Namen des Authentifizierungsservers an."
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:7001
+#: ../ceilometer-common.templates:8001
 msgid "Authentication server username:"
 msgstr "Benutzername des Authentifizierungsservers:"
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:7001
+#: ../ceilometer-common.templates:8001
 msgid "Please specify the username to use with the authentication server."
 msgstr ""
 "Bitte geben Sie den Benutzernamen an, der für den Authentifizierungsserver "
@@ -239,14 +261,14 @@ msgstr ""
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:8001
+#: ../ceilometer-common.templates:9001
 msgid "Authentication server password:"
 msgstr "Passwort des Authentifizierungsservers:"
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:8001
+#: ../ceilometer-common.templates:9001
 msgid "Please specify the password to use with the authentication server."
 msgstr ""
-"Bitte geben Sie das Passwort an, das für den Authentifizierungsserver benutzt "
-"wird."
+"Bitte geben Sie das Passwort an, das für den Authentifizierungsserver "
+"benutzt wird."

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
-"POT-Creation-Date: 2013-10-28 22:32+0800\n"
+"POT-Creation-Date: 2015-06-26 13:18+0000\n"
 "PO-Revision-Date: 2014-10-09 22:14+0200\n"
 "Last-Translator: Frans Spiesschaert <Frans.Spiesschaert@yucom.be>\n"
 "Language-Team: Debian Dutch l10n Team <debian-l10n-dutch@lists.debian.org>\n"
@@ -121,9 +121,31 @@ msgstr ""
 "elke regio een locatie vertegenwoordigt. Geef aan welke zone u wenst te "
 "gebruiken bij het registreren van het toegangspunt."
 
-#. Type: string
+#. Type: boolean
 #. Description
 #: ../ceilometer-common.templates:2001
+msgid "Perform automatic dbsync for Ceilometer?"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-common.templates:2001
+msgid ""
+"Ceilometer can automatically run ceilometer-dbsync after installation. For "
+"it to work, you need an up and running mongodb-server."
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../ceilometer-common.templates:2001
+msgid ""
+"You can change this setting later on by running \"dpkg-reconfigure -plow "
+"ceilometer\"."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../ceilometer-common.templates:3001
 msgid "IP address of your RabbitMQ host:"
 msgstr "IP-adres van uw RabbitMQ-computer:"
 
@@ -133,8 +155,8 @@ msgstr "IP-adres van uw RabbitMQ-computer:"
 #. Description
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:2001 ../ceilometer-common.templates:3001
-#: ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:3001 ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:5001
 msgid ""
 "In order to interoperate with other components of OpenStack, this package "
 "needs to connect to a central RabbitMQ server."
@@ -144,19 +166,19 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:2001
+#: ../ceilometer-common.templates:3001
 msgid "Please specify the IP address of that server."
 msgstr "Geef het IP-adres op van die server."
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:3001
+#: ../ceilometer-common.templates:4001
 msgid "Username for connection to the RabbitMQ server:"
 msgstr "Gebruikersnaam voor de verbinding met de RabbitMQ-server:"
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:3001
+#: ../ceilometer-common.templates:4001
 msgid "Please specify the username used to connect to the RabbitMQ server."
 msgstr ""
 "Geef de gebruikersnaam op die u nodig heeft om verbinding te maken met de "
@@ -164,13 +186,13 @@ msgstr ""
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:5001
 msgid "Password for connection to the RabbitMQ server:"
 msgstr "Wachtwoord voor de verbinding met de RabbitMQ-server:"
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:4001
+#: ../ceilometer-common.templates:5001
 msgid "Please specify the password used to connect to the RabbitMQ server."
 msgstr ""
 "Gelieve het wachtwoord te geven dat u nodig heeft om verbinding te maken met "
@@ -178,13 +200,13 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:5001
+#: ../ceilometer-common.templates:6001
 msgid "Authentication server hostname:"
 msgstr "Computernaam van de authenticatieserver:"
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:5001
+#: ../ceilometer-common.templates:6001
 msgid ""
 "Please specify the hostname of the authentication server for Ceilometer. "
 "Typically this is also the hostname of the OpenStack Identity Service "
@@ -202,7 +224,7 @@ msgstr ""
 #. You're advised to either keep "tenant" without translating it
 #. or keep it parenthezised. Example for French:
 #. locataire ("tenant")
-#: ../ceilometer-common.templates:6001
+#: ../ceilometer-common.templates:7001
 msgid "Authentication server tenant name:"
 msgstr "Naam van de clientruimte (tenant) op de authenticatieserver:"
 
@@ -215,7 +237,7 @@ msgstr "Naam van de clientruimte (tenant) op de authenticatieserver:"
 #. You're advised to either keep "tenant" without translating it
 #. or keep it parenthezised. Example for French:
 #. locataire ("tenant")
-#: ../ceilometer-common.templates:6001
+#: ../ceilometer-common.templates:7001
 msgid "Please specify the authentication server tenant name."
 msgstr ""
 "Gelieve de naam te vermelden van de clientruimte (tenant) op de "
@@ -223,24 +245,24 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:7001
+#: ../ceilometer-common.templates:8001
 msgid "Authentication server username:"
 msgstr "Gebruikersnaam voor de authenticatieserver:"
 
 #. Type: string
 #. Description
-#: ../ceilometer-common.templates:7001
+#: ../ceilometer-common.templates:8001
 msgid "Please specify the username to use with the authentication server."
 msgstr "Geef de gebruikersnaam op voor de authenticatieserver."
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:8001
+#: ../ceilometer-common.templates:9001
 msgid "Authentication server password:"
 msgstr "Wachtwoord voor de authenticatieserver:"
 
 #. Type: password
 #. Description
-#: ../ceilometer-common.templates:8001
+#: ../ceilometer-common.templates:9001
 msgid "Please specify the password to use with the authentication server."
 msgstr "Geef het wachtwoord op voor de authenticatieserver."
