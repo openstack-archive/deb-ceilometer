@@ -1,3 +1,10 @@
+ceilometer (2015.1.0-6) unstable; urgency=medium
+
+  * Updated French debconf translations thanks to Julien Patriarca
+    (Closes: #789902).
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 26 Jun 2015 15:11:26 +0200
+
 ceilometer (2015.1.0-5) unstable; urgency=medium
 
   * Added debconf screen to ask if dbsync should be done (Closes: #787536).
