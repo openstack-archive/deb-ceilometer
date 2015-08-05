@@ -16,11 +16,11 @@
 notification events.
 """
 
-from oslo import messaging
 from oslo_config import cfg
+from oslo_log import log
+import oslo_messaging as messaging
 
 from ceilometer.agent import plugin_base
-from ceilometer.openstack.common import log
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)

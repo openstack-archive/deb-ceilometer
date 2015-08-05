@@ -16,8 +16,7 @@ import functools
 import novaclient
 from novaclient import client as nova_client
 from oslo_config import cfg
-
-from ceilometer.openstack.common import log
+from oslo_log import log
 
 
 OPTS = [
@@ -137,17 +136,29 @@ class Client(object):
             setattr(instance, attr, ameta)
 
     @logged
-    def instance_get_all_by_host(self, hostname):
-        """Returns list of instances on particular host."""
+    def instance_get_all_by_host(self, hostname, since=None):
+        """Returns list of instances on particular host.
+
+        If since is supplied, it will return the instances changed since that
+        datetime. since should be in ISO Format '%Y-%m-%dT%H:%M:%SZ'
+        """
         search_opts = {'host': hostname, 'all_tenants': True}
+        if since:
+            search_opts['changes-since'] = since
         return self._with_flavor_and_image(self.nova_client.servers.list(
             detailed=True,
             search_opts=search_opts))
 
     @logged
-    def instance_get_all(self):
-        """Returns list of all instances."""
+    def instance_get_all(self, since=None):
+        """Returns list of all instances.
+
+        If since is supplied, it will return the instances changes since that
+        datetime. since should be in ISO Format '%Y-%m-%dT%H:%M:%SZ'
+        """
         search_opts = {'all_tenants': True}
+        if since:
+            search_opts['changes-since'] = since
         return self.nova_client.servers.list(
             detailed=True,
             search_opts=search_opts)

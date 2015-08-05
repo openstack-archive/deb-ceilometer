@@ -22,6 +22,13 @@
 """
 import mock
 
+
+try:
+    import happybase   # noqa
+except ImportError:
+    import testtools.testcase
+    raise testtools.testcase.TestSkipped("happybase is needed")
+
 from ceilometer.alarm.storage import impl_hbase as hbase_alarm
 from ceilometer.event.storage import impl_hbase as hbase_event
 from ceilometer.storage import impl_hbase as hbase
@@ -57,20 +64,16 @@ class CapabilitiesTest(test_base.BaseTestCase):
 
     def test_capabilities(self):
         expected_capabilities = {
-            'meters': {'pagination': False,
-                       'query': {'simple': True,
+            'meters': {'query': {'simple': True,
                                  'metadata': True,
                                  'complex': False}},
-            'resources': {'pagination': False,
-                          'query': {'simple': True,
+            'resources': {'query': {'simple': True,
                                     'metadata': True,
                                     'complex': False}},
-            'samples': {'pagination': False,
-                        'query': {'simple': True,
+            'samples': {'query': {'simple': True,
                                   'metadata': True,
                                   'complex': False}},
-            'statistics': {'pagination': False,
-                           'groupby': False,
+            'statistics': {'groupby': False,
                            'query': {'simple': True,
                                      'metadata': True,
                                      'complex': False},

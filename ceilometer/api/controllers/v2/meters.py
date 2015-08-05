@@ -21,7 +21,10 @@
 import base64
 import datetime
 
+from oslo_config import cfg
 from oslo_context import context
+from oslo_log import log
+from oslo_utils import strutils
 from oslo_utils import timeutils
 import pecan
 from pecan import rest
@@ -34,7 +37,7 @@ from ceilometer.api.controllers.v2 import base
 from ceilometer.api.controllers.v2 import utils as v2_utils
 from ceilometer.api import rbac
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
+from ceilometer.publisher import utils as publisher_utils
 from ceilometer import sample
 from ceilometer import storage
 from ceilometer import utils
@@ -282,8 +285,7 @@ class MeterController(rest.RestController):
         rbac.enforce('get_samples', pecan.request)
 
         q = q or []
-        if limit and limit < 0:
-            raise base.ClientSideError(_("Limit must be positive"))
+        limit = v2_utils.enforce_limit(limit)
         kwargs = v2_utils.query_to_kwargs(q, storage.SampleFilter.__init__)
         kwargs['meter'] = self.meter_name
         f = storage.SampleFilter(**kwargs)
@@ -291,14 +293,20 @@ class MeterController(rest.RestController):
                 for e in pecan.request.storage_conn.get_samples(f, limit=limit)
                 ]
 
-    @wsme_pecan.wsexpose([OldSample], body=[OldSample], status_code=201)
-    def post(self, samples):
+    @wsme_pecan.wsexpose([OldSample], str, body=[OldSample], status_code=201)
+    def post(self, direct='', samples=None):
         """Post a list of new Samples to Telemetry.
 
+        :param direct: a flag indicates whether the samples will be posted
+                       directly to storage or not.
         :param samples: a list of samples within the request body.
         """
-
         rbac.enforce('create_samples', pecan.request)
+
+        direct = strutils.bool_from_string(direct)
+        if not samples:
+            msg = _('Samples should be included in request body')
+            raise base.ClientSideError(msg)
 
         now = timeutils.utcnow()
         auth_project = rbac.get_limited_to_project(pecan.request.headers)
@@ -308,14 +316,6 @@ class MeterController(rest.RestController):
 
         published_samples = []
         for s in samples:
-            for p in pecan.request.pipeline_manager.pipelines:
-                if p.support_meter(s.counter_name):
-                    break
-            else:
-                message = _("The metric %s is not supported by metering "
-                            "pipeline configuration.") % s.counter_name
-                raise base.ClientSideError(message, status_code=409)
-
             if self.meter_name != s.counter_name:
                 raise wsme.exc.InvalidInput('counter_name', s.counter_name,
                                             'should be %s' % self.meter_name)
@@ -352,18 +352,27 @@ class MeterController(rest.RestController):
                 resource_metadata=utils.restore_nesting(s.resource_metadata,
                                                         separator='.'),
                 source=s.source)
-            published_samples.append(published_sample)
-
             s.message_id = published_sample.id
 
-        with pecan.request.pipeline_manager.publisher(
-                context.get_admin_context()) as publisher:
-            publisher(published_samples)
+            sample_dict = publisher_utils.meter_message_from_counter(
+                published_sample, cfg.CONF.publisher.telemetry_secret)
+            if direct:
+                ts = timeutils.parse_isotime(sample_dict['timestamp'])
+                sample_dict['timestamp'] = timeutils.normalize_time(ts)
+                pecan.request.storage_conn.record_metering_data(sample_dict)
+            else:
+                published_samples.append(sample_dict)
+        if not direct:
+            ctxt = context.RequestContext(user=def_user_id,
+                                          tenant=def_project_id,
+                                          is_admin=True)
+            notifier = pecan.request.notifier
+            notifier.info(ctxt.to_dict(), 'telemetry.api', published_samples)
 
         return samples
 
     @wsme_pecan.wsexpose([Statistics],
-                         [base.Query], [unicode], int, [Aggregate])
+                         [base.Query], [six.text_type], int, [Aggregate])
     def statistics(self, q=None, groupby=None, period=None, aggregate=None):
         """Computes the statistics of the samples in the time range given.
 
@@ -403,9 +412,6 @@ class MeterController(rest.RestController):
         try:
             computed = pecan.request.storage_conn.get_meter_statistics(
                 f, period, g, aggregate)
-            LOG.debug(_('computed value coming from %r'),
-                      pecan.request.storage_conn)
-
             return [Statistics(start_timestamp=start,
                                end_timestamp=end,
                                **c.as_dict())
@@ -470,8 +476,8 @@ class MetersController(rest.RestController):
     def _lookup(self, meter_name, *remainder):
         return MeterController(meter_name), remainder
 
-    @wsme_pecan.wsexpose([Meter], [base.Query])
-    def get_all(self, q=None):
+    @wsme_pecan.wsexpose([Meter], [base.Query], int)
+    def get_all(self, q=None, limit=None):
         """Return all known meters, based on the data recorded so far.
 
         :param q: Filter rules for the meters to be returned.
@@ -482,7 +488,9 @@ class MetersController(rest.RestController):
         q = q or []
 
         # Timestamp field is not supported for Meter queries
+        limit = v2_utils.enforce_limit(limit)
         kwargs = v2_utils.query_to_kwargs(
             q, pecan.request.storage_conn.get_meters, allow_timestamps=False)
         return [Meter.from_db_model(m)
-                for m in pecan.request.storage_conn.get_meters(**kwargs)]
+                for m in pecan.request.storage_conn.get_meters(limit=limit,
+                                                               **kwargs)]

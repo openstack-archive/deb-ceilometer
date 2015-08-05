@@ -17,6 +17,7 @@
 import abc
 import collections
 
+from oslo_log import log
 import six
 
 import ceilometer
@@ -24,7 +25,6 @@ from ceilometer.compute import pollsters
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer.i18n import _, _LW
-from ceilometer.openstack.common import log
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
@@ -706,7 +706,7 @@ class _DiskInfoPollsterBase(pollsters.BaseComputePollster):
                 # Selected inspector does not implement this pollster.
                 LOG.debug(_('%(inspector)s does not provide data for '
                             ' %(pollster)s'), (
-                          {'inspector': manager.inspector.__class__.__name__,
+                          {'inspector': self.inspector.__class__.__name__,
                            'pollster': self.__class__.__name__}))
             except Exception as err:
                 instance_name = util.instance_name(instance)

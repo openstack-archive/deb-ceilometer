@@ -21,6 +21,8 @@
 
 from pysnmp.entity.rfc3413.oneliner import cmdgen
 
+import six
+
 from ceilometer.hardware.inspector import base
 
 
@@ -68,6 +70,8 @@ class SNMPInspector(base.Inspector):
     _memory_avail_real_oid = "1.3.6.1.4.1.2021.4.6.0"
     _memory_total_swap_oid = "1.3.6.1.4.1.2021.4.3.0"
     _memory_avail_swap_oid = "1.3.6.1.4.1.2021.4.4.0"
+    _memory_buffer_oid = "1.3.6.1.4.1.2021.4.14.0"
+    _memory_cached_oid = "1.3.6.1.4.1.2021.4.15.0"
     # Disk OIDs
     _disk_index_oid = "1.3.6.1.4.1.2021.9.1.1"
     _disk_path_oid = "1.3.6.1.4.1.2021.9.1.2"
@@ -207,6 +211,18 @@ class SNMPInspector(base.Inspector):
             'metadata': {},
             'post_op': None,
         },
+        'memory.buffer': {
+            'matching_type': EXACT,
+            'metric_oid': (_memory_buffer_oid, int),
+            'metadata': {},
+            'post_op': None,
+        },
+        'memory.cached': {
+            'matching_type': EXACT,
+            'metric_oid': (_memory_cached_oid, int),
+            'metadata': {},
+            'post_op': None,
+        },
         'disk.size.total': {
             'matching_type': PREFIX,
             'metric_oid': (_disk_size_oid, int),
@@ -333,7 +349,7 @@ class SNMPInspector(base.Inspector):
     @classmethod
     def construct_metadata(cls, oid_cache, meta_defs, suffix=''):
         metadata = {}
-        for key, oid_def in meta_defs.iteritems():
+        for key, oid_def in six.iteritems(meta_defs):
             metadata[key] = cls.get_oid_value(oid_cache, oid_def, suffix)
         return metadata
 
@@ -409,7 +425,7 @@ class SNMPInspector(base.Inspector):
             # populate the oid into cache
             self._query_oids(host, [self._interface_ip_oid], cache, True)
         ip_addr = ''
-        for k, v in oid_cache.iteritems():
+        for k, v in six.iteritems(oid_cache):
             if k.startswith(self._interface_ip_oid) and v == int(suffix[1:]):
                 ip_addr = k.replace(self._interface_ip_oid + ".", "")
         metadata.update(ip=ip_addr)

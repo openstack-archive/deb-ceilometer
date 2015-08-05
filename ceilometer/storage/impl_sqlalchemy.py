@@ -18,10 +18,11 @@ import datetime
 import hashlib
 import os
 
-from oslo.db import api
-from oslo.db import exception as dbexc
-from oslo.db.sqlalchemy import session as db_session
 from oslo_config import cfg
+from oslo_db import api
+from oslo_db import exception as dbexc
+from oslo_db.sqlalchemy import session as db_session
+from oslo_log import log
 from oslo_serialization import jsonutils
 from oslo_utils import timeutils
 import six
@@ -33,7 +34,6 @@ from sqlalchemy.orm import aliased
 
 import ceilometer
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models as api_models
@@ -72,8 +72,7 @@ AVAILABLE_CAPABILITIES = {
                          'metadata': True}},
     'resources': {'query': {'simple': True,
                             'metadata': True}},
-    'samples': {'pagination': True,
-                'query': {'simple': True,
+    'samples': {'query': {'simple': True,
                           'metadata': True,
                           'complex': True}},
     'statistics': {'groupby': True,
@@ -227,7 +226,7 @@ class Connection(base.Connection):
 
     def upgrade(self):
         # NOTE(gordc): to minimise memory, only import migration when needed
-        from oslo.db.sqlalchemy import migration
+        from oslo_db.sqlalchemy import migration
         path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                             'sqlalchemy', 'migrate_repo')
         migration.db_sync(self._engine_facade.get_engine(), path)
@@ -236,7 +235,6 @@ class Connection(base.Connection):
         engine = self._engine_facade.get_engine()
         for table in reversed(models.Base.metadata.sorted_tables):
             engine.execute(table.delete())
-        self._engine_facade._session_maker.close_all()
         engine.dispose()
 
     @staticmethod
@@ -270,8 +268,10 @@ class Connection(base.Connection):
         # TODO(gordc): implement lru_cache to improve performance
         try:
             res = models.Resource.__table__
-            m_hash = hashlib.md5(jsonutils.dumps(rmeta,
-                                                 sort_keys=True)).hexdigest()
+            m_hash = jsonutils.dumps(rmeta, sort_keys=True)
+            if six.PY3:
+                m_hash = m_hash.encode('utf-8')
+            m_hash = hashlib.md5(m_hash).hexdigest()
             trans = conn.begin_nested()
             if conn.dialect.name == 'sqlite':
                 trans = conn.begin()
@@ -384,7 +384,7 @@ class Connection(base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery=None, resource=None, pagination=None):
+                      metaquery=None, resource=None, limit=None):
         """Return an iterable of api_models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -396,11 +396,10 @@ class Connection(base.Connection):
         :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
-        :param pagination: Optional pagination query.
+        :param limit: Maximum number of results to return.
         """
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
-
+        if limit == 0:
+            return
         s_filter = storage.SampleFilter(user=user,
                                         project=project,
                                         source=source,
@@ -418,7 +417,7 @@ class Connection(base.Connection):
             models.Sample.resource_id == models.Resource.internal_id)
         res_q = make_query_from_filter(session, res_q, s_filter,
                                        require_meter=False)
-
+        res_q = res_q.limit(limit) if limit else res_q
         for res_id in res_q.all():
 
             # get max and min sample timestamp value
@@ -465,7 +464,7 @@ class Connection(base.Connection):
             )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery=None, pagination=None):
+                   metaquery=None, limit=None):
         """Return an iterable of api_models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
@@ -473,12 +472,10 @@ class Connection(base.Connection):
         :param resource: Optional ID of the resource.
         :param source: Optional source filter.
         :param metaquery: Optional dict with metadata to match on.
-        :param pagination: Optional pagination query.
+        :param limit: Maximum number of results to return.
         """
-
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
-
+        if limit == 0:
+            return
         s_filter = storage.SampleFilter(user=user,
                                         project=project,
                                         source=source,
@@ -511,6 +508,7 @@ class Connection(base.Connection):
         query_sample = make_query_from_filter(session, query_sample, s_filter,
                                               require_meter=False)
 
+        query_sample = query_sample.limit(limit) if limit else query_sample
         for row in query_sample.all():
             yield api_models.Meter(
                 name=row.name,
@@ -665,7 +663,7 @@ class Connection(base.Connection):
     @staticmethod
     def _stats_result_aggregates(result, aggregate):
         stats_args = {}
-        if isinstance(result.count, (int, long)):
+        if isinstance(result.count, six.integer_types):
             stats_args['count'] = result.count
         for attr in ['min', 'max', 'sum', 'avg']:
             if hasattr(result, attr):

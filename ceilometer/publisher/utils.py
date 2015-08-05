@@ -45,7 +45,9 @@ def compute_signature(message, secret):
     if not secret:
         return ''
 
-    digest_maker = hmac.new(secret, '', hashlib.sha256)
+    if isinstance(secret, six.text_type):
+        secret = secret.encode('utf-8')
+    digest_maker = hmac.new(secret, b'', hashlib.sha256)
     for name, value in utils.recursive_keypairs(message):
         if name == 'message_signature':
             # Skip any existing signature value, which would not have
@@ -103,6 +105,8 @@ def verify_signature(message, secret):
             old_sig = old_sig.encode('ascii')
         except UnicodeDecodeError:
             return False
+    if six.PY3:
+        new_sig = new_sig.encode('ascii')
 
     return compare_digest(new_sig, old_sig)
 

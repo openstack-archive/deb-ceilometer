@@ -139,17 +139,11 @@ class BasePipelineTestCase(base.BaseTestCase):
         )
 
         self.useFixture(mockpatch.PatchObject(
-            transformer.TransformerExtensionManager, "__init__",
-            side_effect=self.fake_tem_init))
-
-        self.useFixture(mockpatch.PatchObject(
-            transformer.TransformerExtensionManager, "get_ext",
-            side_effect=self.fake_tem_get_ext))
-
-        self.useFixture(mockpatch.PatchObject(
             publisher, 'get_publisher', side_effect=self.get_publisher))
 
-        self.transformer_manager = transformer.TransformerExtensionManager()
+        self.transformer_manager = mock.MagicMock()
+        self.transformer_manager.__getitem__.side_effect = \
+            self.fake_tem_get_ext
 
         self._setup_pipeline_cfg()
 
@@ -210,7 +204,11 @@ class BasePipelineTestCase(base.BaseTestCase):
 
     def test_no_interval(self):
         self._unset_pipeline_cfg('interval')
-        self._exception_create_pipelinemanager()
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+
+        pipe = pipeline_manager.pipelines[0]
+        self.assertEqual(600, pipe.get_interval())
 
     def test_no_publishers(self):
         self._unset_pipeline_cfg('publishers')
@@ -752,16 +750,12 @@ class BasePipelineTestCase(base.BaseTestCase):
                          getattr(publisher.samples[0], 'name'))
 
     def test_variable_counter(self):
-        self.pipeline_cfg = [{
-            'name': "test_pipeline",
-            'interval': 5,
-            'counters': ['a:*'],
-            'transformers': [
-                {'name': "update",
-                 'parameters': {}}
-            ],
-            'publishers': ["test://"],
-        }, ]
+        transformer_cfg = [{
+            'name': "update",
+            'parameters': {}
+        }]
+        self._set_pipeline_cfg('transformers', transformer_cfg)
+        self._set_pipeline_cfg('counters', ['a:*'])
         pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
                                                     self.transformer_manager)
 

@@ -15,6 +15,7 @@
 """Test event, event_type and trait retrieval."""
 
 import datetime
+import uuid
 
 import webtest.app
 
@@ -207,6 +208,18 @@ class TestEventAPI(EventTestBase):
                          "\'float\', \'string\', \'datetime\']",
                          resp.json['error_message']['faultstring'])
 
+    def test_get_events_filter_operator_invalid_type(self):
+        resp = self.get_json(self.PATH, headers=headers,
+                             q=[{'field': 'trait_A',
+                                 'value': 'my_Foo_text',
+                                 'op': 'whats-up'}],
+                             expect_errors=True)
+        self.assertEqual(400, resp.status_code)
+        self.assertEqual("operator whats-up is not supported. the "
+                         "supported operators are: (\'lt\', \'le\', "
+                         "\'eq\', \'ne\', \'ge\', \'gt\')",
+                         resp.json['error_message']['faultstring'])
+
     def test_get_events_filter_text_trait(self):
         data = self.get_json(self.PATH, headers=headers,
                              q=[{'field': 'trait_A',
@@ -223,7 +236,7 @@ class TestEventAPI(EventTestBase):
         self.assertEqual(1, len(data))
         self.assertEqual('Bar', data[0]['event_type'])
 
-        traits = filter(lambda x: x['name'] == 'trait_B', data[0]['traits'])
+        traits = [x for x in data[0]['traits'] if x['name'] == 'trait_B']
         self.assertEqual(1, len(traits))
         self.assertEqual('integer', traits[0]['type'])
         self.assertEqual('101', traits[0]['value'])
@@ -236,7 +249,7 @@ class TestEventAPI(EventTestBase):
         self.assertEqual(1, len(data))
         self.assertEqual('Zoo', data[0]['event_type'])
 
-        traits = filter(lambda x: x['name'] == 'trait_C', data[0]['traits'])
+        traits = [x for x in data[0]['traits'] if x['name'] == 'trait_C']
         self.assertEqual(1, len(traits))
         self.assertEqual('float', traits[0]['type'])
         self.assertEqual('200.123456', traits[0]['value'])
@@ -247,7 +260,7 @@ class TestEventAPI(EventTestBase):
                                  'value': '2014-01-01T05:00:00',
                                  'type': 'datetime'}])
         self.assertEqual(1, len(data))
-        traits = filter(lambda x: x['name'] == 'trait_D', data[0]['traits'])
+        traits = [x for x in data[0]['traits'] if x['name'] == 'trait_D']
         self.assertEqual(1, len(traits))
         self.assertEqual('datetime', traits[0]['type'])
         self.assertEqual('2014-01-01T05:00:00', traits[0]['value'])
@@ -438,3 +451,57 @@ class TestEventAPI(EventTestBase):
                               'value': '1',
                               'type': 'integer',
                               'op': 'el'}])
+
+
+class EventRestrictionTestBase(v2.FunctionalTest,
+                               tests_db.MixinTestsWithBackendScenarios):
+
+    def setUp(self):
+        super(EventRestrictionTestBase, self).setUp()
+        self.CONF.set_override('default_api_return_limit', 10, group='api')
+        self._generate_models()
+
+    def _generate_models(self):
+        event_models = []
+        base = 0
+        self.s_time = datetime.datetime(2013, 12, 31, 5, 0)
+        self.trait_time = datetime.datetime(2013, 12, 31, 5, 0)
+        for i in range(20):
+            trait_models = [models.Trait(name, type, value)
+                            for name, type, value in [
+                                ('trait_A', models.Trait.TEXT_TYPE,
+                                    "my_text"),
+                                ('trait_B', models.Trait.INT_TYPE,
+                                    base + 1),
+                                ('trait_C', models.Trait.FLOAT_TYPE,
+                                    float(base) + 0.123456),
+                                ('trait_D', models.Trait.DATETIME_TYPE,
+                                    self.trait_time)]]
+
+            event_models.append(
+                models.Event(message_id=str(uuid.uuid4()),
+                             event_type='foo.bar',
+                             generated=self.trait_time,
+                             traits=trait_models,
+                             raw={'status': {'nested': 'started'}}))
+            self.trait_time += datetime.timedelta(seconds=1)
+        self.event_conn.record_events(event_models)
+
+
+class TestEventRestriction(EventRestrictionTestBase):
+
+    def test_get_limit(self):
+        data = self.get_json('/events?limit=1', headers=headers)
+        self.assertEqual(1, len(data))
+
+    def test_get_limit_negative(self):
+        self.assertRaises(webtest.app.AppError,
+                          self.get_json, '/events?limit=-2', headers=headers)
+
+    def test_get_limit_bigger(self):
+        data = self.get_json('/events?limit=100', headers=headers)
+        self.assertEqual(20, len(data))
+
+    def test_get_default_limit(self):
+        data = self.get_json('/events', headers=headers)
+        self.assertEqual(10, len(data))

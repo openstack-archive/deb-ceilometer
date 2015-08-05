@@ -19,7 +19,7 @@ import functools
 import os.path
 
 import eventlet
-import oslo.messaging.conffixture
+import oslo_messaging.conffixture
 from oslo_utils import timeutils
 from oslotest import base
 from oslotest import mockpatch
@@ -33,16 +33,15 @@ from ceilometer import messaging
 
 class BaseTestCase(base.BaseTestCase):
     def setup_messaging(self, conf, exchange=None):
-        self.useFixture(oslo.messaging.conffixture.ConfFixture(conf))
+        self.useFixture(oslo_messaging.conffixture.ConfFixture(conf))
         conf.set_override("notification_driver", "messaging")
         if not exchange:
             exchange = 'ceilometer'
         conf.set_override("control_exchange", exchange)
 
-        # NOTE(sileht): oslo.messaging fake driver uses time.sleep
-        # for task switch, so we need to monkey_patch it
-        # and also ensure the correct exchange have been set
-        eventlet.monkey_patch(time=True)
+        # oslo.messaging fake driver needs time and thread
+        # to be patched, otherwise there are chances of deadlocks
+        eventlet.monkey_patch(time=True, thread=True)
 
         # NOTE(sileht): Ensure a new oslo.messaging driver is loaded
         # between each tests

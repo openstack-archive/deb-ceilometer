@@ -18,26 +18,38 @@
 """Common functions for MongoDB and DB2 backends
 """
 
+import datetime
 import time
 import weakref
 
 from oslo_config import cfg
+from oslo_log import log
 from oslo_utils import netutils
 import pymongo
 import six
 from six.moves.urllib import parse
 
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
 
-cfg.CONF.import_opt('max_retries', 'oslo.db.options', group="database")
-cfg.CONF.import_opt('retry_interval', 'oslo.db.options', group="database")
+# FIXME(dhellmann): Configuration options are not part of the Oslo
+# library APIs, and should not be used like this.
+cfg.CONF.import_opt('max_retries', 'oslo_db.options', group="database")
+cfg.CONF.import_opt('retry_interval', 'oslo_db.options', group="database")
 
 EVENT_TRAIT_TYPES = {'none': 0, 'string': 1, 'integer': 2, 'float': 3,
                      'datetime': 4}
 OP_SIGN = {'lt': '$lt', 'le': '$lte', 'ne': '$ne', 'gt': '$gt', 'ge': '$gte'}
+
+MINIMUM_COMPATIBLE_MONGODB_VERSION = [2, 4]
+COMPLETE_AGGREGATE_COMPATIBLE_VERSION = [2, 6]
+
+TRIVIAL_LAMBDA = lambda result, param=None: result
+CARDINALITY_VALIDATION = (lambda name, param: param in ['resource_id',
+                                                        'user_id',
+                                                        'project_id',
+                                                        'source'])
 
 
 def make_timestamp_range(start, end,
@@ -182,7 +194,7 @@ def improve_keys(data, metaquery=False):
         return data
 
     if metaquery:
-        for key in data.iterkeys():
+        for key in six.iterkeys(data):
             if '.$' in key:
                 key_list = []
                 for k in quote_key(key):
@@ -251,13 +263,11 @@ class ConnectionPool(object):
     @staticmethod
     def _mongo_connect(url):
         try:
-            if cfg.CONF.database.mongodb_replica_set:
-                client = MongoProxy(
-                    pymongo.MongoReplicaSetClient(
-                        url,
-                        replicaSet=cfg.CONF.database.mongodb_replica_set))
-            else:
-                client = MongoProxy(pymongo.MongoClient(url))
+            client = MongoProxy(
+                pymongo.MongoClient(
+                    url, replicaSet=cfg.CONF.database.mongodb_replica_set
+                )
+            )
             return client
         except pymongo.errors.ConnectionFailure as e:
             LOG.warn(_('Unable to connect to the database server: '
@@ -287,8 +297,8 @@ class QueryTransformer(object):
         orderby_filter = []
 
         for field in orderby:
-            field_name = field.keys()[0]
-            ordering = self.ordering_functions[field.values()[0]]
+            field_name = list(field.keys())[0]
+            ordering = self.ordering_functions[list(field.values())[0]]
             orderby_filter.append((field_name, ordering))
         return orderby_filter
 
@@ -310,12 +320,12 @@ class QueryTransformer(object):
             del tree["not"]
 
         def transform(subtree):
-            op = subtree.keys()[0]
+            op = list(subtree.keys())[0]
             if op in ["and", "or"]:
                 [transform(child) for child in subtree[op]]
             elif op == "not":
                 negated_tree = subtree[op]
-                negated_op = negated_tree.keys()[0]
+                negated_op = list(negated_tree.keys())[0]
                 if negated_op == "and":
                     _apply_de_morgan(subtree, negated_tree, negated_op)
                     transform(subtree)
@@ -324,7 +334,8 @@ class QueryTransformer(object):
                     transform(subtree)
                 elif negated_op == "not":
                     # two consecutive not annihilates themselves
-                    new_op = negated_tree.values()[0].keys()[0]
+                    value = list(negated_tree.values())[0]
+                    new_op = list(value.keys())[0]
                     subtree[new_op] = negated_tree[negated_op][new_op]
                     del subtree["not"]
                     transform(subtree)
@@ -350,8 +361,8 @@ class QueryTransformer(object):
     def _handle_not_op(self, negated_tree):
         # assumes that not is moved to the leaf already
         # so we are next to a leaf
-        negated_op = negated_tree.keys()[0]
-        negated_field = negated_tree[negated_op].keys()[0]
+        negated_op = list(negated_tree.keys())[0]
+        negated_field = list(negated_tree[negated_op].keys())[0]
         value = negated_tree[negated_op][negated_field]
         if negated_op == "=":
             return {negated_field: {"$ne": value}}
@@ -362,8 +373,8 @@ class QueryTransformer(object):
                                     {self.operators[negated_op]: value}}}
 
     def _handle_simple_op(self, simple_op, nodes):
-        field_name = nodes.keys()[0]
-        field_value = nodes.values()[0]
+        field_name = list(nodes.keys())[0]
+        field_value = list(nodes.values())[0]
 
         # no operator for equal in Mongo
         if simple_op == "=":
@@ -375,8 +386,8 @@ class QueryTransformer(object):
         return op
 
     def _process_json_tree(self, condition_tree):
-        operator_node = condition_tree.keys()[0]
-        nodes = condition_tree.values()[0]
+        operator_node = list(condition_tree.keys())[0]
+        nodes = list(condition_tree.values())[0]
 
         if operator_node in self.complex_operators:
             return self._handle_complex_op(operator_node, nodes)
@@ -483,3 +494,136 @@ class CursorProxy(pymongo.cursor.Cursor):
 
     def __getattr__(self, item):
         return getattr(self.cursor, item)
+
+
+class AggregationFields(object):
+    def __init__(self, version,
+                 group,
+                 project,
+                 finalize=None,
+                 parametrized=False,
+                 validate=None):
+        self._finalize = finalize or TRIVIAL_LAMBDA
+        self.group = lambda *args: group(*args) if parametrized else group
+        self.project = (lambda *args: project(*args)
+                        if parametrized else project)
+        self.version = version
+        self.validate = validate or (lambda name, param: True)
+
+    def finalize(self, name, data, param=None):
+        field = ("%s" % name) + ("/%s" % param if param else "")
+        return {field: (self._finalize(data.get(field))
+                        if self._finalize else data.get(field))}
+
+
+class Aggregation(object):
+    def __init__(self, name, aggregation_fields):
+        self.name = name
+        aggregation_fields = (aggregation_fields
+                              if isinstance(aggregation_fields, list)
+                              else [aggregation_fields])
+        self.aggregation_fields = sorted(aggregation_fields,
+                                         key=lambda af: getattr(af, "version"),
+                                         reverse=True)
+
+    def _get_compatible_aggregation_field(self, version_array):
+        if version_array:
+            version_array = version_array[0:2]
+        else:
+            version_array = MINIMUM_COMPATIBLE_MONGODB_VERSION
+        for aggregation_field in self.aggregation_fields:
+            if version_array >= aggregation_field.version:
+                return aggregation_field
+
+    def group(self, param=None, version_array=None):
+        af = self._get_compatible_aggregation_field(version_array)
+        return af.group(param)
+
+    def project(self, param=None, version_array=None):
+        af = self._get_compatible_aggregation_field(version_array)
+        return af.project(param)
+
+    def finalize(self, data, param=None, version_array=None):
+        af = self._get_compatible_aggregation_field(version_array)
+        return af.finalize(self.name, data, param)
+
+    def validate(self, param=None, version_array=None):
+        af = self._get_compatible_aggregation_field(version_array)
+        return af.validate(self.name, param)
+
+SUM_AGGREGATION = Aggregation(
+    "sum", AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                             {"sum": {"$sum": "$counter_volume"}},
+                             {"sum": "$sum"}))
+AVG_AGGREGATION = Aggregation(
+    "avg", AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                             {"avg": {"$avg": "$counter_volume"}},
+                             {"avg": "$avg"}))
+MIN_AGGREGATION = Aggregation(
+    "min", AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                             {"min": {"$min": "$counter_volume"}},
+                             {"min": "$min"}))
+MAX_AGGREGATION = Aggregation(
+    "max", AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                             {"max": {"$max": "$counter_volume"}},
+                             {"max": "$max"}))
+COUNT_AGGREGATION = Aggregation(
+    "count", AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                               {"count": {"$sum": 1}},
+                               {"count": "$count"}))
+STDDEV_AGGREGATION = Aggregation(
+    "stddev",
+    AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                      {"std_square": {
+                          "$sum": {
+                              "$multiply": ["$counter_volume",
+                                            "$counter_volume"]
+                          }},
+                       "std_count": {"$sum": 1},
+                       "std_sum": {"$sum": "$counter_volume"}},
+                      {"stddev": {
+                          "count": "$std_count",
+                          "sum": "$std_sum",
+                          "square_sum": "$std_square"}},
+                      lambda stddev: ((stddev['square_sum']
+                                       * stddev['count']
+                                       - stddev["sum"] ** 2) ** 0.5
+                                      / stddev['count'])))
+
+CARDINALITY_AGGREGATION = Aggregation(
+    "cardinality",
+    # $cond operator available only in MongoDB 2.6+
+    [AggregationFields(COMPLETE_AGGREGATE_COMPATIBLE_VERSION,
+                       lambda field: ({"cardinality/%s" % field:
+                                      {"$addToSet": "$%s" % field}}),
+                       lambda field: {
+                           "cardinality/%s" % field: {
+                               "$cond": [
+                                   {"$eq": ["$cardinality/%s" % field, None]},
+                                   0,
+                                   {"$size": "$cardinality/%s" % field}]
+                           }},
+                       validate=CARDINALITY_VALIDATION,
+                       parametrized=True),
+     AggregationFields(MINIMUM_COMPATIBLE_MONGODB_VERSION,
+                       lambda field: ({"cardinality/%s" % field:
+                                       {"$addToSet": "$%s" % field}}),
+                       lambda field: ({"cardinality/%s" % field:
+                                       "$cardinality/%s" % field}),
+                       finalize=len,
+                       validate=CARDINALITY_VALIDATION,
+                       parametrized=True)]
+)
+
+
+def to_unix_timestamp(timestamp):
+    if isinstance(timestamp, datetime.datetime):
+        return int(time.mktime(timestamp.timetuple()))
+    return timestamp
+
+
+def from_unix_timestamp(timestamp):
+    if (isinstance(timestamp, six.integer_types) or
+            isinstance(timestamp, float)):
+        return datetime.datetime.fromtimestamp(timestamp)
+    return timestamp

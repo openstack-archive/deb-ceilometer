@@ -19,9 +19,9 @@ import datetime
 import operator
 
 import mock
-from oslo.db import api
-from oslo.db import exception as dbexc
 from oslo_config import cfg
+from oslo_db import api
+from oslo_db import exception as dbexc
 from oslo_utils import timeutils
 import pymongo
 
@@ -31,7 +31,6 @@ from ceilometer.event.storage import models as event_models
 from ceilometer.publisher import utils
 from ceilometer import sample
 from ceilometer import storage
-from ceilometer.storage import base
 from ceilometer.tests import constants
 from ceilometer.tests import db as tests_db
 
@@ -310,49 +309,6 @@ class ResourceTest(DBTestBase,
         self.assertEqual(expected_tag, resource.metadata['tag'])
 
 
-class ResourceTestPagination(DBTestBase,
-                             tests_db.MixinTestsWithBackendScenarios):
-
-    def test_get_resource_all_limit(self):
-        pagination = base.Pagination(limit=8)
-        results = list(self.conn.get_resources(pagination=pagination))
-        self.assertEqual(8, len(results))
-
-        pagination = base.Pagination(limit=5)
-        results = list(self.conn.get_resources(pagination=pagination))
-        self.assertEqual(5, len(results))
-
-    def test_get_resources_all_marker(self):
-        pagination = base.Pagination(primary_sort_dir='asc',
-                                     sort_keys=['user_id'],
-                                     sort_dirs=['asc'],
-                                     marker_value='resource-id-4')
-        results = list(self.conn.get_resources(pagination=pagination))
-        self.assertEqual(5, len(results))
-
-    def test_get_resources_paginate(self):
-        pagination = base.Pagination(limit=3, primary_sort_dir='asc',
-                                     sort_keys=['user_id'], sort_dirs=['asc'],
-                                     marker_value='resource-id-4')
-        results = self.conn.get_resources(pagination=pagination)
-        self.assertEqual(['user-id-5', 'user-id-6', 'user-id-7'],
-                         [i.user_id for i in results])
-
-        pagination = base.Pagination(limit=2, primary_sort_dir='desc',
-                                     sort_keys=['user_id'], sort_dirs=['asc'],
-                                     marker_value='resource-id-4')
-        results = list(self.conn.get_resources(pagination=pagination))
-        self.assertEqual(['user-id-3', 'user-id-2'],
-                         [i.user_id for i in results])
-
-        pagination = base.Pagination(limit=3, primary_sort_dir='asc',
-                                     sort_keys=['user_id'], sort_dirs=['asc'],
-                                     marker_value='resource-id-5')
-        results = list(self.conn.get_resources(pagination=pagination))
-        self.assertEqual(['resource-id-6', 'resource-id-7', 'resource-id-8'],
-                         [i.resource_id for i in results])
-
-
 class ResourceTestOrdering(DBTestBase,
                            tests_db.MixinTestsWithBackendScenarios):
     def prepare_data(self):
@@ -431,56 +387,6 @@ class MeterTest(DBTestBase,
     def test_get_meters_by_empty_metaquery(self):
         results = list(self.conn.get_meters(metaquery={}))
         self.assertEqual(9, len(results))
-
-
-class MeterTestPagination(DBTestBase,
-                          tests_db.MixinTestsWithBackendScenarios):
-
-    def tet_get_meters_all_limit(self):
-        pagination = base.Pagination(limit=8)
-        results = list(self.conn.get_meters(pagination=pagination))
-        self.assertEqual(8, len(results))
-
-        pagination = base.Pagination(limit=5)
-        results = list(self.conn.get_meters(pagination=pagination))
-        self.assertEqual(5, len(results))
-
-    def test_get_meters_all_marker(self):
-        pagination = base.Pagination(limit=3, primary_sort_dir='desc',
-                                     sort_keys=['user_id'],
-                                     sort_dirs=['desc'],
-                                     marker_value='resource-id-5')
-
-        results = list(self.conn.get_meters(pagination=pagination))
-        self.assertEqual(8, len(results))
-
-    def test_get_meters_paginate(self):
-        pagination = base.Pagination(limit=3, primary_sort_dir='desc',
-                                     sort_keys=['user_id'], sort_dirs=['desc'],
-                                     marker_value='resource-id-5')
-        results = self.conn.get_meters(pagination=pagination)
-        self.assertEqual(['user-id-8', 'user-id-7', 'user-id-6'],
-                         [i.user_id for i in results])
-
-        pagination = base.Pagination(limit=3, primary_sort_dir='asc',
-                                     sort_keys=['user_id'], sort_dirs=['desc'],
-                                     marker_value='resource-id-5')
-        results = self.conn.get_meters(pagination=pagination)
-        self.assertEqual(['user-id-5', 'user-id-6', 'user-id-7'],
-                         [i.user_id for i in results])
-
-        pagination = base.Pagination(limit=2, primary_sort_dir='desc',
-                                     sort_keys=['user_id'], sort_dirs=['desc'],
-                                     marker_value='resource-id-5')
-        results = list(self.conn.get_meters(pagination=pagination))
-        self.assertEqual(['user-id-3', 'user-id-2'],
-                         [i.user_id for i in results])
-
-        pagination = base.Pagination(limit=3, primary_sort_dir='desc',
-                                     sort_keys=['user_id'], sort_dirs=['desc'],
-                                     marker_value='resource-id-5')
-        results = self.conn.get_meters(pagination=pagination)
-        self.assertEqual([], [i.user_id for i in results])
 
 
 class RawSampleTest(DBTestBase,
@@ -2763,7 +2669,7 @@ class CounterDataTypeTest(DBTestBase,
             meter='dummySmallCounter',
         )
         results = list(self.conn.get_samples(f))
-        observed_num = long(results[0].counter_volume)
+        observed_num = int(results[0].counter_volume)
         self.assertEqual(-337203685477580, observed_num)
 
     def test_storage_can_handle_float_values(self):
@@ -2976,46 +2882,48 @@ class AlarmTest(AlarmTestBase,
             self.assertNotEqual(victim.name, s.name)
 
 
-class AlarmTestPagination(AlarmTestBase,
-                          tests_db.MixinTestsWithBackendScenarios):
+@tests_db.run_with('sqlite', 'mysql', 'pgsql', 'hbase', 'db2')
+class AlarmHistoryTest(AlarmTestBase,
+                       tests_db.MixinTestsWithBackendScenarios):
 
-    def test_get_alarm_all_limit(self):
+    def setUp(self):
+        super(AlarmTestBase, self).setUp()
         self.add_some_alarms()
-        pagination = base.Pagination(limit=2)
-        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(2, len(alarms))
+        self.prepare_alarm_history()
 
-        pagination = base.Pagination(limit=1)
-        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(1, len(alarms))
+    def prepare_alarm_history(self):
+        alarms = list(self.alarm_conn.get_alarms())
+        for alarm in alarms:
+            i = alarms.index(alarm)
+            alarm_change = {
+                "event_id": "3e11800c-a3ca-4991-b34b-d97efb6047d%s" % i,
+                "alarm_id": alarm.alarm_id,
+                "type": alarm_models.AlarmChange.CREATION,
+                "detail": "detail %s" % alarm.name,
+                "user_id": alarm.user_id,
+                "project_id": alarm.project_id,
+                "on_behalf_of": alarm.project_id,
+                "timestamp": datetime.datetime(2014, 4, 7, 7, 30 + i)
+            }
+            self.alarm_conn.record_alarm_change(alarm_change=alarm_change)
 
-    def test_get_alarm_all_marker(self):
-        self.add_some_alarms()
+    def _clear_alarm_history(self, utcnow, ttl, count):
+        self.mock_utcnow.return_value = utcnow
+        self.alarm_conn.clear_expired_alarm_history_data(ttl)
+        history = list(self.alarm_conn.query_alarm_history())
+        self.assertEqual(count, len(history))
 
-        pagination = base.Pagination(marker_value='orange-alert')
-        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(0, len(alarms))
+    def test_clear_alarm_history_no_data_to_remove(self):
+        utcnow = datetime.datetime(2013, 4, 7, 7, 30)
+        self._clear_alarm_history(utcnow, 1, 3)
 
-        pagination = base.Pagination(marker_value='red-alert')
-        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(1, len(alarms))
+    def test_clear_some_alarm_history(self):
+        utcnow = datetime.datetime(2014, 4, 7, 7, 35)
+        self._clear_alarm_history(utcnow, 3 * 60, 1)
 
-        pagination = base.Pagination(marker_value='yellow-alert')
-        alarms = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(2, len(alarms))
-
-    def test_get_alarm_paginate(self):
-        self.add_some_alarms()
-
-        pagination = base.Pagination(limit=4, marker_value='yellow-alert')
-        page = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(['red-alert', 'orange-alert'], [i.name for i in page])
-
-        pagination = base.Pagination(limit=2, marker_value='orange-alert',
-                                     primary_sort_dir='asc')
-        page1 = list(self.alarm_conn.get_alarms(pagination=pagination))
-        self.assertEqual(['red-alert', 'yellow-alert'],
-                         [i.name for i in page1])
+    def test_clear_all_alarm_history(self):
+        utcnow = datetime.datetime(2014, 4, 7, 7, 45)
+        self._clear_alarm_history(utcnow, 3 * 60, 0)
 
 
 class ComplexAlarmQueryTest(AlarmTestBase,
@@ -3281,10 +3189,22 @@ class EventTest(EventTestBase):
         now = datetime.datetime.utcnow()
         m = [event_models.Event("1", "Foo", now, None, {}),
              event_models.Event("1", "Zoo", now, [], {})]
-        problem_events = self.event_conn.record_events(m)
-        self.assertEqual(1, len(problem_events))
-        bad = problem_events[0]
-        self.assertEqual(event_models.Event.DUPLICATE, bad[0])
+        with mock.patch('%s.LOG' %
+                        self.event_conn.record_events.__module__) as log:
+            self.event_conn.record_events(m)
+            self.assertEqual(1, log.info.call_count)
+
+    def test_bad_event(self):
+        now = datetime.datetime.utcnow()
+        broken_event = event_models.Event("1", "Foo", now, None, {})
+        del(broken_event.__dict__['raw'])
+        m = [broken_event, broken_event]
+        with mock.patch('%s.LOG' %
+                        self.event_conn.record_events.__module__) as log:
+            self.assertRaises(AttributeError, self.event_conn.record_events, m)
+            # ensure that record_events does not break on first error but
+            # delays exception and tries to record each event.
+            self.assertEqual(2, log.exception.call_count)
 
 
 class GetEventTest(EventTestBase):
@@ -3590,10 +3510,9 @@ class GetEventTest(EventTestBase):
     def test_simple_get_event_no_traits(self):
         new_events = [event_models.Event("id_notraits", "NoTraits",
                       self.start, [], {})]
-        bad_events = self.event_conn.record_events(new_events)
+        self.event_conn.record_events(new_events)
         event_filter = storage.EventFilter(self.start, self.end, "NoTraits")
         events = [event for event in self.event_conn.get_events(event_filter)]
-        self.assertEqual(0, len(bad_events))
         self.assertEqual(1, len(events))
         self.assertEqual("id_notraits", events[0].message_id)
         self.assertEqual("NoTraits", events[0].event_type)
@@ -3610,10 +3529,9 @@ class GetEventTest(EventTestBase):
                                          self.start,
                                          [], {})]
 
-        bad_events = self.event_conn.record_events(new_events)
+        self.event_conn.record_events(new_events)
         event_filter = storage.EventFilter(message_id="id_testid")
         events = [event for event in self.event_conn.get_events(event_filter)]
-        self.assertEqual(0, len(bad_events))
         self.assertEqual(1, len(events))
         event = events[0]
         self.assertEqual("id_testid", event.message_id)
@@ -3623,6 +3541,22 @@ class GetEventTest(EventTestBase):
         events = [event for event in self.event_conn.get_events(event_filter)]
         self.assertTrue(events)
         self.assertEqual({'status': {'nested': 'started'}}, events[0].raw)
+
+    def test_trait_type_enforced_on_none(self):
+        new_events = [event_models.Event(
+            "id_testid", "MessageIDTest", self.start,
+            [event_models.Trait('text', event_models.Trait.TEXT_TYPE, ''),
+             event_models.Trait('int', event_models.Trait.INT_TYPE, 0),
+             event_models.Trait('float', event_models.Trait.FLOAT_TYPE, 0.0)],
+            {})]
+        self.event_conn.record_events(new_events)
+        event_filter = storage.EventFilter(message_id="id_testid")
+        events = [event for event in self.event_conn.get_events(event_filter)]
+        options = [(event_models.Trait.TEXT_TYPE, ''),
+                   (event_models.Trait.INT_TYPE, 0.0),
+                   (event_models.Trait.FLOAT_TYPE, 0.0)]
+        for trait in events[0].traits:
+            options.remove((trait.dtype, trait.value))
 
 
 class BigIntegerTest(tests_db.TestBase,

@@ -18,6 +18,7 @@
 from oslo_config import cfg
 from oslo_utils import units
 from oslo_vmware import api
+import six
 
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer.compute.virt.vmware import vsphere_operations
@@ -30,20 +31,29 @@ opt_group = cfg.OptGroup(name='vmware',
 OPTS = [
     cfg.StrOpt('host_ip',
                default='',
-               help='IP address of the VMware Vsphere host.'),
+               help='IP address of the VMware vSphere host.'),
     cfg.IntOpt('host_port',
                default=443,
-               help='Port of the VMware Vsphere host.'),
+               help='Port of the VMware vSphere host.'),
     cfg.StrOpt('host_username',
                default='',
-               help='Username of VMware Vsphere.'),
+               help='Username of VMware vSphere.'),
     cfg.StrOpt('host_password',
                default='',
-               help='Password of VMware Vsphere.',
+               help='Password of VMware vSphere.',
                secret=True),
+    cfg.StrOpt('ca_file',
+               help='CA bundle file to use in verifying the vCenter server '
+                    'certificate.'),
+    cfg.BoolOpt('insecure',
+                default=False,
+                help='If true, the vCenter server certificate is not '
+                     'verified. If false, then the default CA truststore is '
+                     'used for verification. This option is ignored if '
+                     '"ca_file" is set.'),
     cfg.IntOpt('api_retry_count',
                default=10,
-               help='Number of times a VMware Vsphere API may be retried.'),
+               help='Number of times a VMware vSphere API may be retried.'),
     cfg.FloatOpt('task_poll_interval',
                  default=0.5,
                  help='Sleep time in seconds for polling an ongoing async '
@@ -76,7 +86,9 @@ def get_api_session():
         cfg.CONF.vmware.api_retry_count,
         cfg.CONF.vmware.task_poll_interval,
         wsdl_loc=cfg.CONF.vmware.wsdl_location,
-        port=cfg.CONF.vmware.host_port)
+        port=cfg.CONF.vmware.host_port,
+        cacert=cfg.CONF.vmware.ca_file,
+        insecure=cfg.CONF.vmware.insecure)
     return api_session
 
 
@@ -91,7 +103,7 @@ class VsphereInspector(virt_inspector.Inspector):
         vm_moid = self._ops.get_vm_moid(instance.id)
         if vm_moid is None:
             raise virt_inspector.InstanceNotFoundException(
-                _('VM %s not found in VMware Vsphere') % instance.id)
+                _('VM %s not found in VMware vSphere') % instance.id)
         cpu_util_counter_id = self._ops.get_perf_counter_id(
             VC_AVERAGE_CPU_CONSUMED_CNTR)
         cpu_util = self._ops.query_vm_aggregate_stats(
@@ -108,7 +120,7 @@ class VsphereInspector(virt_inspector.Inspector):
         vm_moid = self._ops.get_vm_moid(instance.id)
         if not vm_moid:
             raise virt_inspector.InstanceNotFoundException(
-                _('VM %s not found in VMware Vsphere') % instance.id)
+                _('VM %s not found in VMware vSphere') % instance.id)
 
         vnic_stats = {}
         vnic_ids = set()
@@ -118,7 +130,7 @@ class VsphereInspector(virt_inspector.Inspector):
             vnic_id_to_stats_map = self._ops.query_vm_device_stats(
                 vm_moid, net_counter_id, duration)
             vnic_stats[net_counter] = vnic_id_to_stats_map
-            vnic_ids.update(vnic_id_to_stats_map.iterkeys())
+            vnic_ids.update(six.iterkeys(vnic_id_to_stats_map))
 
         # Stats provided from vSphere are in KB/s, converting it to B/s.
         for vnic_id in vnic_ids:
@@ -140,7 +152,7 @@ class VsphereInspector(virt_inspector.Inspector):
         vm_moid = self._ops.get_vm_moid(instance.id)
         if vm_moid is None:
             raise virt_inspector.InstanceNotFoundException(
-                _('VM %s not found in VMware Vsphere') % instance.id)
+                _('VM %s not found in VMware vSphere') % instance.id)
         mem_counter_id = self._ops.get_perf_counter_id(
             VC_AVERAGE_MEMORY_CONSUMED_CNTR)
         memory = self._ops.query_vm_aggregate_stats(
@@ -153,7 +165,7 @@ class VsphereInspector(virt_inspector.Inspector):
         vm_moid = self._ops.get_vm_moid(instance.id)
         if not vm_moid:
             raise virt_inspector.InstanceNotFoundException(
-                _('VM %s not found in VMware Vsphere') % instance.id)
+                _('VM %s not found in VMware vSphere') % instance.id)
 
         disk_stats = {}
         disk_ids = set()
@@ -169,7 +181,7 @@ class VsphereInspector(virt_inspector.Inspector):
             disk_id_to_stat_map = self._ops.query_vm_device_stats(
                 vm_moid, disk_counter_id, duration)
             disk_stats[disk_counter] = disk_id_to_stat_map
-            disk_ids.update(disk_id_to_stat_map.iterkeys())
+            disk_ids.update(six.iterkeys(disk_id_to_stat_map))
 
         for disk_id in disk_ids:
 

@@ -14,11 +14,12 @@
 import datetime
 import operator
 
+from oslo_log import log
+
 import ceilometer
 from ceilometer.alarm.storage import base
 from ceilometer.alarm.storage import models
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer.storage.hbase import base as hbase_base
 from ceilometer.storage.hbase import migration as hbase_migration
 from ceilometer.storage.hbase import utils as hbase_utils
@@ -119,11 +120,9 @@ class Connection(hbase_base.Connection, base.Connection):
             alarm_table.delete(alarm_id)
 
     def get_alarms(self, name=None, user=None, state=None, meter=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None,
+                   project=None, enabled=None, alarm_id=None,
                    alarm_type=None, severity=None):
 
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
         if meter:
             raise ceilometer.NotImplementedError(
                 'Filter by meter not implemented')

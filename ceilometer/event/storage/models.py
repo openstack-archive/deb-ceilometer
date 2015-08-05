@@ -121,4 +121,7 @@ class Trait(base.Model):
             return float(value)
         if trait_type is cls.DATETIME_TYPE:
             return timeutils.normalize_time(timeutils.parse_isotime(value))
-        return six.text_type(value)
+        # Cropping the text value to match the TraitText value size
+        if isinstance(value, six.binary_type):
+            return value.decode('utf-8')[:255]
+        return six.text_type(value)[:255]

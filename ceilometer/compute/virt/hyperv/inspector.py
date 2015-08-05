@@ -14,12 +14,12 @@
 """Implementation of Inspector abstraction for Hyper-V"""
 
 from oslo_config import cfg
+from oslo_log import log
 from oslo_utils import units
 
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt.hyperv import utilsv2
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.openstack.common import log
 
 
 CONF = cfg.CONF
@@ -41,7 +41,7 @@ class HyperVInspector(virt_inspector.Inspector):
         cpu_percent_used = (cpu_clock_used /
                             float(host_cpu_clock * cpu_count))
         # Nanoseconds
-        cpu_time = (long(uptime * cpu_percent_used) * units.k)
+        cpu_time = (int(uptime * cpu_percent_used) * units.k)
 
         return virt_inspector.CPUStats(number=cpu_count, time=cpu_time)
 

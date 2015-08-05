@@ -18,8 +18,8 @@
 import datetime
 import json
 
-from oslo_utils import timeutils
 import six
+import webtest.app
 
 from ceilometer.publisher import utils
 from ceilometer import sample
@@ -34,17 +34,12 @@ class TestListResources(v2.FunctionalTest,
         data = self.get_json('/resources')
         self.assertEqual([], data)
 
-    @staticmethod
-    def _isotime(timestamp):
-        # drop TZ specifier
-        return six.text_type(timeutils.isotime(timestamp))[:-1]
-
     def _verify_resource_timestamps(self, res, first, last):
         # Bounds need not be tight (see ceilometer bug #1288372)
         self.assertIn('first_sample_timestamp', res)
-        self.assertTrue(self._isotime(first) >= res['first_sample_timestamp'])
+        self.assertTrue(first.isoformat() >= res['first_sample_timestamp'])
         self.assertIn('last_sample_timestamp', res)
-        self.assertTrue(self._isotime(last) <= res['last_sample_timestamp'])
+        self.assertTrue(last.isoformat() <= res['last_sample_timestamp'])
 
     def test_instance_no_metadata(self):
         timestamp = datetime.datetime(2012, 7, 2, 10, 40)
@@ -286,8 +281,11 @@ class TestListResources(v2.FunctionalTest,
 
         resp3 = self.get_json('/resources/resource-id-3', expect_errors=True)
         self.assertEqual(404, resp3.status_code)
+        json_data = resp3.body
+        if six.PY3:
+            json_data = json_data.decode('utf-8')
         self.assertEqual("Resource resource-id-3 Not Found",
-                         json.loads(resp3.body)['error_message']
+                         json.loads(json_data)['error_message']
                          ['faultstring'])
 
     def test_with_user(self):
@@ -519,3 +517,47 @@ class TestListResources(v2.FunctionalTest,
         self.assertEqual(links[0]['rel'], 'self')
         self.assertTrue((self.PATH_PREFIX + '/resources/resource-id')
                         in links[0]['href'])
+
+
+class TestListResourcesRestriction(v2.FunctionalTest,
+                                   tests_db.MixinTestsWithBackendScenarios):
+
+    def setUp(self):
+        super(TestListResourcesRestriction, self).setUp()
+        self.CONF.set_override('default_api_return_limit', 10, group='api')
+        for i in range(20):
+            s = sample.Sample(
+                'volume.size',
+                'gauge',
+                'GiB',
+                5 + i,
+                'user-id',
+                'project1',
+                'resource-id%s' % i,
+                timestamp=(datetime.datetime(2012, 9, 25, 10, 30) +
+                           datetime.timedelta(seconds=i)),
+                resource_metadata={'display_name': 'test-volume',
+                                   'tag': 'self.sample',
+                                   },
+                source='source1',
+            )
+            msg = utils.meter_message_from_counter(
+                s, self.CONF.publisher.telemetry_secret,
+            )
+            self.conn.record_metering_data(msg)
+
+    def test_resource_limit(self):
+        data = self.get_json('/resources?limit=1')
+        self.assertEqual(1, len(data))
+
+    def test_resource_limit_negative(self):
+        self.assertRaises(webtest.app.AppError, self.get_json,
+                          '/resources?limit=-2')
+
+    def test_resource_limit_bigger(self):
+        data = self.get_json('/resources?limit=42')
+        self.assertEqual(20, len(data))
+
+    def test_resource_default_limit(self):
+        data = self.get_json('/resources')
+        self.assertEqual(10, len(data))

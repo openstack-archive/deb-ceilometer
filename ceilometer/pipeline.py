@@ -19,20 +19,22 @@
 
 import abc
 import fnmatch
+import hashlib
 import os
 
 from oslo_config import cfg
+from oslo_log import log
 from oslo_utils import timeutils
 import six
+from stevedore import extension
 import yaml
+
 
 from ceilometer.event.storage import models
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer import publisher
 from ceilometer.publisher import utils as publisher_utils
 from ceilometer import sample as sample_util
-from ceilometer import transformer as xformer
 
 
 OPTS = [
@@ -43,6 +45,15 @@ OPTS = [
     cfg.StrOpt('event_pipeline_cfg_file',
                default="event_pipeline.yaml",
                help="Configuration file for event pipeline definition."
+               ),
+    cfg.BoolOpt('refresh_pipeline_cfg',
+                default=False,
+                help="Refresh Pipeline configuration on-the-fly."
+                ),
+    cfg.IntOpt('pipeline_polling_interval',
+               default=20,
+               help="Polling interval for pipeline file configuration"
+                    " in seconds."
                ),
 ]
 
@@ -108,6 +119,57 @@ class EventPipelineEndpoint(PipelineEndpoint):
         ]
         with self.publish_context as p:
             p(events)
+
+
+class _PipelineTransportManager(object):
+    def __init__(self):
+        self.transporters = []
+
+    def add_transporter(self, transporter):
+        self.transporters.append(transporter)
+
+    def publisher(self, context):
+        serializer = self.serializer
+        transporters = self.transporters
+        filter_attr = self.filter_attr
+        event_type = self.event_type
+
+        class PipelinePublishContext(object):
+            def __enter__(self):
+                def p(data):
+                    serialized_data = serializer(data)
+                    for d_filter, notifier in transporters:
+                        if any(d_filter(d[filter_attr])
+                               for d in serialized_data):
+                            notifier.sample(context.to_dict(),
+                                            event_type=event_type,
+                                            payload=serialized_data)
+                return p
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                pass
+
+        return PipelinePublishContext()
+
+
+class SamplePipelineTransportManager(_PipelineTransportManager):
+    filter_attr = 'counter_name'
+    event_type = 'ceilometer.pipeline'
+
+    @staticmethod
+    def serializer(data):
+        return [publisher_utils.meter_message_from_counter(
+            sample, cfg.CONF.publisher.telemetry_secret) for sample in data]
+
+
+class EventPipelineTransportManager(_PipelineTransportManager):
+    filter_attr = 'event_type'
+    event_type = 'pipeline.event'
+
+    @staticmethod
+    def serializer(data):
+        return [publisher_utils.message_from_event(
+            data, cfg.CONF.publisher.telemetry_secret)]
 
 
 class PublishContext(object):
@@ -227,15 +289,16 @@ class SampleSource(Source):
     def __init__(self, cfg):
         super(SampleSource, self).__init__(cfg)
         try:
-            try:
-                self.interval = int(cfg['interval'])
-            except ValueError:
-                raise PipelineException("Invalid interval value", cfg)
             # Support 'counters' for backward compatibility
             self.meters = cfg.get('meters', cfg.get('counters'))
         except KeyError as err:
             raise PipelineException(
                 "Required field %s not specified" % err.args[0], cfg)
+
+        try:
+            self.interval = int(cfg.get('interval', 600))
+        except ValueError:
+            raise PipelineException("Invalid interval value", cfg)
         if self.interval <= 0:
             raise PipelineException("Interval value should > 0", cfg)
 
@@ -247,6 +310,9 @@ class SampleSource(Source):
         if not isinstance(self.discovery, list):
             raise PipelineException("Discovery should be a list", cfg)
         self.check_source_filtering(self.meters, 'meters')
+
+    def get_interval(self):
+        return self.interval
 
     # (yjiang5) To support meters like instance:m1.tiny,
     # which include variable part at the end starting with ':'.
@@ -324,7 +390,7 @@ class Sink(object):
         for transformer in self.transformer_cfg:
             parameter = transformer['parameters'] or {}
             try:
-                ext = transformer_manager.get_ext(transformer['name'])
+                ext = transformer_manager[transformer['name']]
             except KeyError:
                 raise PipelineException(
                     "No transformer named %s loaded" % transformer['name'],
@@ -525,74 +591,44 @@ class PipelineManager(object):
     def __init__(self, cfg, transformer_manager, p_type=SAMPLE_TYPE):
         """Setup the pipelines according to config.
 
-        The configuration is supported in one of two forms:
+        The configuration is supported as follows:
 
-        1. Deprecated: the source and sink configuration are conflated
-           as a list of consolidated pipelines.
+        Decoupled: the source and sink configuration are separately
+        specified before being linked together. This allows source-
+        specific configuration, such as resource discovery, to be
+        kept focused only on the fine-grained source while avoiding
+        the necessity for wide duplication of sink-related config.
 
-           The pipelines are defined as a list of dictionaries each
-           specifying the target samples, the transformers involved,
-           and the target publishers, for example:
+        The configuration is provided in the form of separate lists
+        of dictionaries defining sources and sinks, for example:
 
-           [{"name": pipeline_1,
-             "interval": interval_time,
-             "meters" : ["meter_1", "meter_2"],
-             "resources": ["resource_uri1", "resource_uri2"],
-             "transformers": [
-                              {"name": "Transformer_1",
-                               "parameters": {"p1": "value"}},
+        {"sources": [{"name": source_1,
+                      "interval": interval_time,
+                      "meters" : ["meter_1", "meter_2"],
+                      "resources": ["resource_uri1", "resource_uri2"],
+                      "sinks" : ["sink_1", "sink_2"]
+                     },
+                     {"name": source_2,
+                      "interval": interval_time,
+                      "meters" : ["meter_3"],
+                      "sinks" : ["sink_2"]
+                     },
+                    ],
+         "sinks": [{"name": sink_1,
+                    "transformers": [
+                           {"name": "Transformer_1",
+                         "parameters": {"p1": "value"}},
 
-                              {"name": "Transformer_2",
-                               "parameters": {"p1": "value"}},
-                              ],
-             "publishers": ["publisher_1", "publisher_2"]
-            },
-            {"name": pipeline_2,
-             "interval": interval_time,
-             "meters" : ["meter_3"],
-             "publishers": ["publisher_3"]
-            },
-           ]
-
-        2. Decoupled: the source and sink configuration are separately
-           specified before being linked together. This allows source-
-           specific configuration, such as resource discovery, to be
-           kept focused only on the fine-grained source while avoiding
-           the necessity for wide duplication of sink-related config.
-
-           The configuration is provided in the form of separate lists
-           of dictionaries defining sources and sinks, for example:
-
-           {"sources": [{"name": source_1,
-                         "interval": interval_time,
-                         "meters" : ["meter_1", "meter_2"],
-                         "resources": ["resource_uri1", "resource_uri2"],
-                         "sinks" : ["sink_1", "sink_2"]
-                        },
-                        {"name": source_2,
-                         "interval": interval_time,
-                         "meters" : ["meter_3"],
-                         "sinks" : ["sink_2"]
-                        },
-                       ],
-            "sinks": [{"name": sink_1,
-                       "transformers": [
-                              {"name": "Transformer_1",
-                               "parameters": {"p1": "value"}},
-
-                              {"name": "Transformer_2",
-                               "parameters": {"p1": "value"}},
-                             ],
-                        "publishers": ["publisher_1", "publisher_2"]
-                       },
-                       {"name": sink_2,
-                        "publishers": ["publisher_3"]
-                       },
-                      ]
-           }
-
-        The semantics of the common individual configuration elements
-        are identical in the deprecated and decoupled version.
+                           {"name": "Transformer_2",
+                            "parameters": {"p1": "value"}},
+                          ],
+                     "publishers": ["publisher_1", "publisher_2"]
+                    },
+                    {"name": sink_2,
+                     "publishers": ["publisher_3"]
+                    },
+                   ]
+        }
 
         The interval determines the cadence of sample injection into
         the pipeline where samples are produced under the direct control
@@ -621,42 +657,47 @@ class PipelineManager(object):
 
         """
         self.pipelines = []
-        if 'sources' in cfg or 'sinks' in cfg:
-            if not ('sources' in cfg and 'sinks' in cfg):
-                raise PipelineException("Both sources & sinks are required",
-                                        cfg)
-            LOG.info(_('detected decoupled pipeline config format'))
-            sources = [p_type['source'](s) for s in cfg.get('sources', [])]
-            sinks = {}
-            for s in cfg.get('sinks', []):
-                if s['name'] in sinks:
-                    raise PipelineException("Duplicated sink names: %s" %
-                                            s['name'], self)
-                else:
-                    sinks[s['name']] = p_type['sink'](s, transformer_manager)
-            for source in sources:
-                source.check_sinks(sinks)
-                for target in source.sinks:
-                    pipe = p_type['pipeline'](source, sinks[target])
-                    if pipe.name in [p.name for p in self.pipelines]:
-                        raise PipelineException(
-                            "Duplicate pipeline name: %s. Ensure pipeline"
-                            " names are unique. (name is the source and sink"
-                            " names combined)" % pipe.name, cfg)
-                    else:
-                        self.pipelines.append(pipe)
-        else:
-            LOG.warning(_('detected deprecated pipeline config format'))
-            for pipedef in cfg:
-                source = p_type['source'](pipedef)
-                sink = p_type['sink'](pipedef, transformer_manager)
-                pipe = p_type['pipeline'](source, sink)
-                if pipe.name in [p.name for p in self.pipelines]:
+        if not ('sources' in cfg and 'sinks' in cfg):
+            raise PipelineException("Both sources & sinks are required",
+                                    cfg)
+        LOG.info(_('detected decoupled pipeline config format'))
+
+        unique_names = set()
+        sources = []
+        for s in cfg.get('sources', []):
+            name = s.get('name')
+            if name in unique_names:
+                raise PipelineException("Duplicated source names: %s" %
+                                        name, self)
+            else:
+                unique_names.add(name)
+                sources.append(p_type['source'](s))
+        unique_names.clear()
+
+        sinks = {}
+        for s in cfg.get('sinks', []):
+            name = s.get('name')
+            if name in unique_names:
+                raise PipelineException("Duplicated sink names: %s" %
+                                        name, self)
+            else:
+                unique_names.add(name)
+                sinks[s['name']] = p_type['sink'](s, transformer_manager)
+        unique_names.clear()
+
+        for source in sources:
+            source.check_sinks(sinks)
+            for target in source.sinks:
+                pipe = p_type['pipeline'](source, sinks[target])
+                if pipe.name in unique_names:
                     raise PipelineException(
                         "Duplicate pipeline name: %s. Ensure pipeline"
-                        " names are unique" % pipe.name, cfg)
+                        " names are unique. (name is the source and sink"
+                        " names combined)" % pipe.name, cfg)
                 else:
+                    unique_names.add(pipe.name)
                     self.pipelines.append(pipe)
+        unique_names.clear()
 
     def publisher(self, context):
         """Build a new Publisher for these manager pipelines.
@@ -664,6 +705,35 @@ class PipelineManager(object):
         :param context: The context.
         """
         return PublishContext(context, self.pipelines)
+
+
+class PollingManager(object):
+    """Polling Manager
+
+    Polling manager sets up polling according to config file.
+    """
+
+    def __init__(self, cfg):
+        """Setup the polling according to config.
+
+        The configuration is the sources half of the Pipeline Config.
+        """
+        self.sources = []
+        if not ('sources' in cfg and 'sinks' in cfg):
+            raise PipelineException("Both sources & sinks are required",
+                                    cfg)
+        LOG.info(_('detected decoupled pipeline config format'))
+
+        unique_names = set()
+        for s in cfg.get('sources', []):
+            name = s.get('name')
+            if name in unique_names:
+                raise PipelineException("Duplicated source names: %s" %
+                                        name, self)
+            else:
+                unique_names.add(name)
+                self.sources.append(SampleSource(s))
+        unique_names.clear()
 
 
 def _setup_pipeline_manager(cfg_file, transformer_manager, p_type=SAMPLE_TYPE):
@@ -680,9 +750,24 @@ def _setup_pipeline_manager(cfg_file, transformer_manager, p_type=SAMPLE_TYPE):
 
     return PipelineManager(pipeline_cfg,
                            transformer_manager or
-                           xformer.TransformerExtensionManager(
+                           extension.ExtensionManager(
                                'ceilometer.transformer',
                            ), p_type)
+
+
+def _setup_polling_manager(cfg_file):
+    if not os.path.exists(cfg_file):
+        cfg_file = cfg.CONF.find_file(cfg_file)
+
+    LOG.debug(_("Polling config file: %s"), cfg_file)
+
+    with open(cfg_file) as fap:
+        data = fap.read()
+
+    pipeline_cfg = yaml.safe_load(data)
+    LOG.info(_("Pipeline config: %s"), pipeline_cfg)
+
+    return PollingManager(pipeline_cfg)
 
 
 def setup_event_pipeline(transformer_manager=None):
@@ -695,3 +780,38 @@ def setup_pipeline(transformer_manager=None):
     """Setup pipeline manager according to yaml config file."""
     cfg_file = cfg.CONF.pipeline_cfg_file
     return _setup_pipeline_manager(cfg_file, transformer_manager)
+
+
+def _get_pipeline_cfg_file(p_type=SAMPLE_TYPE):
+    if p_type == EVENT_TYPE:
+        cfg_file = cfg.CONF.event_pipeline_cfg_file
+    else:
+        cfg_file = cfg.CONF.pipeline_cfg_file
+
+    if not os.path.exists(cfg_file):
+        cfg_file = cfg.CONF.find_file(cfg_file)
+
+    return cfg_file
+
+
+def get_pipeline_mtime(p_type=SAMPLE_TYPE):
+    cfg_file = _get_pipeline_cfg_file(p_type)
+    return os.path.getmtime(cfg_file)
+
+
+def get_pipeline_hash(p_type=SAMPLE_TYPE):
+
+    cfg_file = _get_pipeline_cfg_file(p_type)
+    with open(cfg_file) as fap:
+        data = fap.read()
+    if six.PY3:
+        data = data.encode('utf-8')
+
+    file_hash = hashlib.md5(data).hexdigest()
+    return file_hash
+
+
+def setup_polling():
+    """Setup polling manager according to yaml config file."""
+    cfg_file = cfg.CONF.pipeline_cfg_file
+    return _setup_polling_manager(cfg_file)

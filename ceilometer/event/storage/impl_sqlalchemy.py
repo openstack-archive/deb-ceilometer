@@ -17,16 +17,16 @@ from __future__ import absolute_import
 import datetime
 import os
 
-from oslo.db import exception as dbexc
-from oslo.db.sqlalchemy import session as db_session
 from oslo_config import cfg
+from oslo_db import exception as dbexc
+from oslo_db.sqlalchemy import session as db_session
+from oslo_log import log
 from oslo_utils import timeutils
 import sqlalchemy as sa
 
 from ceilometer.event.storage import base
 from ceilometer.event.storage import models as api_models
-from ceilometer.i18n import _, _LI
-from ceilometer.openstack.common import log
+from ceilometer.i18n import _LE, _LI
 from ceilometer.storage.sqlalchemy import models
 from ceilometer import utils
 
@@ -93,25 +93,25 @@ class Connection(base.Connection):
         - TraitInt
           - int trait value
           - { event_id: event -> event.id
-              key: trait type
+              key: trait name
               value: integer value
               }
         - TraitDatetime
-          - int trait value
+          - datetime trait value
           - { event_id: event -> event.id
-              key: trait type
+              key: trait name
               value: datetime value
               }
         - TraitText
-          - int trait value
+          - text trait value
           - { event_id: event -> event.id
-              key: trait type
+              key: trait name
               value: text value
               }
         - TraitFloat
-          - int trait value
+          - float trait value
           - { event_id: event -> event.id
-              key: trait type
+              key: trait name
               value: float value
               }
 
@@ -134,7 +134,7 @@ class Connection(base.Connection):
 
     def upgrade(self):
         # NOTE(gordc): to minimise memory, only import migration when needed
-        from oslo.db.sqlalchemy import migration
+        from oslo_db.sqlalchemy import migration
         path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                             '..', '..', 'storage', 'sqlalchemy',
                             'migrate_repo')
@@ -144,7 +144,6 @@ class Connection(base.Connection):
         engine = self._engine_facade.get_engine()
         for table in reversed(models.Base.metadata.sorted_tables):
             engine.execute(table.delete())
-        self._engine_facade._session_maker.close_all()
         engine.dispose()
 
     def _get_or_create_event_type(self, event_type, session=None):
@@ -166,16 +165,9 @@ class Connection(base.Connection):
         """Write the events to SQL database via sqlalchemy.
 
         :param event_models: a list of model.Event objects.
-
-        Returns a list of events that could not be saved in a
-        (reason, event) tuple. Reasons are enumerated in
-        storage.model.Event
-
-        Flush when they're all added, unless new EventTypes or
-        TraitTypes are added along the way.
         """
         session = self._engine_facade.get_session()
-        problem_events = []
+        error = None
         for event_model in event_models:
             event = None
             try:
@@ -202,29 +194,24 @@ class Connection(base.Connection):
                             session.execute(model.__table__.insert(),
                                             trait_map[dtype])
             except dbexc.DBDuplicateEntry as e:
-                LOG.exception(_("Failed to record duplicated event: %s") % e)
-                problem_events.append((api_models.Event.DUPLICATE,
-                                       event_model))
+                LOG.info(_LI("Duplicate event detected, skipping it: %s") % e)
             except KeyError as e:
-                LOG.exception(_('Failed to record event: %s') % e)
-                problem_events.append((api_models.Event.INCOMPATIBLE_TRAIT,
-                                       event_model))
+                LOG.exception(_LE('Failed to record event: %s') % e)
             except Exception as e:
-                LOG.exception(_('Failed to record event: %s') % e)
-                problem_events.append((api_models.Event.UNKNOWN_PROBLEM,
-                                       event_model))
-        return problem_events
+                LOG.exception(_LE('Failed to record event: %s') % e)
+                error = e
+        if error:
+            raise error
 
-    def get_events(self, event_filter):
+    def get_events(self, event_filter, limit=None):
         """Return an iterable of model.Event objects.
 
         :param event_filter: EventFilter instance
         """
-
+        if limit == 0:
+            return
         session = self._engine_facade.get_session()
         with session.begin():
-            event_query = session.query(models.Event)
-
             # Build up the join conditions
             event_join_conditions = [models.EventType.id ==
                                      models.Event.event_type_id]
@@ -232,9 +219,6 @@ class Connection(base.Connection):
             if event_filter.event_type:
                 event_join_conditions.append(models.EventType.desc ==
                                              event_filter.event_type)
-
-            event_query = event_query.join(models.EventType,
-                                           sa.and_(*event_join_conditions))
 
             # Build up the where conditions
             event_filter_conditions = []
@@ -247,9 +231,6 @@ class Connection(base.Connection):
             if event_filter.end_timestamp:
                 event_filter_conditions.append(
                     models.Event.generated <= event_filter.end_timestamp)
-            if event_filter_conditions:
-                event_query = (event_query.
-                               filter(sa.and_(*event_filter_conditions)))
 
             trait_subq = None
             # Build trait filter
@@ -258,15 +239,15 @@ class Connection(base.Connection):
                 trait_filter = filters.pop()
                 key = trait_filter.pop('key')
                 op = trait_filter.pop('op', 'eq')
-                trait_subq, t_model = _build_trait_query(
-                    session, trait_filter.keys()[0], key,
-                    trait_filter.values()[0], op)
+                trait_type, value = list(trait_filter.items())[0]
+                trait_subq, t_model = _build_trait_query(session, trait_type,
+                                                         key, value, op)
                 for trait_filter in filters:
                     key = trait_filter.pop('key')
                     op = trait_filter.pop('op', 'eq')
-                    q, model = _build_trait_query(
-                        session, trait_filter.keys()[0], key,
-                        trait_filter.values()[0], op)
+                    trait_type, value = list(trait_filter.items())[0]
+                    q, model = _build_trait_query(session, trait_type,
+                                                  key, value, op)
                     trait_subq = trait_subq.filter(
                         q.filter(model.event_id == t_model.event_id).exists())
                 trait_subq = trait_subq.subquery()
@@ -280,53 +261,56 @@ class Connection(base.Connection):
             if event_filter_conditions:
                 query = query.filter(sa.and_(*event_filter_conditions))
 
+            query = query.order_by(models.Event.generated).limit(limit)
             event_list = {}
             # get a list of all events that match filters
             for (id_, generated, message_id,
                  desc, raw) in query.add_columns(
                      models.Event.generated, models.Event.message_id,
-                     models.EventType.desc, models.Event.raw).order_by(
-                         models.Event.generated).all():
+                     models.EventType.desc, models.Event.raw).all():
                 event_list[id_] = api_models.Event(message_id, desc,
                                                    generated, [], raw)
             # Query all traits related to events.
             # NOTE (gordc): cast is done because pgsql defaults to TEXT when
             #               handling unknown values such as null.
             trait_q = (
-                query.join(
-                    models.TraitDatetime,
-                    models.TraitDatetime.event_id == models.Event.id)
-                .add_columns(
+                session.query(
+                    models.TraitDatetime.event_id,
                     models.TraitDatetime.key, models.TraitDatetime.value,
                     sa.cast(sa.null(), sa.Integer),
                     sa.cast(sa.null(), sa.Float(53)),
                     sa.cast(sa.null(), sa.String(255)))
+                .filter(sa.exists().where(
+                    models.TraitDatetime.event_id == query.subquery().c.id))
             ).union(
-                query.join(
-                    models.TraitInt,
-                    models.TraitInt.event_id == models.Event.id)
-                .add_columns(models.TraitInt.key, sa.null(),
-                             models.TraitInt.value, sa.null(), sa.null()),
-                query.join(
-                    models.TraitFloat,
-                    models.TraitFloat.event_id == models.Event.id)
-                .add_columns(models.TraitFloat.key, sa.null(),
-                             sa.null(), models.TraitFloat.value, sa.null()),
-                query.join(
-                    models.TraitText,
-                    models.TraitText.event_id == models.Event.id)
-                .add_columns(models.TraitText.key, sa.null(),
-                             sa.null(), sa.null(), models.TraitText.value))
+                session.query(
+                    models.TraitInt.event_id,
+                    models.TraitInt.key, sa.null(),
+                    models.TraitInt.value, sa.null(), sa.null())
+                .filter(sa.exists().where(
+                    models.TraitInt.event_id == query.subquery().c.id)),
+                session.query(
+                    models.TraitFloat.event_id,
+                    models.TraitFloat.key, sa.null(), sa.null(),
+                    models.TraitFloat.value, sa.null())
+                .filter(sa.exists().where(
+                    models.TraitFloat.event_id == query.subquery().c.id)),
+                session.query(
+                    models.TraitText.event_id,
+                    models.TraitText.key, sa.null(), sa.null(), sa.null(),
+                    models.TraitText.value)
+                .filter(sa.exists().where(
+                    models.TraitText.event_id == query.subquery().c.id)))
 
             for id_, key, t_date, t_int, t_float, t_text in (
-                    trait_q.order_by('2')).all():
-                if t_int:
+                    trait_q.order_by(models.TraitDatetime.key)).all():
+                if t_int is not None:
                     dtype = api_models.Trait.INT_TYPE
                     val = t_int
-                elif t_float:
+                elif t_float is not None:
                     dtype = api_models.Trait.FLOAT_TYPE
                     val = t_float
-                elif t_date:
+                elif t_date is not None:
                     dtype = api_models.Trait.DATETIME_TYPE
                     val = t_date
                 else:

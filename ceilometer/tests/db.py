@@ -31,7 +31,10 @@ from testtools import testcase
 
 from ceilometer import storage
 from ceilometer.tests import base as test_base
-from ceilometer.tests import mocks
+try:
+    from ceilometer.tests import mocks
+except ImportError:
+    mocks = None   # happybase module is not Python 3 compatible yet
 
 
 class MongoDbManager(fixtures.Fixture):
@@ -89,6 +92,8 @@ class PgSQLManager(SQLManager):
         self._conn.execute(
             'CREATE DATABASE %s WITH TEMPLATE template0;' % self._db_name)
         self._conn.connection.set_isolation_level(1)
+        self._conn.close()
+        self._engine.dispose()
 
 
 class MySQLManager(SQLManager):
@@ -100,6 +105,8 @@ class MySQLManager(SQLManager):
             self._url.replace('template1', ''))
         self._conn = self._engine.connect()
         self._conn.execute('CREATE DATABASE %s;' % self._db_name)
+        self._conn.close()
+        self._engine.dispose()
 
 
 class ElasticSearchManager(fixtures.Fixture):
@@ -183,9 +190,10 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         'postgresql': PgSQLManager,
         'db2': MongoDbManager,
         'sqlite': SQLiteManager,
-        'hbase': HBaseManager,
         'es': ElasticSearchManager,
     }
+    if mocks is not None:
+        DRIVER_MANAGERS['hbase'] = HBaseManager
 
     db_url = 'sqlite://'  # NOTE(Alexei_987) Set default db url
 
@@ -203,7 +211,10 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         self.CONF = self.useFixture(fixture_config.Config()).conf
         self.CONF([], project='ceilometer', validate_default_values=True)
 
-        self.db_manager = self._get_driver_manager(engine)(self.db_url)
+        try:
+            self.db_manager = self._get_driver_manager(engine)(self.db_url)
+        except ValueError as exc:
+            self.skipTest("missing driver manager: %s" % exc)
         self.useFixture(self.db_manager)
 
         self.conn = self.db_manager.connection
@@ -261,7 +272,10 @@ def run_with(*drivers):
             for attr in dir(test):
                 value = getattr(test, attr)
                 if callable(value) and attr.startswith('test_'):
-                    value.__func__._run_with = drivers
+                    if six.PY3:
+                        value._run_with = drivers
+                    else:
+                        value.__func__._run_with = drivers
         else:
             test._run_with = drivers
         return test

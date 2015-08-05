@@ -19,18 +19,21 @@
 # under the License.
 
 import datetime
+import itertools
 import json
 import uuid
 
 import croniter
 from oslo_config import cfg
 from oslo_context import context
+from oslo_log import log
 from oslo_utils import netutils
 from oslo_utils import timeutils
 import pecan
 from pecan import rest
 import pytz
 import six
+from six.moves.urllib import parse as urlparse
 from stevedore import extension
 import wsme
 from wsme import types as wtypes
@@ -44,8 +47,8 @@ from ceilometer.api.controllers.v2 import base
 from ceilometer.api.controllers.v2 import utils as v2_utils
 from ceilometer.api import rbac
 from ceilometer.i18n import _
+from ceilometer import keystone_client
 from ceilometer import messaging
-from ceilometer.openstack.common import log
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
@@ -64,6 +67,10 @@ ALARM_API_OPTS = [
                default=None,
                help='Maximum number of alarms defined for a project.'
                ),
+    cfg.IntOpt('alarm_max_actions',
+               default=-1,
+               help='Maximum count of actions for each state of an alarm, '
+                    'non-positive number means no limit.'),
 ]
 
 cfg.CONF.register_opts(ALARM_API_OPTS, group='alarm')
@@ -306,11 +313,27 @@ class Alarm(base.Base):
     @staticmethod
     def check_alarm_actions(alarm):
         actions_schema = ceilometer_alarm.NOTIFIER_SCHEMAS
+        max_actions = cfg.CONF.alarm.alarm_max_actions
         for state in state_kind:
             actions_name = state.replace(" ", "_") + '_actions'
             actions = getattr(alarm, actions_name)
             if not actions:
                 continue
+
+            action_set = set(actions)
+            if len(actions) != len(action_set):
+                LOG.info(_('duplicate actions are found: %s, '
+                           'remove duplicate ones') % actions)
+                actions = list(action_set)
+                setattr(alarm, actions_name, actions)
+
+            if 0 < max_actions < len(actions):
+                error = _('%(name)s count exceeds maximum value '
+                          '%(maximum)d') % {"name": actions_name,
+                                            "maximum": max_actions}
+                raise base.ClientSideError(error)
+
+            limited = rbac.get_limited_to_project(pecan.request.headers)
 
             for action in actions:
                 try:
@@ -321,6 +344,10 @@ class Alarm(base.Base):
                 if url.scheme not in actions_schema:
                     error = _("Unsupported action %s") % action
                     raise base.ClientSideError(error)
+                if limited and url.scheme in ('log', 'test'):
+                    error = _('You are not authorized to create '
+                              'action: %s') % action
+                    raise base.ClientSideError(error, status_code=401)
 
     @classmethod
     def sample(cls):
@@ -353,6 +380,54 @@ class Alarm(base.Base):
             d['time_constraints'] = [tc.as_dict()
                                      for tc in self.time_constraints]
         return d
+
+    @staticmethod
+    def _is_trust_url(url):
+        return url.scheme in ('trust+http', 'trust+https')
+
+    def update_actions(self, old_alarm=None):
+        trustor_user_id = pecan.request.headers.get('X-User-Id')
+        trustor_project_id = pecan.request.headers.get('X-Project-Id')
+        roles = pecan.request.headers.get('X-Roles', '')
+        if roles:
+            roles = roles.split(',')
+        else:
+            roles = []
+        auth_plugin = pecan.request.environ.get('keystone.token_auth')
+        for actions in (self.ok_actions, self.alarm_actions,
+                        self.insufficient_data_actions):
+            if actions is not None:
+                for index, action in enumerate(actions[:]):
+                    url = netutils.urlsplit(action)
+                    if self._is_trust_url(url):
+                        if '@' not in url.netloc:
+                            # We have a trust action without a trust ID,
+                            # create it
+                            trust_id = keystone_client.create_trust_id(
+                                trustor_user_id, trustor_project_id, roles,
+                                auth_plugin)
+                            netloc = '%s:delete@%s' % (trust_id, url.netloc)
+                            url = list(url)
+                            url[1] = netloc
+                            actions[index] = urlparse.urlunsplit(url)
+        if old_alarm:
+            for key in ('ok_actions', 'alarm_actions',
+                        'insufficient_data_actions'):
+                for action in getattr(old_alarm, key):
+                    url = netutils.urlsplit(action)
+                    if (self._is_trust_url(url) and url.password and
+                            action not in getattr(self, key)):
+                        keystone_client.delete_trust_id(
+                            url.username, auth_plugin)
+
+    def delete_actions(self):
+        auth_plugin = pecan.request.environ.get('keystone.token_auth')
+        for action in itertools.chain(self.ok_actions, self.alarm_actions,
+                                      self.insufficient_data_actions):
+            url = netutils.urlsplit(action)
+            if self._is_trust_url(url) and url.password:
+                keystone_client.delete_trust_id(url.username, auth_plugin)
+
 
 Alarm.add_attributes(**{"%s_rule" % ext.name: ext.plugin
                         for ext in ALARMS_RULES})
@@ -435,6 +510,8 @@ class AlarmController(rest.RestController):
     def _record_change(self, data, now, on_behalf_of=None, type=None):
         if not cfg.CONF.alarm.record_history:
             return
+        if not data:
+            return
         type = type or alarm_models.AlarmChange.RULE_CHANGE
         scrubbed_data = utils.stringify_timestamps(data)
         detail = json.dumps(scrubbed_data)
@@ -498,8 +575,6 @@ class AlarmController(rest.RestController):
         else:
             data.state_timestamp = alarm_in.state_timestamp
 
-        alarm_in.severity = data.severity
-
         # make sure alarms are unique by name per project.
         if alarm_in.name != data.name:
             alarms = list(self.conn.get_alarms(name=data.name,
@@ -511,7 +586,9 @@ class AlarmController(rest.RestController):
 
         ALARMS_RULES[data.type].plugin.update_hook(data)
 
-        old_alarm = Alarm.from_db_model(alarm_in).as_dict(alarm_models.Alarm)
+        old_data = Alarm.from_db_model(alarm_in)
+        old_alarm = old_data.as_dict(alarm_models.Alarm)
+        data.update_actions(old_data)
         updated_alarm = data.as_dict(alarm_models.Alarm)
         try:
             alarm_in = alarm_models.Alarm(**updated_alarm)
@@ -536,13 +613,13 @@ class AlarmController(rest.RestController):
         # ensure alarm exists before deleting
         alarm = self._alarm()
         self.conn.delete_alarm(alarm.alarm_id)
-        change = Alarm.from_db_model(alarm).as_dict(alarm_models.Alarm)
+        alarm_object = Alarm.from_db_model(alarm)
+        alarm_object.delete_actions()
+        change = alarm_object.as_dict(alarm_models.Alarm)
         self._record_change(change,
                             timeutils.utcnow(),
                             type=alarm_models.AlarmChange.DELETION)
 
-    # TODO(eglynn): add pagination marker to signature once overall
-    #               API support for pagination is finalized
     @wsme_pecan.wsexpose([AlarmChange], [base.Query])
     def history(self, q=None):
         """Assembles the alarm history requested.
@@ -671,6 +748,7 @@ class AlarmsController(rest.RestController):
 
         ALARMS_RULES[data.type].plugin.create_hook(data)
 
+        data.update_actions()
         change = data.as_dict(alarm_models.Alarm)
 
         # make sure alarms are unique by name per project.

@@ -16,6 +16,7 @@
 
 import copy
 
+from oslo_log import log
 from oslo_utils import timeutils
 
 import ceilometer
@@ -24,7 +25,6 @@ from ceilometer.compute.pollsters import util
 from ceilometer.compute import util as compute_util
 from ceilometer.compute.virt import inspector as virt_inspector
 from ceilometer.i18n import _, _LW
-from ceilometer.openstack.common import log
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
@@ -60,7 +60,7 @@ class _Base(pollsters.BaseComputePollster):
             user_id=instance.user_id,
             project_id=instance.tenant_id,
             resource_id=rid,
-            timestamp=timeutils.isotime(),
+            timestamp=timeutils.utcnow().isoformat(),
             resource_metadata=resource_metadata
         )
 

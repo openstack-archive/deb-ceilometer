@@ -21,6 +21,7 @@
 import json
 
 import jsonschema
+from oslo_log import log
 from oslo_utils import timeutils
 import pecan
 from pecan import rest
@@ -33,7 +34,6 @@ from ceilometer.api.controllers.v2 import base
 from ceilometer.api.controllers.v2 import samples
 from ceilometer.api import rbac
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer import storage
 from ceilometer import utils
 
@@ -97,7 +97,7 @@ class ValidatedComplexQuery(object):
                              "project": "project_id"}
         self.name_mapping.update(additional_name_mapping)
         valid_keys = db_model.get_field_names()
-        valid_keys = list(valid_keys) + self.name_mapping.keys()
+        valid_keys = list(valid_keys) + list(self.name_mapping.keys())
         valid_fields = _list_to_regexp(valid_keys)
 
         if metadata_allowed:
@@ -216,7 +216,7 @@ class ValidatedComplexQuery(object):
                 self._validate_orderby(self.orderby)
             except (ValueError, jsonschema.exceptions.ValidationError) as e:
                 raise base.ClientSideError(
-                    _("Order-by expression not valid: %s") % e.message)
+                    _("Order-by expression not valid: %s") % e)
             self._convert_orderby_to_lower_case(self.orderby)
             self._normalize_field_names_in_orderby(self.orderby)
 
@@ -239,7 +239,7 @@ class ValidatedComplexQuery(object):
             self._replace_field_names(orderby_field)
 
     def _traverse_postorder(self, tree, visitor):
-        op = tree.keys()[0]
+        op = list(tree.keys())[0]
         if op.lower() in self.complex_operators:
             for i, operand in enumerate(tree[op]):
                 self._traverse_postorder(operand, visitor)
@@ -252,12 +252,11 @@ class ValidatedComplexQuery(object):
                                         visibility_field):
         """Do not allow other than own_project_id."""
         def check_project_id(subfilter):
-            op = subfilter.keys()[0]
+            op, value = list(subfilter.items())[0]
             if (op.lower() not in self.complex_operators
-                    and subfilter[op].keys()[0] == visibility_field
-                    and subfilter[op][visibility_field] != own_project_id):
-                raise base.ProjectNotAuthorized(
-                    subfilter[op][visibility_field])
+                    and list(value.keys())[0] == visibility_field
+                    and value[visibility_field] != own_project_id):
+                raise base.ProjectNotAuthorized(value[visibility_field])
 
         self._traverse_postorder(self.filter_expr, check_project_id)
 
@@ -283,26 +282,25 @@ class ValidatedComplexQuery(object):
 
     def _replace_isotime_with_datetime(self, filter_expr):
         def replace_isotime(subfilter):
-            op = subfilter.keys()[0]
-            if (op.lower() not in self.complex_operators
-                    and subfilter[op].keys()[0] in self.timestamp_fields):
-                field = subfilter[op].keys()[0]
-                date_time = self._convert_to_datetime(subfilter[op][field])
-                subfilter[op][field] = date_time
+            op, value = list(subfilter.items())[0]
+            if op.lower() not in self.complex_operators:
+                field = list(value.keys())[0]
+                if field in self.timestamp_fields:
+                    date_time = self._convert_to_datetime(subfilter[op][field])
+                    subfilter[op][field] = date_time
 
         self._traverse_postorder(filter_expr, replace_isotime)
 
     def _normalize_field_names_for_db_model(self, filter_expr):
         def _normalize_field_names(subfilter):
-            op = subfilter.keys()[0]
+            op, value = list(subfilter.items())[0]
             if op.lower() not in self.complex_operators:
-                self._replace_field_names(subfilter.values()[0])
+                self._replace_field_names(value)
         self._traverse_postorder(filter_expr,
                                  _normalize_field_names)
 
     def _replace_field_names(self, subfilter):
-        field = subfilter.keys()[0]
-        value = subfilter[field]
+        field, value = list(subfilter.items())[0]
         if field in self.name_mapping:
             del subfilter[field]
             subfilter[self.name_mapping[field]] = value
@@ -403,9 +401,3 @@ class QueryAlarmsController(rest.RestController):
                 for s in conn.query_alarms(query.filter_expr,
                                            query.orderby,
                                            query.limit)]
-
-
-class QueryController(rest.RestController):
-
-    samples = QuerySamplesController()
-    alarms = QueryAlarmsController()

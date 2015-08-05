@@ -24,8 +24,6 @@ source .tox/py27/bin/activate
 ./tools/make_test_data.py --user 1 --project 1 --resource 1 --counter cpu_util
 --volume 20
 """
-from __future__ import print_function
-
 import argparse
 import datetime
 import logging
@@ -44,7 +42,11 @@ from ceilometer import storage
 def make_test_data(name, meter_type, unit, volume, random_min,
                    random_max, user_id, project_id, resource_id, start,
                    end, interval, resource_metadata=None, source='artificial'):
-    resource_metadata = resource_metadata or {}
+    resource_metadata = resource_metadata or {'display_name': 'toto',
+                                              'host': 'tata',
+                                              'image_ref_url': 'test',
+                                              'instance_flavor_id': 'toto',
+                                              }
     # Compute start and end timestamps for the new data.
     if isinstance(start, datetime.datetime):
         timestamp = start

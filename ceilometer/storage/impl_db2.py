@@ -25,12 +25,12 @@ import sys
 import bson.code
 import bson.objectid
 from oslo_config import cfg
+from oslo_log import log
 from oslo_utils import timeutils
 import pymongo
 import six
 
 import ceilometer
-from ceilometer.openstack.common import log
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -156,6 +156,12 @@ class Connection(pymongo_base.Connection):
         return init_str
 
     def upgrade(self, version=None):
+        # create collection if not present
+        if 'resource' not in self.db.conn.collection_names():
+            self.db.conn.create_collection('resource')
+        if 'meter' not in self.db.conn.collection_names():
+            self.db.conn.create_collection('meter')
+
         # Establish indexes
         #
         # We need variations for user_id vs. project_id because of the
@@ -173,20 +179,20 @@ class Connection(pymongo_base.Connection):
             # for their ENV.
             resource_id = self._generate_random_str(
                 cfg.CONF.database.db2nosql_resource_id_maxlen)
-            self.db.resource.insert({'_id': resource_id,
-                                     'no_key': resource_id})
+            self.db.resource.insert_one({'_id': resource_id,
+                                         'no_key': resource_id})
             meter_id = str(bson.objectid.ObjectId())
             timestamp = timeutils.utcnow()
-            self.db.meter.insert({'_id': meter_id,
-                                  'no_key': meter_id,
-                                  'timestamp': timestamp})
+            self.db.meter.insert_one({'_id': meter_id,
+                                      'no_key': meter_id,
+                                      'timestamp': timestamp})
 
-            self.db.resource.ensure_index([
+            self.db.resource.create_index([
                 ('user_id', pymongo.ASCENDING),
                 ('project_id', pymongo.ASCENDING),
                 ('source', pymongo.ASCENDING)], name='resource_idx')
 
-            self.db.meter.ensure_index([
+            self.db.meter.create_index([
                 ('resource_id', pymongo.ASCENDING),
                 ('user_id', pymongo.ASCENDING),
                 ('project_id', pymongo.ASCENDING),
@@ -194,16 +200,12 @@ class Connection(pymongo_base.Connection):
                 ('timestamp', pymongo.ASCENDING),
                 ('source', pymongo.ASCENDING)], name='meter_idx')
 
-            self.db.meter.ensure_index([('timestamp',
+            self.db.meter.create_index([('timestamp',
                                          pymongo.DESCENDING)],
                                        name='timestamp_idx')
 
             self.db.resource.remove({'_id': resource_id})
             self.db.meter.remove({'_id': meter_id})
-
-        # remove API v1 related table
-        self.db.user.drop()
-        self.db.project.drop()
 
     def clear(self):
         # db2 does not support drop_database, remove all collections
@@ -226,7 +228,7 @@ class Connection(pymongo_base.Connection):
         data = copy.deepcopy(data)
         data['resource_metadata'] = pymongo_utils.improve_keys(
             data.pop('resource_metadata'))
-        self.db.resource.update(
+        self.db.resource.update_one(
             {'_id': data['resource_id']},
             {'$set': {'project_id': data['project_id'],
                       'user_id': data['user_id'] or 'null',
@@ -251,12 +253,12 @@ class Connection(pymongo_base.Connection):
         # automatically.
         if record.get('_id') is None:
             record['_id'] = str(bson.objectid.ObjectId())
-        self.db.meter.insert(record)
+        self.db.meter.insert_one(record)
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery=None, resource=None, pagination=None):
+                      metaquery=None, resource=None, limit=None):
         """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -268,11 +270,10 @@ class Connection(pymongo_base.Connection):
         :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
-        :param pagination: Optional pagination query.
+        :param limit: Maximum number of results to return.
         """
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
-
+        if limit == 0:
+            return
         metaquery = pymongo_utils.improve_keys(metaquery, metaquery=True) or {}
 
         q = {}
@@ -304,7 +305,11 @@ class Connection(pymongo_base.Connection):
         sort_instructions = self._build_sort_instructions(sort_keys=sort_keys,
                                                           sort_dir='desc')
         resource = lambda x: x['resource_id']
-        meters = self.db.meter.find(q, sort=sort_instructions)
+        if limit is not None:
+            meters = self.db.meter.find(q, sort=sort_instructions,
+                                        limit=limit)
+        else:
+            meters = self.db.meter.find(q, sort=sort_instructions)
         for resource_id, r_meters in itertools.groupby(meters, key=resource):
             # Because we have to know first/last timestamp, and we need a full
             # list of references to the resource's meters, we need a tuple
@@ -376,7 +381,7 @@ class Connection(pymongo_base.Connection):
 
         for key, grouped_meters in itertools.groupby(meters, key=_group_key):
             stat = models.Statistics(unit=None,
-                                     min=sys.maxint, max=-sys.maxint,
+                                     min=sys.maxsize, max=-sys.maxsize,
                                      avg=0, sum=0, count=0,
                                      period=0, period_start=0, period_end=0,
                                      duration=0, duration_start=0,

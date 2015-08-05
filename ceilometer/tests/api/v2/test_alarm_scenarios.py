@@ -18,7 +18,7 @@ import datetime
 import uuid
 
 import mock
-import oslo.messaging.conffixture
+import oslo_messaging.conffixture
 from oslo_serialization import jsonutils
 import requests
 import six
@@ -752,13 +752,9 @@ class TestAlarms(v2.FunctionalTest,
         }
         resp = self.post_json('/alarms', params=json, expect_errors=True,
                               status=400, headers=self.auth_headers)
-        expected_err_msg = ("Invalid input for field/attribute"
-                            " enabled."
-                            " Value: 'bad_enabled'."
-                            " Wrong type. Expected '<type 'bool'>',"
-                            " got '<type 'str'>'")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+        expected_err_msg = "Value not an unambiguous boolean: bad_enabled"
+        self.assertIn(expected_err_msg,
+                      resp.json['error_message']['faultstring'])
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(7, len(alarms))
 
@@ -774,17 +770,11 @@ class TestAlarms(v2.FunctionalTest,
                 'threshold': 50.0
             }
         }
-        resp = self.post_json('/alarms', params=json, expect_errors=True,
-                              status=400, headers=self.auth_headers)
-        expected_err_msg = ("Invalid input for field/attribute"
-                            " enabled."
-                            " Value: '0'."
-                            " Wrong type. Expected '<type 'bool'>',"
-                            " got '<type 'int'>'")
-        self.assertEqual(expected_err_msg,
-                         resp.json['error_message']['faultstring'])
+        resp = self.post_json('/alarms', params=json,
+                              headers=self.auth_headers)
+        self.assertFalse(resp.json['enabled'])
         alarms = list(self.alarm_conn.get_alarms())
-        self.assertEqual(7, len(alarms))
+        self.assertEqual(8, len(alarms))
 
     def test_post_invalid_combination_alarm_input_operator(self):
         json = {
@@ -1710,6 +1700,160 @@ class TestAlarms(v2.FunctionalTest,
         self._test_post_alarm_combination_rule_less_than_two_alarms(['a',
                                                                      'a'])
 
+    def test_post_alarm_with_duplicate_actions(self):
+        body = {
+            'name': 'dup-alarm-actions',
+            'type': 'combination',
+            'combination_rule': {
+                'alarm_ids': ['a', 'b'],
+            },
+            'alarm_actions': ['http://no.where', 'http://no.where']
+        }
+        resp = self.post_json('/alarms', params=body,
+                              headers=self.auth_headers)
+        self.assertEqual(201, resp.status_code)
+        alarms = list(self.alarm_conn.get_alarms(name='dup-alarm-actions'))
+        self.assertEqual(1, len(alarms))
+        self.assertEqual(['http://no.where'], alarms[0].alarm_actions)
+
+    def test_post_alarm_with_too_many_actions(self):
+        self.CONF.set_override('alarm_max_actions', 1, group='alarm')
+        body = {
+            'name': 'alarm-with-many-actions',
+            'type': 'combination',
+            'combination_rule': {
+                'alarm_ids': ['a', 'b'],
+            },
+            'alarm_actions': ['http://no.where', 'http://no.where2']
+        }
+        resp = self.post_json('/alarms', params=body, expect_errors=True,
+                              headers=self.auth_headers)
+        self.assertEqual(400, resp.status_code)
+        self.assertEqual("alarm_actions count exceeds maximum value 1",
+                         resp.json['error_message']['faultstring'])
+
+    def test_post_alarm_normal_user_set_log_actions(self):
+        body = {
+            'name': 'log_alarm_actions',
+            'type': 'combination',
+            'combination_rule': {
+                'alarm_ids': ['a', 'b'],
+            },
+            'alarm_actions': ['log://']
+        }
+        resp = self.post_json('/alarms', params=body, expect_errors=True,
+                              headers=self.auth_headers)
+        self.assertEqual(401, resp.status_code)
+        expected_msg = ("You are not authorized to create action: log://")
+        self.assertEqual(expected_msg,
+                         resp.json['error_message']['faultstring'])
+
+    def test_post_alarm_normal_user_set_test_actions(self):
+        body = {
+            'name': 'test_alarm_actions',
+            'type': 'combination',
+            'combination_rule': {
+                'alarm_ids': ['a', 'b'],
+            },
+            'alarm_actions': ['test://']
+        }
+        resp = self.post_json('/alarms', params=body, expect_errors=True,
+                              headers=self.auth_headers)
+        self.assertEqual(401, resp.status_code)
+        expected_msg = ("You are not authorized to create action: test://")
+        self.assertEqual(expected_msg,
+                         resp.json['error_message']['faultstring'])
+
+    def test_post_alarm_admin_user_set_log_test_actions(self):
+        body = {
+            'name': 'admin_alarm_actions',
+            'type': 'combination',
+            'combination_rule': {
+                'alarm_ids': ['a', 'b'],
+            },
+            'alarm_actions': ['test://', 'log://']
+        }
+        headers = self.auth_headers
+        headers['X-Roles'] = 'admin'
+        self.post_json('/alarms', params=body, status=201,
+                       headers=headers)
+        alarms = list(self.alarm_conn.get_alarms(name='admin_alarm_actions'))
+        self.assertEqual(1, len(alarms))
+        self.assertEqual(['test://', 'log://'],
+                         alarms[0].alarm_actions)
+
+    def test_post_alarm_without_actions(self):
+        body = {
+            'name': 'alarm_actions_none',
+            'type': 'combination',
+            'combination_rule': {
+                'alarm_ids': ['a', 'b'],
+            },
+            'alarm_actions': None
+        }
+        headers = self.auth_headers
+        headers['X-Roles'] = 'admin'
+        self.post_json('/alarms', params=body, status=201,
+                       headers=headers)
+        alarms = list(self.alarm_conn.get_alarms(name='alarm_actions_none'))
+        self.assertEqual(1, len(alarms))
+
+        # FIXME(sileht): This should really returns [] not None
+        # but the mongodb and sql just store the json dict as is...
+        # migration script for sql will be a mess because we have
+        # to parse all JSON :(
+        # I guess we assume that wsme convert the None input to []
+        # because of the array type, but it won't...
+        self.assertIsNone(alarms[0].alarm_actions)
+
+    def test_post_alarm_trust(self):
+        json = {
+            'name': 'added_alarm_defaults',
+            'type': 'threshold',
+            'ok_actions': ['trust+http://my.server:1234/foo'],
+            'threshold_rule': {
+                'meter_name': 'ameter',
+                'threshold': 300.0
+            }
+        }
+        auth = mock.Mock()
+        trust_client = mock.Mock()
+        with mock.patch('ceilometer.keystone_client.get_v3_client') as client:
+            client.return_value = mock.Mock(
+                auth_ref=mock.Mock(user_id='my_user'))
+            with mock.patch('keystoneclient.v3.client.Client') as sub_client:
+                sub_client.return_value = trust_client
+                trust_client.trusts.create.return_value = mock.Mock(id='5678')
+                self.post_json('/alarms', params=json, status=201,
+                               headers=self.auth_headers,
+                               extra_environ={'keystone.token_auth': auth})
+                trust_client.trusts.create.assert_called_once_with(
+                    trustor_user=self.auth_headers['X-User-Id'],
+                    trustee_user='my_user',
+                    project=self.auth_headers['X-Project-Id'],
+                    impersonation=True,
+                    role_names=[])
+        alarms = list(self.alarm_conn.get_alarms())
+        for alarm in alarms:
+            if alarm.name == 'added_alarm_defaults':
+                self.assertEqual(
+                    ['trust+http://5678:delete@my.server:1234/foo'],
+                    alarm.ok_actions)
+                break
+        else:
+            self.fail("Alarm not found")
+
+        with mock.patch('ceilometer.keystone_client.get_v3_client') as client:
+            client.return_value = mock.Mock(
+                auth_ref=mock.Mock(user_id='my_user'))
+            with mock.patch('keystoneclient.v3.client.Client') as sub_client:
+                sub_client.return_value = trust_client
+                self.delete('/alarms/%s' % alarm.alarm_id,
+                            headers=self.auth_headers,
+                            status=204,
+                            extra_environ={'keystone.token_auth': auth})
+                trust_client.trusts.delete.assert_called_once_with('5678')
+
     def test_put_alarm(self):
         json = {
             'enabled': False,
@@ -2001,6 +2145,39 @@ class TestAlarms(v2.FunctionalTest,
         self.assertEqual(1, len(alarms))
         self.assertEqual(['c', 'a', 'b'], alarms[0].rule.get('alarm_ids'))
 
+    def test_put_alarm_trust(self):
+        data = self._get_alarm('a')
+        data.update({'ok_actions': ['trust+http://something/ok']})
+        trust_client = mock.Mock()
+        with mock.patch('ceilometer.keystone_client.get_v3_client') as client:
+            client.return_value = mock.Mock(
+                auth_ref=mock.Mock(user_id='my_user'))
+            with mock.patch('keystoneclient.v3.client.Client') as sub_client:
+                sub_client.return_value = trust_client
+                trust_client.trusts.create.return_value = mock.Mock(id='5678')
+                self.put_json('/alarms/%s' % data['alarm_id'],
+                              params=data,
+                              headers=self.auth_headers)
+        data = self._get_alarm('a')
+        self.assertEqual(
+            ['trust+http://5678:delete@something/ok'], data['ok_actions'])
+
+        data.update({'ok_actions': ['http://no-trust-something/ok']})
+
+        with mock.patch('ceilometer.keystone_client.get_v3_client') as client:
+            client.return_value = mock.Mock(
+                auth_ref=mock.Mock(user_id='my_user'))
+            with mock.patch('keystoneclient.v3.client.Client') as sub_client:
+                sub_client.return_value = trust_client
+                self.put_json('/alarms/%s' % data['alarm_id'],
+                              params=data,
+                              headers=self.auth_headers)
+                trust_client.trusts.delete.assert_called_once_with('5678')
+
+        data = self._get_alarm('a')
+        self.assertEqual(
+            ['http://no-trust-something/ok'], data['ok_actions'])
+
     def test_delete_alarm(self):
         data = self.get_json('/alarms')
         self.assertEqual(7, len(data))
@@ -2008,7 +2185,7 @@ class TestAlarms(v2.FunctionalTest,
         resp = self.delete('/alarms/%s' % data[0]['alarm_id'],
                            headers=self.auth_headers,
                            status=204)
-        self.assertEqual('', resp.body)
+        self.assertEqual(b'', resp.body)
         alarms = list(self.alarm_conn.get_alarms())
         self.assertEqual(6, len(alarms))
 
@@ -2095,6 +2272,42 @@ class TestAlarms(v2.FunctionalTest,
         self._update_alarm(alarm, dict(name='foobar'))
         history = self._get_alarm_history(alarm)
         self.assertEqual(1, len(history))
+
+    def test_record_alarm_history_severity(self):
+        alarm = self._get_alarm('a')
+        history = self._get_alarm_history(alarm)
+        self.assertEqual([], history)
+        self.assertEqual('critical', alarm['severity'])
+
+        self._update_alarm(alarm, dict(severity='low'))
+        new_alarm = self._get_alarm('a')
+        history = self._get_alarm_history(alarm)
+        self.assertEqual(1, len(history))
+        self.assertEqual(jsonutils.dumps({'severity': 'low'}),
+                         history[0]['detail'])
+        self.assertEqual('low', new_alarm['severity'])
+
+    def test_redundant_update_alarm_property_no_history_change(self):
+        alarm = self._get_alarm('a')
+        history = self._get_alarm_history(alarm)
+        self.assertEqual([], history)
+        self.assertEqual('critical', alarm['severity'])
+
+        self._update_alarm(alarm, dict(severity='low'))
+        new_alarm = self._get_alarm('a')
+        history = self._get_alarm_history(alarm)
+        self.assertEqual(1, len(history))
+        self.assertEqual(jsonutils.dumps({'severity': 'low'}),
+                         history[0]['detail'])
+        self.assertEqual('low', new_alarm['severity'])
+
+        self._update_alarm(alarm, dict(severity='low'))
+        updated_alarm = self._get_alarm('a')
+        updated_history = self._get_alarm_history(updated_alarm)
+        self.assertEqual(1, len(updated_history))
+        self.assertEqual(jsonutils.dumps({'severity': 'low'}),
+                         updated_history[0]['detail'])
+        self.assertEqual(history, updated_history)
 
     def test_get_recorded_alarm_history_on_create(self):
         new_alarm = {
@@ -2336,11 +2549,13 @@ class TestAlarms(v2.FunctionalTest,
         query = dict(field='alarm_id', op='eq', value='b')
         resp = self._get_alarm_history(alarm, query=query,
                                        expect_errors=True, status=400)
-        self.assertEqual(u'Unknown argument: "alarm_id": unrecognized'
-                         " field in query: [<Query u'alarm_id' eq"
-                         " u'b' Unset>], valid keys: ['project', "
-                         "'search_offset', 'severity', 'timestamp',"
-                         " 'type', 'user']",
+        msg = ('Unknown argument: "alarm_id": unrecognized'
+               " field in query: [<Query {key!r} eq"
+               " {value!r} Unset>], valid keys: ['project', "
+               "'search_offset', 'severity', 'timestamp',"
+               " 'type', 'user']")
+        msg = msg.format(key=u'alarm_id', value=u'b')
+        self.assertEqual(msg,
                          resp.json['error_message']['faultstring'])
 
     def test_get_alarm_history_constrained_by_not_supported_rule(self):
@@ -2348,11 +2563,13 @@ class TestAlarms(v2.FunctionalTest,
         query = dict(field='abcd', op='eq', value='abcd')
         resp = self._get_alarm_history(alarm, query=query,
                                        expect_errors=True, status=400)
-        self.assertEqual(u'Unknown argument: "abcd": unrecognized'
-                         " field in query: [<Query u'abcd' eq"
-                         " u'abcd' Unset>], valid keys: ['project', "
-                         "'search_offset', 'severity', 'timestamp',"
-                         " 'type', 'user']",
+        msg = ('Unknown argument: "abcd": unrecognized'
+               " field in query: [<Query {key!r} eq"
+               " {value!r} Unset>], valid keys: ['project', "
+               "'search_offset', 'severity', 'timestamp',"
+               " 'type', 'user']")
+        msg = msg.format(key=u'abcd', value=u'abcd')
+        self.assertEqual(msg,
                          resp.json['error_message']['faultstring'])
 
     def test_get_nonexistent_alarm_history(self):
@@ -2376,7 +2593,7 @@ class TestAlarms(v2.FunctionalTest,
 
         }
         endpoint = mock.MagicMock()
-        target = oslo.messaging.Target(topic="notifications")
+        target = oslo_messaging.Target(topic="notifications")
         listener = messaging.get_notification_listener(
             self.transport, [target], [endpoint])
         listener.start()
@@ -2538,6 +2755,8 @@ class TestAlarms(v2.FunctionalTest,
 
     @mock.patch('ceilometer.keystone_client.get_client')
     def test_post_gnocchi_aggregation_alarm_project_constraint(self, __):
+        self.CONF.set_override('gnocchi_url', 'http://localhost:8041',
+                               group='alarms')
         json = {
             'enabled': False,
             'name': 'project_constraint',

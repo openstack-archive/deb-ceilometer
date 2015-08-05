@@ -18,13 +18,11 @@
 """Common functions for MongoDB and DB2 backends
 """
 
-
+from oslo_log import log
 import pymongo
 
-import ceilometer
 from ceilometer.alarm.storage import base
 from ceilometer.alarm.storage import models
-from ceilometer.openstack.common import log
 from ceilometer.storage.mongo import utils as pymongo_utils
 from ceilometer import utils
 
@@ -54,6 +52,13 @@ class Connection(base.Connection):
         AVAILABLE_STORAGE_CAPABILITIES,
     )
 
+    def upgrade(self):
+        # create collection if not present
+        if 'alarm' not in self.db.conn.collection_names():
+            self.db.conn.create_collection('alarm')
+        if 'alarm_history' not in self.db.conn.collection_names():
+            self.db.conn.create_collection('alarm_history')
+
     def update_alarm(self, alarm):
         """Update alarm."""
         data = alarm.as_dict()
@@ -80,7 +85,7 @@ class Connection(base.Connection):
         self.db.alarm_history.insert(alarm_change.copy())
 
     def get_alarms(self, name=None, user=None, state=None, meter=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None,
+                   project=None, enabled=None, alarm_id=None,
                    alarm_type=None, severity=None):
         """Yields a lists of alarms that match filters.
 
@@ -91,13 +96,9 @@ class Connection(base.Connection):
         :param project: Optional ID for project that owns the resource.
         :param enabled: Optional boolean to list disable alarm.
         :param alarm_id: Optional alarm_id to return one alarm.
-        :param pagination: Optional pagination query.
         :param alarm_type: Optional alarm type.
         :param severity: Optional alarm severity.
         """
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
-
         q = {}
         if user is not None:
             q['user_id'] = user

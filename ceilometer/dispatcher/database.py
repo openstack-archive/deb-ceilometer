@@ -12,11 +12,13 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
+from oslo_log import log
 from oslo_utils import timeutils
 
 from ceilometer import dispatcher
-from ceilometer.i18n import _
-from ceilometer.openstack.common import log
+from ceilometer.event.storage import models
+from ceilometer.i18n import _, _LE, _LW
 from ceilometer.publisher import utils as publisher_utils
 from ceilometer import storage
 
@@ -32,7 +34,8 @@ class DatabaseDispatcher(dispatcher.Base):
     To enable this dispatcher, the following section needs to be present in
     ceilometer.conf file
 
-    dispatchers = database
+    [DEFAULT]
+    dispatcher = database
     """
     def __init__(self, conf):
         super(DatabaseDispatcher, self).__init__(conf)
@@ -45,8 +48,8 @@ class DatabaseDispatcher(dispatcher.Base):
             return storage.get_connection_from_config(self.conf, purpose)
         except Exception as err:
             params = {"purpose": purpose, "err": err}
-            LOG.exception(_("Failed to connect to db, purpose %(purpose)s "
-                            "re-try later: %(err)s") % params)
+            LOG.exception(_LE("Failed to connect to db, purpose %(purpose)s "
+                              "re-try later: %(err)s") % params)
             if not ignore_exception:
                 raise
 
@@ -88,12 +91,12 @@ class DatabaseDispatcher(dispatcher.Base):
                         meter['timestamp'] = timeutils.normalize_time(ts)
                     self.meter_conn.record_metering_data(meter)
                 except Exception as err:
-                    LOG.exception(_('Failed to record metering data: %s'),
+                    LOG.exception(_LE('Failed to record metering data: %s'),
                                   err)
                     # raise the exception to propagate it up in the chain.
                     raise
             else:
-                LOG.warning(_(
+                LOG.warning(_LW(
                     'message signature invalid, discarding message: %r'),
                     meter)
 
@@ -101,4 +104,22 @@ class DatabaseDispatcher(dispatcher.Base):
         if not isinstance(events, list):
             events = [events]
 
-        return self.event_conn.record_events(events)
+        event_list = []
+        for ev in events:
+            try:
+                event_list.append(
+                    models.Event(
+                        message_id=ev['message_id'],
+                        event_type=ev['event_type'],
+                        generated=timeutils.normalize_time(
+                            timeutils.parse_isotime(ev['generated'])),
+                        traits=[models.Trait(
+                                name, dtype,
+                                models.Trait.convert_value(dtype, value))
+                                for name, dtype, value in ev['traits']],
+                        raw=ev.get('raw', {}))
+                )
+            except Exception:
+                LOG.exception(_LE("Error processing event and it will be "
+                                  "dropped: %s"), ev)
+        self.event_conn.record_events(event_list)

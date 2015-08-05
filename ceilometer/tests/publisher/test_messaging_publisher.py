@@ -19,9 +19,9 @@ import uuid
 
 import eventlet
 import mock
-import oslo.messaging
 from oslo_config import fixture as fixture_config
 from oslo_context import context
+import oslo_messaging
 from oslo_utils import netutils
 import testscenarios.testcase
 
@@ -178,7 +178,7 @@ class RpcOnlyPublisherTest(BasePublisherTestCase):
 
 class NotifierOnlyPublisherTest(BasePublisherTestCase):
 
-    @mock.patch('oslo.messaging.Notifier')
+    @mock.patch('oslo_messaging.Notifier')
     def test_publish_topic_override(self, notifier):
         msg_publisher.SampleNotifierPublisher(
             netutils.urlsplit('notifier://?topic=custom_topic'))
@@ -218,6 +218,8 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
                       if self.pub_func == 'publish_events' else
                       self.CONF.publisher_rpc.metering_topic)
 
+
+class TestPublisherPolicy(TestPublisher):
     def test_published_concurrency(self):
         """Test concurrent access to the local queue of the rpc publisher."""
 
@@ -248,11 +250,11 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
     def test_published_with_no_policy(self, mylog):
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://' % self.protocol))
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             self.assertRaises(
-                oslo.messaging.MessageDeliveryFailure,
+                oslo_messaging.MessageDeliveryFailure,
                 getattr(publisher, self.pub_func),
                 mock.MagicMock(), self.test_data)
             self.assertTrue(mylog.info.called)
@@ -265,11 +267,11 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
     def test_published_with_policy_block(self, mylog):
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://?policy=default' % self.protocol))
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             self.assertRaises(
-                oslo.messaging.MessageDeliveryFailure,
+                oslo_messaging.MessageDeliveryFailure,
                 getattr(publisher, self.pub_func),
                 mock.MagicMock(), self.test_data)
             self.assertTrue(mylog.info.called)
@@ -281,11 +283,11 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
     def test_published_with_policy_incorrect(self, mylog):
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://?policy=notexist' % self.protocol))
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             self.assertRaises(
-                oslo.messaging.MessageDeliveryFailure,
+                oslo_messaging.MessageDeliveryFailure,
                 getattr(publisher, self.pub_func),
                 mock.MagicMock(), self.test_data)
             self.assertTrue(mylog.warn.called)
@@ -294,10 +296,14 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
             fake_send.assert_called_once_with(
                 mock.ANY, self.topic, mock.ANY)
 
+
+@mock.patch('ceilometer.publisher.messaging.LOG', mock.Mock())
+class TestPublisherPolicyReactions(TestPublisher):
+
     def test_published_with_policy_drop_and_rpc_down(self):
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://?policy=drop' % self.protocol))
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             getattr(publisher, self.pub_func)(mock.MagicMock(),
@@ -309,7 +315,7 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
     def test_published_with_policy_queue_and_rpc_down(self):
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://?policy=queue' % self.protocol))
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
 
@@ -324,7 +330,7 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://?policy=queue' % self.protocol))
 
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             getattr(publisher, self.pub_func)(mock.MagicMock(),
@@ -348,7 +354,7 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
         publisher = self.publisher_cls(netutils.urlsplit(
             '%s://?policy=queue&max_queue_length=3' % self.protocol))
 
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             for i in range(0, 5):
@@ -375,7 +381,7 @@ class TestPublisher(testscenarios.testcase.WithScenarios,
         publisher = self.publisher_cls(
             netutils.urlsplit('%s://?policy=queue' % self.protocol))
 
-        side_effect = oslo.messaging.MessageDeliveryFailure()
+        side_effect = oslo_messaging.MessageDeliveryFailure()
         with mock.patch.object(publisher, '_send') as fake_send:
             fake_send.side_effect = side_effect
             for i in range(0, 2000):

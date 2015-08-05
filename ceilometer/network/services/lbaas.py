@@ -16,12 +16,12 @@
 import abc
 import collections
 
+from oslo_log import log
 from oslo_utils import timeutils
 import six
 
 from ceilometer.i18n import _
 from ceilometer.network.services import base
-from ceilometer.openstack.common import log
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
@@ -186,7 +186,7 @@ class LBHealthMonitorPollster(base.BaseServicesPollster):
             yield sample.Sample(
                 name='network.services.lb.health_monitor',
                 type=sample.TYPE_GAUGE,
-                unit='monitor',
+                unit='health_monitor',
                 volume=1,
                 user_id=None,
                 project_id=probe['tenant_id'],
@@ -223,7 +223,7 @@ class _LBStatsPollster(base.BaseServicesPollster):
             user_id=None,
             project_id=pool['tenant_id'],
             resource_id=pool['id'],
-            timestamp=timeutils.isotime(),
+            timestamp=timeutils.utcnow().isoformat(),
             resource_metadata=resource_metadata,
         )
 
@@ -325,6 +325,6 @@ def make_sample_from_pool(pool, name, type, unit, volume,
         user_id=None,
         project_id=pool['tenant_id'],
         resource_id=pool['id'],
-        timestamp=timeutils.isotime(),
+        timestamp=timeutils.utcnow().isoformat(),
         resource_metadata=resource_metadata,
     )

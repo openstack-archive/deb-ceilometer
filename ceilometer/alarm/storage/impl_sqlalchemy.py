@@ -13,16 +13,18 @@
 """SQLAlchemy storage backend."""
 
 from __future__ import absolute_import
+import datetime
 import os
 
-from oslo.db.sqlalchemy import session as db_session
 from oslo_config import cfg
+from oslo_db.sqlalchemy import session as db_session
+from oslo_log import log
+from oslo_utils import timeutils
 from sqlalchemy import desc
 
-import ceilometer
 from ceilometer.alarm.storage import base
 from ceilometer.alarm.storage import models as alarm_api_models
-from ceilometer.openstack.common import log
+from ceilometer.i18n import _LI
 from ceilometer.storage.sqlalchemy import models
 from ceilometer.storage.sqlalchemy import utils as sql_utils
 from ceilometer import utils
@@ -87,7 +89,7 @@ class Connection(base.Connection):
 
     def upgrade(self):
         # NOTE(gordc): to minimise memory, only import migration when needed
-        from oslo.db.sqlalchemy import migration
+        from oslo_db.sqlalchemy import migration
         path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                             '..', '..', 'storage', 'sqlalchemy',
                             'migrate_repo')
@@ -97,7 +99,6 @@ class Connection(base.Connection):
         engine = self._engine_facade.get_engine()
         for table in reversed(models.Base.metadata.sorted_tables):
             engine.execute(table.delete())
-        self._engine_facade._session_maker.close_all()
         engine.dispose()
 
     def _retrieve_data(self, filter_expr, orderby, limit, table):
@@ -144,7 +145,7 @@ class Connection(base.Connection):
         return (self._row_to_alarm_model(x) for x in query.all())
 
     def get_alarms(self, name=None, user=None, state=None, meter=None,
-                   project=None, enabled=None, alarm_id=None, pagination=None,
+                   project=None, enabled=None, alarm_id=None,
                    alarm_type=None, severity=None):
         """Yields a lists of alarms that match filters.
 
@@ -155,13 +156,9 @@ class Connection(base.Connection):
         :param project: Optional ID for project that owns the resource.
         :param enabled: Optional boolean to list disable alarm.
         :param alarm_id: Optional alarm_id to return one alarm.
-        :param pagination: Optional pagination query.
         :param alarm_type: Optional alarm type.
         :param severity: Optional alarm severity
         """
-
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
 
         session = self._engine_facade.get_session()
         query = session.query(models.Alarm)
@@ -323,3 +320,21 @@ class Connection(base.Connection):
                 event_id=alarm_change['event_id'])
             alarm_change_row.update(alarm_change)
             session.add(alarm_change_row)
+
+    def clear_expired_alarm_history_data(self, alarm_history_ttl):
+        """Clear expired alarm history data from the backend storage system.
+
+        Clearing occurs according to the time-to-live.
+
+        :param alarm_history_ttl: Number of seconds to keep alarm history
+                                  records for.
+        """
+        session = self._engine_facade.get_session()
+        with session.begin():
+            valid_start = (timeutils.utcnow() -
+                           datetime.timedelta(seconds=alarm_history_ttl))
+            deleted_rows = (session.query(models.AlarmChange)
+                            .filter(models.AlarmChange.timestamp < valid_start)
+                            .delete())
+            LOG.info(_LI("%d alarm histories are removed from database"),
+                     deleted_rows)

@@ -22,6 +22,7 @@ import datetime
 
 import pecan
 from pecan import rest
+import six
 from wsme import types as wtypes
 import wsmeext.pecan as wsme_pecan
 
@@ -99,19 +100,19 @@ class ResourcesController(rest.RestController):
                          rel=rel_name)
 
     def _resource_links(self, resource_id, meter_links=1):
-        links = [self._make_link('self', pecan.request.host_url,
+        links = [self._make_link('self', pecan.request.application_url,
                                  'resources', resource_id)]
         if meter_links:
             for meter in pecan.request.storage_conn.get_meters(
                     resource=resource_id):
                 query = {'field': 'resource_id', 'value': resource_id}
                 links.append(self._make_link(meter.name,
-                                             pecan.request.host_url,
+                                             pecan.request.application_url,
                                              'meters', meter.name,
                                              query=query))
         return links
 
-    @wsme_pecan.wsexpose(Resource, unicode)
+    @wsme_pecan.wsexpose(Resource, six.text_type)
     def get_one(self, resource_id):
         """Retrieve details about one resource.
 
@@ -128,8 +129,8 @@ class ResourcesController(rest.RestController):
         return Resource.from_db_and_links(resources[0],
                                           self._resource_links(resource_id))
 
-    @wsme_pecan.wsexpose([Resource], [base.Query], int)
-    def get_all(self, q=None, meter_links=1):
+    @wsme_pecan.wsexpose([Resource], [base.Query], int, int)
+    def get_all(self, q=None, limit=None, meter_links=1):
         """Retrieve definitions of all of the resources.
 
         :param q: Filter rules for the resources to be returned.
@@ -139,11 +140,13 @@ class ResourcesController(rest.RestController):
         rbac.enforce('get_resources', pecan.request)
 
         q = q or []
+        limit = utils.enforce_limit(limit)
         kwargs = utils.query_to_kwargs(
             q, pecan.request.storage_conn.get_resources)
         resources = [
             Resource.from_db_and_links(r,
                                        self._resource_links(r.resource_id,
                                                             meter_links))
-            for r in pecan.request.storage_conn.get_resources(**kwargs)]
+            for r in pecan.request.storage_conn.get_resources(limit=limit,
+                                                              **kwargs)]
         return resources

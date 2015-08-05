@@ -25,16 +25,19 @@ import random
 
 from oslo_config import cfg
 from oslo_context import context
-import six
+from oslo_log import log
+import oslo_messaging
+from six import moves
 from six.moves.urllib import parse as urlparse
 from stevedore import extension
 
 from ceilometer.agent import plugin_base
 from ceilometer import coordination
-from ceilometer.i18n import _
-from ceilometer.openstack.common import log
-from ceilometer.openstack.common import service as os_service
-from ceilometer import pipeline as publish_pipeline
+from ceilometer.i18n import _, _LI
+from ceilometer import messaging
+from ceilometer import pipeline
+from ceilometer.publisher import utils as publisher_utils
+from ceilometer import service_base
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
@@ -48,6 +51,8 @@ OPTS = [
 ]
 
 cfg.CONF.register_opts(OPTS)
+cfg.CONF.import_opt('telemetry_driver', 'ceilometer.publisher.messaging',
+                    group='publisher_notifier')
 
 
 class PollsterListForbidden(Exception):
@@ -67,9 +72,9 @@ class Resources(object):
         self.blacklist = []
         self.last_dup = []
 
-    def setup(self, pipeline):
-        self._resources = pipeline.resources
-        self._discovery = pipeline.discovery
+    def setup(self, source):
+        self._resources = source.resources
+        self._discovery = source.discovery
 
     def get(self, discovery_cache=None):
         source_discovery = (self.agent_manager.discover(self._discovery,
@@ -90,7 +95,7 @@ class Resources(object):
 
 
 class PollingTask(object):
-    """Polling task for polling samples and inject into pipeline.
+    """Polling task for polling samples and notifying.
 
     A polling task can be invoked periodically or only once.
     """
@@ -102,109 +107,109 @@ class PollingTask(object):
         # with a common interval
         self.pollster_matches = collections.defaultdict(set)
 
-        # per-sink publisher contexts associated with each source
-        self.publishers = {}
-
         # we relate the static resources and per-source discovery to
         # each combination of pollster and matching source
         resource_factory = lambda: Resources(agent_manager)
         self.resources = collections.defaultdict(resource_factory)
 
-    def add(self, pollster, pipeline):
-        if pipeline.source.name not in self.publishers:
-            publish_context = publish_pipeline.PublishContext(
-                self.manager.context)
-            self.publishers[pipeline.source.name] = publish_context
-        self.publishers[pipeline.source.name].add_pipelines([pipeline])
-        self.pollster_matches[pipeline.source.name].add(pollster)
-        key = Resources.key(pipeline.source.name, pollster)
-        self.resources[key].setup(pipeline)
+    def add(self, pollster, source):
+        self.pollster_matches[source.name].add(pollster)
+        key = Resources.key(source.name, pollster)
+        self.resources[key].setup(source)
 
-    def poll_and_publish(self):
-        """Polling sample and publish into pipeline."""
+    def poll_and_notify(self):
+        """Polling sample and notify."""
         cache = {}
         discovery_cache = {}
         for source_name in self.pollster_matches:
-            with self.publishers[source_name] as publisher:
-                for pollster in self.pollster_matches[source_name]:
-                    LOG.info(_("Polling pollster %(poll)s in the context of "
-                               "%(src)s"),
-                             dict(poll=pollster.name, src=source_name))
-                    key = Resources.key(source_name, pollster)
-                    candidate_res = list(
-                        self.resources[key].get(discovery_cache))
-                    if not candidate_res and pollster.obj.default_discovery:
-                        candidate_res = self.manager.discover(
-                            [pollster.obj.default_discovery], discovery_cache)
+            for pollster in self.pollster_matches[source_name]:
+                LOG.info(_("Polling pollster %(poll)s in the context of "
+                           "%(src)s"),
+                         dict(poll=pollster.name, src=source_name))
+                key = Resources.key(source_name, pollster)
+                candidate_res = list(
+                    self.resources[key].get(discovery_cache))
+                if not candidate_res and pollster.obj.default_discovery:
+                    candidate_res = self.manager.discover(
+                        [pollster.obj.default_discovery], discovery_cache)
 
-                    # Remove duplicated resources and black resources. Using
-                    # set() requires well defined __hash__ for each resource.
-                    # Since __eq__ is defined, 'not in' is safe here.
-                    seen = []
-                    duplicated = []
-                    polling_resources = []
-                    black_res = self.resources[key].blacklist
-                    for x in candidate_res:
-                        if x not in seen:
-                            seen.append(x)
-                            if x not in black_res:
-                                polling_resources.append(x)
-                        else:
-                            duplicated.append(x)
+                # Remove duplicated resources and black resources. Using
+                # set() requires well defined __hash__ for each resource.
+                # Since __eq__ is defined, 'not in' is safe here.
+                seen = []
+                duplicated = []
+                polling_resources = []
+                black_res = self.resources[key].blacklist
+                for x in candidate_res:
+                    if x not in seen:
+                        seen.append(x)
+                        if x not in black_res:
+                            polling_resources.append(x)
+                    else:
+                        duplicated.append(x)
 
-                    # Warn duplicated resources for the 1st time
-                    if self.resources[key].last_dup != duplicated:
-                        self.resources[key].last_dup = duplicated
-                        LOG.warning(_(
-                            'Found following duplicated resoures for '
-                            '%(name)s in context of %(source)s:%(list)s. '
-                            'Check pipeline configuration.')
-                            % ({'name': pollster.name,
-                                'source': source_name,
-                                'list': duplicated
-                                }))
+                # Warn duplicated resources for the 1st time
+                if self.resources[key].last_dup != duplicated:
+                    self.resources[key].last_dup = duplicated
+                    LOG.warning(_(
+                        'Found following duplicated resoures for '
+                        '%(name)s in context of %(source)s:%(list)s. '
+                        'Check pipeline configuration.')
+                        % ({'name': pollster.name,
+                            'source': source_name,
+                            'list': duplicated
+                            }))
 
-                    # If no resources, skip for this pollster
-                    if not polling_resources:
-                        LOG.info(_("Skip polling pollster %s, no resources"
-                                   " found"), pollster.name)
-                        continue
+                # If no resources, skip for this pollster
+                if not polling_resources:
+                    LOG.info(_("Skip polling pollster %s, no resources"
+                               " found"), pollster.name)
+                    continue
 
-                    try:
-                        samples = list(pollster.obj.get_samples(
-                            manager=self.manager,
-                            cache=cache,
-                            resources=polling_resources
-                        ))
-                        publisher(samples)
-                    except plugin_base.PollsterPermanentError as err:
-                        LOG.error(_(
-                            'Prevent pollster %(name)s for '
-                            'polling source %(source)s anymore!')
-                            % ({'name': pollster.name, 'source': source_name}))
-                        self.resources[key].blacklist.append(err.fail_res)
-                    except Exception as err:
-                        LOG.warning(_(
-                            'Continue after error from %(name)s: %(error)s')
-                            % ({'name': pollster.name, 'error': err}),
-                            exc_info=True)
+                try:
+                    samples = pollster.obj.get_samples(
+                        manager=self.manager,
+                        cache=cache,
+                        resources=polling_resources
+                    )
+                    for sample in samples:
+                        sample_dict = (
+                            publisher_utils.meter_message_from_counter(
+                                sample, cfg.CONF.publisher.telemetry_secret
+                            ))
+                        self.manager.notifier.info(
+                            self.manager.context.to_dict(),
+                            'telemetry.api',
+                            [sample_dict]
+                        )
+                except plugin_base.PollsterPermanentError as err:
+                    LOG.error(_(
+                        'Prevent pollster %(name)s for '
+                        'polling source %(source)s anymore!')
+                        % ({'name': pollster.name, 'source': source_name}))
+                    self.resources[key].blacklist.append(err.fail_res)
+                except Exception as err:
+                    LOG.warning(_(
+                        'Continue after error from %(name)s: %(error)s')
+                        % ({'name': pollster.name, 'error': err}),
+                        exc_info=True)
 
 
-class AgentManager(os_service.Service):
+class AgentManager(service_base.BaseService):
 
     def __init__(self, namespaces, pollster_list, group_prefix=None):
+        # features of using coordination and pollster-list are exclusive, and
+        # cannot be used at one moment to avoid both samples duplication and
+        # samples being lost
+        if pollster_list and cfg.CONF.coordination.backend_url:
+            raise PollsterListForbidden()
+
         super(AgentManager, self).__init__()
 
         def _match(pollster):
             """Find out if pollster name matches to one of the list."""
             return any(fnmatch.fnmatch(pollster.name, pattern) for
                        pattern in pollster_list)
-
-        # features of using coordination and pollster-list are exclusive, and
-        # cannot be used at one moment to avoid both samples duplication and
-        # samples being lost
-        if pollster_list and cfg.CONF.coordination.backend_url:
-            raise PollsterListForbidden()
 
         if type(namespaces) is not list:
             namespaces = [namespaces]
@@ -214,7 +219,7 @@ class AgentManager(os_service.Service):
         extensions = (self._extensions('poll', namespace).extensions
                       for namespace in namespaces)
         if pollster_list:
-            extensions = (itertools.ifilter(_match, exts)
+            extensions = (moves.filter(_match, exts)
                           for exts in extensions)
 
         self.extensions = list(itertools.chain(*list(extensions)))
@@ -228,6 +233,11 @@ class AgentManager(os_service.Service):
         namespace_prefix = '-'.join(sorted(namespaces))
         self.group_prefix = ('%s-%s' % (namespace_prefix, group_prefix)
                              if group_prefix else namespace_prefix)
+
+        self.notifier = oslo_messaging.Notifier(
+            messaging.get_transport(),
+            driver=cfg.CONF.publisher_notifier.telemetry_driver,
+            publisher_id="ceilometer.api")
 
     @staticmethod
     def _extensions(category, agent_ns=None):
@@ -255,16 +265,16 @@ class AgentManager(os_service.Service):
         )
 
     def join_partitioning_groups(self):
-        groups = set([self.construct_group_id(d.obj.group_id)
-                      for d in self.discovery_manager])
+        self.groups = set([self.construct_group_id(d.obj.group_id)
+                          for d in self.discovery_manager])
         # let each set of statically-defined resources have its own group
         static_resource_groups = set([
             self.construct_group_id(utils.hash_of_set(p.resources))
-            for p in self.pipeline_manager.pipelines
+            for p in self.polling_manager.sources
             if p.resources
         ])
-        groups.update(static_resource_groups)
-        for group in groups:
+        self.groups.update(static_resource_groups)
+        for group in self.groups:
             self.partition_coordinator.join_group(group)
 
     def create_polling_task(self):
@@ -273,14 +283,18 @@ class AgentManager(os_service.Service):
 
     def setup_polling_tasks(self):
         polling_tasks = {}
-        for pipeline in self.pipeline_manager.pipelines:
+        for source in self.polling_manager.sources:
+            polling_task = None
             for pollster in self.extensions:
-                if pipeline.support_meter(pollster.name):
-                    polling_task = polling_tasks.get(pipeline.get_interval())
+                if source.support_meter(pollster.name):
                     if not polling_task:
                         polling_task = self.create_polling_task()
-                        polling_tasks[pipeline.get_interval()] = polling_task
-                    polling_task.add(pollster, pipeline)
+                    polling_task.add(pollster, source)
+            if polling_task:
+                polling_tasks[source.name] = {
+                    'task': polling_task,
+                    'interval': source.get_interval()
+                }
 
         return polling_tasks
 
@@ -289,12 +303,7 @@ class AgentManager(os_service.Service):
                            discovery_group_id)
                 if discovery_group_id else None)
 
-    def start(self):
-        self.pipeline_manager = publish_pipeline.setup_pipeline()
-
-        self.partition_coordinator.start()
-        self.join_partitioning_groups()
-
+    def configure_polling_tasks(self):
         # allow time for coordination if necessary
         delay_start = self.partition_coordinator.is_active()
 
@@ -302,15 +311,31 @@ class AgentManager(os_service.Service):
         delay_polling_time = random.randint(
             0, cfg.CONF.shuffle_time_before_polling_task)
 
-        for interval, task in six.iteritems(self.setup_polling_tasks()):
+        pollster_timers = []
+        data = self.setup_polling_tasks()
+        for name, polling_task in data.items():
+            interval = polling_task['interval']
+            task = polling_task['task']
             delay_time = (interval + delay_polling_time if delay_start
                           else delay_polling_time)
-            self.tg.add_timer(interval,
-                              self.interval_task,
-                              initial_delay=delay_time,
-                              task=task)
+            pollster_timers.append(self.tg.add_timer(interval,
+                                   self.interval_task,
+                                   initial_delay=delay_time,
+                                   task=task))
         self.tg.add_timer(cfg.CONF.coordination.heartbeat,
                           self.partition_coordinator.heartbeat)
+
+        return pollster_timers
+
+    def start(self):
+        self.polling_manager = pipeline.setup_polling()
+
+        self.partition_coordinator.start()
+        self.join_partitioning_groups()
+
+        self.pollster_timers = self.configure_polling_tasks()
+
+        self.init_pipeline_refresh()
 
     def stop(self):
         if self.partition_coordinator:
@@ -319,7 +344,7 @@ class AgentManager(os_service.Service):
 
     @staticmethod
     def interval_task(task):
-        task.poll_and_publish()
+        task.poll_and_notify()
 
     @staticmethod
     def _parse_discoverer(url):
@@ -355,3 +380,25 @@ class AgentManager(os_service.Service):
             else:
                 LOG.warning(_('Unknown discovery extension: %s') % name)
         return resources
+
+    def stop_pollsters(self):
+        for x in self.pollster_timers:
+            try:
+                x.stop()
+                self.tg.timer_done(x)
+            except Exception:
+                LOG.error(_('Error stopping pollster.'), exc_info=True)
+        self.pollster_timers = []
+
+    def reload_pipeline(self):
+        LOG.info(_LI("Reconfiguring polling tasks."))
+
+        # stop existing pollsters and leave partitioning groups
+        self.stop_pollsters()
+        for group in self.groups:
+            self.partition_coordinator.leave_group(group)
+
+        # re-create partitioning groups according to pipeline
+        # and configure polling tasks with latest pipeline conf
+        self.join_partitioning_groups()
+        self.pollster_timers = self.configure_polling_tasks()

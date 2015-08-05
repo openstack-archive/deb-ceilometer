@@ -17,16 +17,17 @@
 import collections
 
 from oslo_config import cfg
+from oslo_log import log
 from stevedore import driver
 
 import ceilometer
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 
 
 OPTS = [
     cfg.StrOpt('hypervisor_inspector',
                default='libvirt',
+               choices=('hyperv', 'libvirt', 'vmware', 'xenapi'),
                help='Inspector to use for inspecting the hypervisor layer.'),
 ]
 

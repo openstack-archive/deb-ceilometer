@@ -19,7 +19,7 @@
 """
 
 import datetime
-import repr
+from six.moves import reprlib
 
 import mock
 from oslo_utils import timeutils
@@ -62,11 +62,7 @@ class EventTypeTest(tests_db.TestBase):
         self.assertNotEqual(et1.id, et2.id)
         self.assertNotEqual(et1.desc, et2.desc)
         # Test the method __repr__ returns a string
-        self.assertTrue(repr.repr(et2))
-
-
-class MyException(Exception):
-    pass
+        self.assertTrue(reprlib.repr(et2))
 
 
 @tests_db.run_with('sqlite', 'mysql', 'pgsql')
@@ -101,23 +97,10 @@ class EventTest(tests_db.TestBase):
         model = models.Trait("Foo", models.Trait.DATETIME_TYPE, now)
         self._verify_data(model, sql_models.TraitDatetime)
 
-    def test_bad_event(self):
-        now = datetime.datetime.utcnow()
-        m = [models.Event("1", "Foo", now, [], {}),
-             models.Event("2", "Zoo", now, [], {})]
-
-        with mock.patch.object(self.event_conn,
-                               "_get_or_create_event_type") as mock_save:
-            mock_save.side_effect = MyException("Boom")
-            problem_events = self.event_conn.record_events(m)
-        self.assertEqual(2, len(problem_events))
-        for bad, event in problem_events:
-            self.assertEqual(bad, models.Event.UNKNOWN_PROBLEM)
-
     def test_event_repr(self):
         ev = sql_models.Event('msg_id', None, False, {})
         ev.id = 100
-        self.assertTrue(repr.repr(ev))
+        self.assertTrue(reprlib.repr(ev))
 
 
 @tests_db.run_with('sqlite', 'mysql', 'pgsql')
@@ -152,20 +135,16 @@ class CapabilitiesTest(test_base.BaseTestCase):
 
     def test_capabilities(self):
         expected_capabilities = {
-            'meters': {'pagination': False,
-                       'query': {'simple': True,
+            'meters': {'query': {'simple': True,
                                  'metadata': True,
                                  'complex': False}},
-            'resources': {'pagination': False,
-                          'query': {'simple': True,
+            'resources': {'query': {'simple': True,
                                     'metadata': True,
                                     'complex': False}},
-            'samples': {'pagination': True,
-                        'query': {'simple': True,
+            'samples': {'query': {'simple': True,
                                   'metadata': True,
                                   'complex': True}},
-            'statistics': {'pagination': False,
-                           'groupby': True,
+            'statistics': {'groupby': True,
                            'query': {'simple': True,
                                      'metadata': True,
                                      'complex': False},

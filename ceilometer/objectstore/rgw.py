@@ -17,13 +17,12 @@
 
 from keystoneclient import exceptions
 from oslo_config import cfg
+from oslo_log import log
 from oslo_utils import timeutils
 import six.moves.urllib.parse as urlparse
 
 from ceilometer.agent import plugin_base
 from ceilometer.i18n import _
-from ceilometer.objectstore.rgw_client import RGWAdminClient as rgwclient
-from ceilometer.openstack.common import log
 from ceilometer import sample
 
 LOG = log.getLogger(__name__)
@@ -91,7 +90,12 @@ class _Base(plugin_base.PollsterBase):
         if not endpoint:
             raise StopIteration()
 
-        rgw_client = rgwclient(endpoint, self.access_key, self.secret)
+        try:
+            from ceilometer.objectstore.rgw_client import RGWAdminClient
+            rgw_client = RGWAdminClient(endpoint, self.access_key, self.secret)
+        except ImportError as e:
+            raise plugin_base.PollsterPermanentError(e)
+
         for t in tenants:
             api_method = 'get_%s' % self.METHOD
             yield t.id, getattr(rgw_client, api_method)(t.id)
@@ -112,7 +116,7 @@ class ContainersObjectsPollster(_Base):
                     user_id=None,
                     project_id=tenant,
                     resource_id=tenant + '/' + it.name,
-                    timestamp=timeutils.isotime(),
+                    timestamp=timeutils.utcnow().isoformat(),
                     resource_metadata=None,
                 )
 
@@ -132,7 +136,7 @@ class ContainersSizePollster(_Base):
                         user_id=None,
                         project_id=tenant,
                         resource_id=tenant + '/' + it.name,
-                        timestamp=timeutils.isotime(),
+                        timestamp=timeutils.utcnow().isoformat(),
                         resource_metadata=None,
                     )
 
@@ -151,7 +155,7 @@ class ObjectsSizePollster(_Base):
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
-                timestamp=timeutils.isotime(),
+                timestamp=timeutils.utcnow().isoformat(),
                 resource_metadata=None,
                 )
 
@@ -170,7 +174,7 @@ class ObjectsPollster(_Base):
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
-                timestamp=timeutils.isotime(),
+                timestamp=timeutils.utcnow().isoformat(),
                 resource_metadata=None,
                 )
 
@@ -187,7 +191,7 @@ class ObjectsContainersPollster(_Base):
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
-                timestamp=timeutils.isotime(),
+                timestamp=timeutils.utcnow().isoformat(),
                 resource_metadata=None,
                 )
 
@@ -207,6 +211,6 @@ class UsagePollster(_Base):
                 user_id=None,
                 project_id=tenant,
                 resource_id=tenant,
-                timestamp=timeutils.isotime(),
+                timestamp=timeutils.utcnow().isoformat(),
                 resource_metadata=None,
                 )

@@ -16,11 +16,11 @@
 import collections
 import re
 
+from oslo_log import log
 from oslo_utils import timeutils
 import six
 
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer import sample
 from ceilometer import transformer
 
@@ -231,7 +231,7 @@ class AggregatorTransformer(ScalingTransformer):
                                            self.retention_time))
         full = self.aggregated_samples >= self.size
         if full or expired:
-            x = self.samples.values()
+            x = list(self.samples.values())
             # gauge aggregates need to be averages
             for s in x:
                 if s.type == sample.TYPE_GAUGE:

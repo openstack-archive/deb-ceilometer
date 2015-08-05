@@ -20,6 +20,7 @@ import base64
 import datetime
 
 from oslo_serialization import jsonutils
+import six
 import webtest.app
 
 from ceilometer.publisher import utils
@@ -58,6 +59,86 @@ class TestValidateUserInput(v2.FunctionalTest,
                               'op': 'eq',
                               'value': '45.765',
                               'type': 'integer'}])
+
+
+class TestListMetersRestriction(v2.FunctionalTest,
+                                tests_db.MixinTestsWithBackendScenarios):
+
+    def setUp(self):
+        super(TestListMetersRestriction, self).setUp()
+        self.CONF.set_override('default_api_return_limit', 3, group='api')
+        for x in range(5):
+            for i in range(5):
+                s = sample.Sample(
+                    'volume.size%s' % x,
+                    'gauge',
+                    'GiB',
+                    5 + i,
+                    'user-id',
+                    'project1',
+                    'resource-id',
+                    timestamp=(datetime.datetime(2012, 9, 25, 10, 30) +
+                               datetime.timedelta(seconds=i)),
+                    resource_metadata={'display_name': 'test-volume',
+                                       'tag': 'self.sample',
+                                       },
+                    source='source1',
+                )
+                msg = utils.meter_message_from_counter(
+                    s, self.CONF.publisher.telemetry_secret,
+                )
+                self.conn.record_metering_data(msg)
+
+    def test_meter_limit(self):
+        data = self.get_json('/meters?limit=1')
+        self.assertEqual(1, len(data))
+
+    def test_meter_limit_negative(self):
+        self.assertRaises(webtest.app.AppError,
+                          self.get_json,
+                          '/meters?limit=-2')
+
+    def test_meter_limit_bigger(self):
+        data = self.get_json('/meters?limit=42')
+        self.assertEqual(5, len(data))
+
+    def test_meter_default_limit(self):
+        data = self.get_json('/meters')
+        self.assertEqual(3, len(data))
+
+    def test_old_sample_limit(self):
+        data = self.get_json('/meters/volume.size0?limit=1')
+        self.assertEqual(1, len(data))
+
+    def test_old_sample_limit_negative(self):
+        self.assertRaises(webtest.app.AppError,
+                          self.get_json,
+                          '/meters/volume.size0?limit=-2')
+
+    def test_old_sample_limit_bigger(self):
+        data = self.get_json('/meters/volume.size0?limit=42')
+        self.assertEqual(5, len(data))
+
+    def test_old_sample_default_limit(self):
+        data = self.get_json('/meters/volume.size0')
+        self.assertEqual(3, len(data))
+
+    def test_sample_limit(self):
+        data = self.get_json('/samples?limit=1')
+        self.assertEqual(1, len(data))
+
+    def test_sample_limit_negative(self):
+        self.assertRaises(webtest.app.AppError,
+                          self.get_json,
+                          '/samples?limit=-2')
+
+    def test_sample_limit_bigger(self):
+        data = self.get_json('/samples?limit=42')
+        self.assertEqual(25, len(data))
+
+    def test_sample_default_limit(self):
+        data = self.get_json('/samples')
+        self.assertEqual(3, len(data))
 
 
 class TestListMeters(v2.FunctionalTest,
@@ -221,12 +302,13 @@ class TestListMeters(v2.FunctionalTest,
                              expect_errors=True)
         resp_string = jsonutils.loads(resp.body)
         fault_string = resp_string['error_message']['faultstring']
-        expected_error_message = ('Unknown argument: "non_valid_field_name"'
-                                  ': unrecognized field in query: '
-                                  '[<Query u\'non_valid_field_name\' '
-                                  'gt u\'3\' ')
+        msg = ('Unknown argument: "non_valid_field_name"'
+               ': unrecognized field in query: '
+               '[<Query {key!r} '
+               'gt {value!r} ')
+        msg = msg.format(key=u'non_valid_field_name', value=u'3')
         self.assertEqual(400, resp.status_code)
-        self.assertTrue(fault_string.startswith(expected_error_message))
+        self.assertTrue(fault_string.startswith(msg))
 
     def test_query_samples_with_invalid_field_name_and_eq_operator(self):
         resp = self.get_json('/samples',
@@ -236,12 +318,12 @@ class TestListMeters(v2.FunctionalTest,
                              expect_errors=True)
         resp_string = jsonutils.loads(resp.body)
         fault_string = resp_string['error_message']['faultstring']
-        expected_error_message = ('Unknown argument: "non_valid_field_name"'
-                                  ': unrecognized field in query: '
-                                  '[<Query u\'non_valid_field_name\' '
-                                  'eq u\'3\' ')
+        msg = ('Unknown argument: "non_valid_field_name"'
+               ': unrecognized field in query: '
+               '[<Query {key!r} eq {value!r} ')
+        msg = msg.format(key=u'non_valid_field_name', value=u'3')
         self.assertEqual(400, resp.status_code)
-        self.assertTrue(fault_string.startswith(expected_error_message))
+        self.assertTrue(fault_string.startswith(msg))
 
     def test_query_samples_with_invalid_operator_and_valid_field_name(self):
         resp = self.get_json('/samples',
@@ -704,4 +786,6 @@ class TestListMeters(v2.FunctionalTest,
         for i in data:
             meter_id = '%s+%s' % (i['resource_id'], i['name'])
             expected = base64.encodestring(meter_id.encode('utf-8'))
+            if six.PY3:
+                expected = expected.decode('ascii')
             self.assertEqual(expected, i['meter_id'])

@@ -16,11 +16,11 @@
 # under the License.
 
 
-import itertools
+from oslo_log import log
+from six import moves
 
 from ceilometer.alarm import evaluator
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 
 LOG = log.getLogger(__name__)
 
@@ -48,6 +48,11 @@ class CombinationEvaluator(evaluator.Evaluator):
         alarms_missing_states = [alarm_id for alarm_id, state in states
                                  if not state or state == evaluator.UNKNOWN]
         sufficient = len(alarms_missing_states) == 0
+        if not sufficient and alarm.rule['operator'] == 'or':
+            # if operator is 'or' and there is one alarm, then the combinated
+            # alarm's state should be 'alarm'
+            sufficient = bool([alarm_id for alarm_id, state in states
+                               if state == evaluator.ALARM])
         if not sufficient and alarm.state != evaluator.UNKNOWN:
             reason = (_('Alarms %(alarm_ids)s'
                         ' are in unknown state') %
@@ -101,8 +106,9 @@ class CombinationEvaluator(evaluator.Evaluator):
             return
 
         states = zip(alarm.rule['alarm_ids'],
-                     itertools.imap(self._get_alarm_state,
-                                    alarm.rule['alarm_ids']))
+                     moves.map(self._get_alarm_state, alarm.rule['alarm_ids']))
+        # states is consumed more than once, we need a list
+        states = list(states)
 
         if self._sufficient_states(alarm, states):
             self._transition(alarm, states)

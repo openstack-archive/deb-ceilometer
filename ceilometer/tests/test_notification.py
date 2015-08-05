@@ -14,21 +14,24 @@
 # under the License.
 """Tests for Ceilometer notify daemon."""
 
+import shutil
+
 import eventlet
 import mock
-import oslo.messaging
-import oslo.messaging.conffixture
 from oslo_config import fixture as fixture_config
 from oslo_context import context
+import oslo_messaging
+import oslo_messaging.conffixture
+import oslo_service.service
+from oslo_utils import fileutils
 from oslo_utils import timeutils
+import six
 from stevedore import extension
 import yaml
 
 from ceilometer.compute.notifications import instance
 from ceilometer import messaging
 from ceilometer import notification
-from ceilometer.openstack.common import fileutils
-import ceilometer.openstack.common.service
 from ceilometer.publisher import test as test_publisher
 from ceilometer.tests import base as tests_base
 
@@ -108,7 +111,7 @@ class TestNotification(tests_base.BaseTestCase):
         )
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-    @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start',
+    @mock.patch.object(oslo_messaging.MessageHandlingServer, 'start',
                        mock.MagicMock())
     @mock.patch('ceilometer.event.endpoint.EventsNotificationEndpoint')
     def _do_process_notification_manager_start(self,
@@ -151,7 +154,7 @@ class TestNotification(tests_base.BaseTestCase):
                          self.srv.listeners[0].dispatcher.endpoints[0])
 
     @mock.patch('ceilometer.pipeline.setup_pipeline', mock.MagicMock())
-    @mock.patch.object(oslo.messaging.MessageHandlingServer, 'start',
+    @mock.patch.object(oslo_messaging.MessageHandlingServer, 'start',
                        mock.MagicMock())
     @mock.patch('ceilometer.event.endpoint.EventsNotificationEndpoint')
     def test_unique_consumers(self, fake_event_endpoint_class):
@@ -170,23 +173,37 @@ class TestNotification(tests_base.BaseTestCase):
 
 
 class BaseRealNotification(tests_base.BaseTestCase):
+    def setup_pipeline(self, counter_names):
+        pipeline = yaml.dump({
+            'sources': [{
+                'name': 'test_pipeline',
+                'interval': 5,
+                'meters': counter_names,
+                'sinks': ['test_sink']
+            }],
+            'sinks': [{
+                'name': 'test_sink',
+                'transformers': [],
+                'publishers': ['test://']
+            }]
+        })
+        if six.PY3:
+            pipeline = pipeline.encode('utf-8')
+
+        pipeline_cfg_file = fileutils.write_to_tempfile(content=pipeline,
+                                                        prefix="pipeline",
+                                                        suffix="yaml")
+        return pipeline_cfg_file
+
     def setUp(self):
         super(BaseRealNotification, self).setUp()
         self.CONF = self.useFixture(fixture_config.Config()).conf
         self.setup_messaging(self.CONF, 'nova')
 
-        pipeline = yaml.dump([{
-            'name': 'test_pipeline',
-            'interval': 5,
-            'counters': ['instance', 'memory'],
-            'transformers': [],
-            'publishers': ['test://'],
-        }])
-        self.expected_samples = 2
-        pipeline_cfg_file = fileutils.write_to_tempfile(content=pipeline,
-                                                        prefix="pipeline",
-                                                        suffix="yaml")
+        pipeline_cfg_file = self.setup_pipeline(['instance', 'memory'])
         self.CONF.set_override("pipeline_cfg_file", pipeline_cfg_file)
+
+        self.expected_samples = 2
 
         self.CONF.set_override("store_events", True, group="notification")
         self.CONF.set_override("disable_non_metric_meters", False,
@@ -194,7 +211,7 @@ class BaseRealNotification(tests_base.BaseTestCase):
         ev_pipeline = yaml.dump({
             'sources': [{
                 'name': 'test_event',
-                'events': '*',
+                'events': ['compute.instance.*'],
                 'sinks': ['test_sink']
             }],
             'sinks': [{
@@ -202,6 +219,8 @@ class BaseRealNotification(tests_base.BaseTestCase):
                 'publishers': ['test://']
             }]
         })
+        if six.PY3:
+            ev_pipeline = ev_pipeline.encode('utf-8')
         self.expected_events = 1
         ev_pipeline_cfg_file = fileutils.write_to_tempfile(
             content=ev_pipeline, prefix="event_pipeline", suffix="yaml")
@@ -232,6 +251,79 @@ class BaseRealNotification(tests_base.BaseTestCase):
         self.assertEqual(self.expected_samples, len(self.publisher.samples))
         self.assertEqual(self.expected_events, len(self.publisher.events))
         self.assertEqual(["9f9d01b9-4a58-4271-9e27-398b21ab20d1"], resources)
+
+
+class TestRealNotificationReloadablePipeline(BaseRealNotification):
+
+    def setUp(self):
+        super(TestRealNotificationReloadablePipeline, self).setUp()
+        self.CONF.set_override('refresh_pipeline_cfg', True)
+        self.CONF.set_override('pipeline_polling_interval', 1)
+        self.srv = notification.NotificationService()
+
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_notification_pipeline_poller(self, fake_publisher_cls):
+        fake_publisher_cls.return_value = self.publisher
+        self.srv.tg = mock.MagicMock()
+        self.srv.start()
+
+        pipeline_poller_call = mock.call(1, self.srv.refresh_pipeline)
+        self.assertIn(pipeline_poller_call,
+                      self.srv.tg.add_timer.call_args_list)
+
+    @mock.patch('ceilometer.publisher.test.TestPublisher')
+    def test_notification_reloaded_pipeline(self, fake_publisher_cls):
+        fake_publisher_cls.return_value = self.publisher
+
+        pipeline_cfg_file = self.setup_pipeline(['instance'])
+        self.CONF.set_override("pipeline_cfg_file", pipeline_cfg_file)
+
+        self.expected_samples = 1
+        self.srv.start()
+
+        notifier = messaging.get_notifier(self.transport,
+                                          "compute.vagrant-precise")
+        notifier.info(context.RequestContext(), 'compute.instance.create.end',
+                      TEST_NOTICE_PAYLOAD)
+
+        start = timeutils.utcnow()
+        while timeutils.delta_seconds(start, timeutils.utcnow()) < 600:
+            if (len(self.publisher.samples) >= self.expected_samples and
+                    len(self.publisher.events) >= self.expected_events):
+                break
+            eventlet.sleep(0)
+
+        self.assertEqual(self.expected_samples, len(self.publisher.samples))
+
+        # Flush publisher samples to test reloading
+        self.publisher.samples = []
+        # Modify the collection targets
+        updated_pipeline_cfg_file = self.setup_pipeline(['vcpus',
+                                                         'disk.root.size'])
+        # Move/re-name the updated pipeline file to the original pipeline
+        # file path as recorded in oslo config
+        shutil.move(updated_pipeline_cfg_file, pipeline_cfg_file)
+
+        self.expected_samples = 2
+        # Random sleep to let the pipeline poller complete the reloading
+        eventlet.sleep(3)
+        # Send message again to verify the reload works
+        notifier = messaging.get_notifier(self.transport,
+                                          "compute.vagrant-precise")
+        notifier.info(context.RequestContext(), 'compute.instance.create.end',
+                      TEST_NOTICE_PAYLOAD)
+
+        start = timeutils.utcnow()
+        while timeutils.delta_seconds(start, timeutils.utcnow()) < 600:
+            if (len(self.publisher.samples) >= self.expected_samples and
+                    len(self.publisher.events) >= self.expected_events):
+                break
+            eventlet.sleep(0)
+
+        self.assertEqual(self.expected_samples, len(self.publisher.samples))
+
+        (self.assertIn(sample.name, ['disk.root.size', 'vcpus'])
+         for sample in self.publisher.samples)
 
 
 class TestRealNotification(BaseRealNotification):
@@ -281,7 +373,7 @@ class TestRealNotification(BaseRealNotification):
         fake_coord.return_value = fake_coord1
         self._check_notification_service()
 
-    @mock.patch.object(ceilometer.openstack.common.service.Service, 'stop')
+    @mock.patch.object(oslo_service.service.Service, 'stop')
     def test_notification_service_start_abnormal(self, mocked):
         try:
             self.srv.stop()
@@ -325,4 +417,35 @@ class TestRealNotificationHA(BaseRealNotification):
         self.assertEqual(2, len(self.srv.pipeline_listeners))
         self.srv._refresh_agent(None)
         self.assertEqual(2, len(self.srv.pipeline_listeners))
+        self.srv.stop()
+
+    @mock.patch('oslo_messaging.Notifier.sample')
+    def test_broadcast_to_relevant_pipes_only(self, mock_notifier):
+        self.srv.start()
+        for endpoint in self.srv.listeners[0].dispatcher.endpoints:
+            if (hasattr(endpoint, 'filter_rule') and
+                not endpoint.filter_rule.match(None, None, 'nonmatching.end',
+                                               None, None)):
+                continue
+            endpoint.info(TEST_NOTICE_CTXT, 'compute.vagrant-precise',
+                          'nonmatching.end',
+                          TEST_NOTICE_PAYLOAD, TEST_NOTICE_METADATA)
+        self.assertFalse(mock_notifier.called)
+        for endpoint in self.srv.listeners[0].dispatcher.endpoints:
+            if (hasattr(endpoint, 'filter_rule') and
+                not endpoint.filter_rule.match(None, None,
+                                               'compute.instance.create.end',
+                                               None, None)):
+                continue
+            endpoint.info(TEST_NOTICE_CTXT, 'compute.vagrant-precise',
+                          'compute.instance.create.end',
+                          TEST_NOTICE_PAYLOAD, TEST_NOTICE_METADATA)
+        self.assertTrue(mock_notifier.called)
+        self.assertEqual(3, mock_notifier.call_count)
+        self.assertEqual('pipeline.event',
+                         mock_notifier.call_args_list[0][1]['event_type'])
+        self.assertEqual('ceilometer.pipeline',
+                         mock_notifier.call_args_list[1][1]['event_type'])
+        self.assertEqual('ceilometer.pipeline',
+                         mock_notifier.call_args_list[2][1]['event_type'])
         self.srv.stop()

@@ -20,8 +20,7 @@ import ceilometer.alarm.service
 import ceilometer.api
 import ceilometer.api.app
 import ceilometer.api.controllers.v2.alarms
-import ceilometer.cmd.alarm
-import ceilometer.cmd.polling
+import ceilometer.cmd.eventlet.polling
 import ceilometer.collector
 import ceilometer.compute.discovery
 import ceilometer.compute.notifications
@@ -50,8 +49,6 @@ import ceilometer.notification
 import ceilometer.nova_client
 import ceilometer.objectstore.rgw
 import ceilometer.objectstore.swift
-import ceilometer.openstack.common.eventlet_backdoor
-import ceilometer.openstack.common.log
 import ceilometer.orchestration.notifications
 import ceilometer.pipeline
 import ceilometer.profiler.notifications
@@ -69,7 +66,7 @@ def list_opts():
         ('DEFAULT',
          itertools.chain(ceilometer.agent.base.OPTS,
                          ceilometer.api.app.OPTS,
-                         ceilometer.cmd.polling.CLI_OPTS,
+                         ceilometer.cmd.eventlet.polling.CLI_OPTS,
                          ceilometer.compute.notifications.OPTS,
                          ceilometer.compute.util.OPTS,
                          ceilometer.compute.virt.inspector.OPTS,
@@ -84,12 +81,6 @@ def list_opts():
                          ceilometer.network.notifications.OPTS,
                          ceilometer.nova_client.OPTS,
                          ceilometer.objectstore.swift.OPTS,
-                         (ceilometer.openstack.common.eventlet_backdoor
-                          .eventlet_backdoor_opts),
-                         ceilometer.openstack.common.log.common_cli_opts,
-                         ceilometer.openstack.common.log.generic_log_opts,
-                         ceilometer.openstack.common.log.logging_cli_opts,
-                         ceilometer.openstack.common.log.log_opts,
                          ceilometer.orchestration.notifications.OPTS,
                          ceilometer.pipeline.OPTS,
                          ceilometer.profiler.notifications.OPTS,
@@ -103,8 +94,7 @@ def list_opts():
                          ceilometer.alarm.service.OPTS,
                          ceilometer.alarm.rpc.OPTS,
                          ceilometer.alarm.evaluator.gnocchi.OPTS,
-                         ceilometer.api.controllers.v2.alarms.ALARM_API_OPTS,
-                         ceilometer.cmd.alarm.OPTS)),
+                         ceilometer.api.controllers.v2.alarms.ALARM_API_OPTS)),
         ('api',
          itertools.chain(ceilometer.api.OPTS,
                          ceilometer.api.app.API_OPTS,)),

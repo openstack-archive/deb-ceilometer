@@ -15,6 +15,7 @@
 """Test ACL."""
 
 import datetime
+import hashlib
 import json
 
 from oslo_utils import timeutils
@@ -32,13 +33,18 @@ VALID_TOKEN2 = '4562138218392832'
 
 
 class FakeMemcache(object):
-    @staticmethod
-    def get(key):
-        if key == "tokens/%s" % VALID_TOKEN:
+
+    TOKEN_HASH = hashlib.sha256(VALID_TOKEN.encode('utf-8')).hexdigest()
+    TOKEN2_HASH = hashlib.sha256(VALID_TOKEN2.encode('utf-8')).hexdigest()
+
+    def get(self, key):
+        if (key == "tokens/%s" % VALID_TOKEN or
+                key == "tokens/%s" % self.TOKEN_HASH):
             dt = timeutils.utcnow() + datetime.timedelta(minutes=5)
+            dt_isoformat = dt.isoformat()
             return json.dumps(({'access': {
                 'token': {'id': VALID_TOKEN,
-                          'expires': timeutils.isotime(dt)},
+                          'expires': dt_isoformat},
                 'user': {
                     'id': 'user_id1',
                     'name': 'user_name1',
@@ -47,12 +53,14 @@ class FakeMemcache(object):
                     'roles': [
                         {'name': 'admin'},
                     ]},
-            }}, timeutils.isotime(dt)))
-        if key == "tokens/%s" % VALID_TOKEN2:
+            }}, dt_isoformat))
+        if (key == "tokens/%s" % VALID_TOKEN2 or
+                key == "tokens/%s" % self.TOKEN2_HASH):
             dt = timeutils.utcnow() + datetime.timedelta(minutes=5)
+            dt_isoformat = dt.isoformat()
             return json.dumps(({'access': {
                 'token': {'id': VALID_TOKEN2,
-                          'expires': timeutils.isotime(dt)},
+                          'expires': dt_isoformat},
                 'user': {
                     'id': 'user_id2',
                     'name': 'user-good',
@@ -61,7 +69,7 @@ class FakeMemcache(object):
                     'roles': [
                         {'name': 'Member'},
                     ]},
-            }}, timeutils.isotime(dt)))
+            }}, dt_isoformat))
 
     @staticmethod
     def set(key, value, **kwargs):

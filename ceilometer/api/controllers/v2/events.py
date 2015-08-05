@@ -20,6 +20,7 @@
 
 import datetime
 
+from oslo_log import log
 import pecan
 from pecan import rest
 import six
@@ -31,7 +32,6 @@ from ceilometer.api.controllers.v2 import base
 from ceilometer.api.controllers.v2 import utils as v2_utils
 from ceilometer.event.storage import models as event_models
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer import storage
 
 LOG = log.getLogger(__name__)
@@ -169,7 +169,9 @@ def _event_query_to_event_filter(q):
         if not i.op:
             i.op = 'eq'
         elif i.op not in base.operation_kind:
-            error = _("operator {} is incorrect").format(i.op)
+            error = (_('operator %(operator)s is not supported. the supported'
+                       ' operators are: %(supported)s') %
+                     {'operator': i.op, 'supported': base.operation_kind})
             raise base.ClientSideError(error)
         if i.field in evt_model_filter:
             evt_model_filter[i.field] = i.value
@@ -226,7 +228,7 @@ class EventTypesController(rest.RestController):
         pecan.abort(404)
 
     @v2_utils.requires_admin
-    @wsme_pecan.wsexpose([unicode])
+    @wsme_pecan.wsexpose([six.text_type])
     def get_all(self):
         """Get all event types."""
         return list(pecan.request.event_storage_conn.get_event_types())
@@ -236,13 +238,15 @@ class EventsController(rest.RestController):
     """Works on Events."""
 
     @v2_utils.requires_admin
-    @wsme_pecan.wsexpose([Event], [EventQuery])
-    def get_all(self, q=None):
+    @wsme_pecan.wsexpose([Event], [EventQuery], int)
+    def get_all(self, q=None, limit=None):
         """Return all events matching the query filters.
 
         :param q: Filter arguments for which Events to return
+        :param limit: Maximum number of samples to be returned.
         """
         q = q or []
+        limit = v2_utils.enforce_limit(limit)
         event_filter = _event_query_to_event_filter(q)
         return [Event(message_id=event.message_id,
                       event_type=event.event_type,
@@ -250,7 +254,8 @@ class EventsController(rest.RestController):
                       traits=event.traits,
                       raw=event.raw)
                 for event in
-                pecan.request.event_storage_conn.get_events(event_filter)]
+                pecan.request.event_storage_conn.get_events(event_filter,
+                                                            limit)]
 
     @v2_utils.requires_admin
     @wsme_pecan.wsexpose(Event, wtypes.text)

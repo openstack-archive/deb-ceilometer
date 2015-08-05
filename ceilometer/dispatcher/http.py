@@ -15,11 +15,11 @@
 import json
 
 from oslo_config import cfg
+from oslo_log import log
 import requests
 
 from ceilometer import dispatcher
 from ceilometer.i18n import _, _LE
-from ceilometer.openstack.common import log
 from ceilometer.publisher import utils as publisher_utils
 
 LOG = log.getLogger(__name__)
@@ -53,7 +53,8 @@ class HttpDispatcher(dispatcher.Base):
     To enable this dispatcher, the following option needs to be present in
     ceilometer.conf file::
 
-        dispatchers = http
+        [DEFAULT]
+        dispatcher = http
 
     Dispatcher specific options can be added as follows::
 
@@ -127,12 +128,11 @@ class HttpDispatcher(dispatcher.Base):
         for event in events:
             res = None
             try:
-                res = requests.post(self.event_target, data=event.serialize(),
+                res = requests.post(self.event_target, data=event,
                                     headers=self.headers, timeout=self.timeout)
                 res.raise_for_status()
             except Exception:
                 error_code = res.status_code if res else 'unknown'
                 LOG.exception(_LE('Status Code: %{code}s. Failed to dispatch '
                                   'event: %{event}s'),
-                              {'code': error_code,
-                               'event': event.serialize()})
+                              {'code': error_code, 'event': event})

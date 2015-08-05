@@ -15,8 +15,6 @@
 
 """Fixtures used during Gabbi-based test runs."""
 
-from __future__ import print_function
-
 import datetime
 import os
 import random
@@ -46,19 +44,7 @@ class ConfigFixture(fixture.GabbiFixture):
     def start_fixture(self):
         """Set up config."""
 
-        service.prepare_service([])
-        conf = fixture_config.Config().conf
-        self.conf = conf
-        opts.set_defaults(self.conf)
-        conf.import_opt('store_events', 'ceilometer.notification',
-                        group='notification')
-        conf.set_override('policy_file',
-                          os.path.abspath('etc/ceilometer/policy.json'),
-                          group='oslo_policy')
-
-        # A special pipeline is required to use the direct publisher.
-        conf.set_override('pipeline_cfg_file',
-                          'etc/ceilometer/gabbi_pipeline.yaml')
+        self.conf = None
 
         # Determine the database connection.
         db_url = None
@@ -70,6 +56,21 @@ class ConfigFixture(fixture.GabbiFixture):
         if db_url is None:
             raise case.SkipTest('No database connection configured')
 
+        service.prepare_service([])
+        conf = fixture_config.Config().conf
+        self.conf = conf
+        opts.set_defaults(self.conf)
+        conf.import_group('api', 'ceilometer.api.controllers.v2.root')
+        conf.import_opt('store_events', 'ceilometer.notification',
+                        group='notification')
+        conf.set_override('policy_file',
+                          os.path.abspath('etc/ceilometer/policy.json'),
+                          group='oslo_policy')
+
+        # A special pipeline is required to use the direct publisher.
+        conf.set_override('pipeline_cfg_file',
+                          'etc/ceilometer/gabbi_pipeline.yaml')
+
         database_name = '%s-%s' % (db_url, str(uuid.uuid4()))
         conf.set_override('connection', database_name, group='database')
         conf.set_override('metering_connection', '', group='database')
@@ -77,13 +78,16 @@ class ConfigFixture(fixture.GabbiFixture):
         conf.set_override('alarm_connection', '', group='database')
 
         conf.set_override('pecan_debug', True, group='api')
+        conf.set_override('gnocchi_is_enabled', False, group='api')
+        conf.set_override('aodh_is_enabled', False, group='api')
 
         conf.set_override('store_events', True, group='notification')
 
     def stop_fixture(self):
         """Reset the config and remove data."""
-        storage.get_connection_from_config(self.conf).clear()
-        self.conf.reset()
+        if self.conf:
+            storage.get_connection_from_config(self.conf).clear()
+            self.conf.reset()
 
 
 class SampleDataFixture(fixture.GabbiFixture):

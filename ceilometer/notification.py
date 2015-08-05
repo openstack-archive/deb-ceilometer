@@ -13,19 +13,19 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import oslo.messaging
 from oslo_config import cfg
 from oslo_context import context
+from oslo_log import log
+import oslo_messaging
 from stevedore import extension
 
 from ceilometer.agent import plugin_base as base
 from ceilometer import coordination
 from ceilometer.event import endpoint as event_endpoint
-from ceilometer.i18n import _, _LW
+from ceilometer.i18n import _, _LI, _LW
 from ceilometer import messaging
-from ceilometer.openstack.common import log
-from ceilometer.openstack.common import service as os_service
 from ceilometer import pipeline
+from ceilometer import service_base
 from ceilometer import utils
 
 
@@ -42,13 +42,11 @@ OPTS = [
                 default=False,
                 help='Save event details.'),
     cfg.BoolOpt('disable_non_metric_meters',
-                default=False,
+                default=True,
                 help='WARNING: Ceilometer historically offered the ability to '
                      'store events as meters. This usage is NOT advised as it '
                      'can flood the metering database and cause performance '
-                     'degradation. This option disables the collection of '
-                     'non-metric meters and will be the default behavior in '
-                     'Liberty.'),
+                     'degradation.'),
     cfg.BoolOpt('workload_partitioning',
                 default=False,
                 help='Enable workload partitioning, allowing multiple '
@@ -66,7 +64,7 @@ cfg.CONF.import_opt('telemetry_driver', 'ceilometer.publisher.messaging',
                     group='publisher_notifier')
 
 
-class NotificationService(os_service.Service):
+class NotificationService(service_base.BaseService):
     """Notification service.
 
     When running multiple agents, additional queuing sequence is required for
@@ -86,58 +84,79 @@ class NotificationService(os_service.Service):
         self.group_id = None
 
     @classmethod
-    def _get_notifications_manager(cls, transporter):
+    def _get_notifications_manager(cls, pm):
         return extension.ExtensionManager(
             namespace=cls.NOTIFICATION_NAMESPACE,
             invoke_on_load=True,
-            invoke_args=(transporter, )
+            invoke_args=(pm, )
         )
 
     def _get_notifier(self, transport, pipe):
-        return oslo.messaging.Notifier(
+        return oslo_messaging.Notifier(
             transport,
             driver=cfg.CONF.publisher_notifier.telemetry_driver,
             publisher_id='ceilometer.notification',
             topic='%s-%s' % (self.NOTIFICATION_IPC, pipe.name))
 
-    def start(self):
-        super(NotificationService, self).start()
-        self.pipeline_manager = pipeline.setup_pipeline()
+    def _get_pipe_manager(self, transport, pipeline_manager):
+
+        if cfg.CONF.notification.workload_partitioning:
+            pipe_manager = pipeline.SamplePipelineTransportManager()
+            for pipe in pipeline_manager.pipelines:
+                pipe_manager.add_transporter(
+                    (pipe.source.support_meter,
+                     self._get_notifier(transport, pipe)))
+        else:
+            pipe_manager = pipeline_manager
+
+        return pipe_manager
+
+    def _get_event_pipeline_manager(self, transport):
+
         if cfg.CONF.notification.store_events:
             self.event_pipeline_manager = pipeline.setup_event_pipeline()
 
-        transport = messaging.get_transport()
+            if cfg.CONF.notification.workload_partitioning:
+                event_pipe_manager = pipeline.EventPipelineTransportManager()
+                for pipe in self.event_pipeline_manager.pipelines:
+                    event_pipe_manager.add_transporter(
+                        (pipe.source.support_event,
+                         self._get_notifier(transport, pipe)))
+            else:
+                event_pipe_manager = self.event_pipeline_manager
+
+            return event_pipe_manager
+
+    def start(self):
+        super(NotificationService, self).start()
+
+        self.pipeline_manager = pipeline.setup_pipeline()
+        self.transport = messaging.get_transport()
+
+        self.pipe_manager = self._get_pipe_manager(self.transport,
+                                                   self.pipeline_manager)
+        self.event_pipe_manager = self._get_event_pipeline_manager(
+            self.transport)
+
         self.partition_coordinator = coordination.PartitionCoordinator()
         self.partition_coordinator.start()
 
-        event_transporter = None
         if cfg.CONF.notification.workload_partitioning:
-            transporter = []
-            for pipe in self.pipeline_manager.pipelines:
-                transporter.append(self._get_notifier(transport, pipe))
-            if cfg.CONF.notification.store_events:
-                event_transporter = []
-                for pipe in self.event_pipeline_manager.pipelines:
-                    event_transporter.append(self._get_notifier(transport,
-                                                                pipe))
-
             self.ctxt = context.get_admin_context()
             self.group_id = self.NOTIFICATION_NAMESPACE
         else:
             # FIXME(sileht): endpoint use notification_topics option
-            # and it should not because this is oslo.messaging option
+            # and it should not because this is oslo_messaging option
             # not a ceilometer, until we have a something to get
             # the notification_topics in an other way
             # we must create a transport to ensure the option have
-            # beeen registered by oslo.messaging
-            messaging.get_notifier(transport, '')
-            transporter = self.pipeline_manager
-            if cfg.CONF.notification.store_events:
-                event_transporter = self.event_pipeline_manager
+            # beeen registered by oslo_messaging
+            messaging.get_notifier(self.transport, '')
             self.group_id = None
 
         self.listeners, self.pipeline_listeners = [], []
-        self._configure_main_queue_listeners(transporter, event_transporter)
+        self._configure_main_queue_listeners(self.pipe_manager,
+                                             self.event_pipe_manager)
 
         if cfg.CONF.notification.workload_partitioning:
             self.partition_coordinator.join_group(self.group_id)
@@ -157,8 +176,11 @@ class NotificationService(os_service.Service):
         # Add a dummy thread to have wait() working
         self.tg.add_timer(604800, lambda: None)
 
-    def _configure_main_queue_listeners(self, transporter, event_transporter):
-        notification_manager = self._get_notifications_manager(transporter)
+        self.init_pipeline_refresh()
+
+    def _configure_main_queue_listeners(self, pipe_manager,
+                                        event_pipe_manager):
+        notification_manager = self._get_notifications_manager(pipe_manager)
         if not list(notification_manager):
             LOG.warning(_('Failed to load any notification handlers for %s'),
                         self.NOTIFICATION_NAMESPACE)
@@ -168,7 +190,7 @@ class NotificationService(os_service.Service):
         endpoints = []
         if cfg.CONF.notification.store_events:
             endpoints.append(
-                event_endpoint.EventsNotificationEndpoint(event_transporter))
+                event_endpoint.EventsNotificationEndpoint(event_pipe_manager))
 
         targets = []
         for ext in notification_manager:
@@ -181,7 +203,7 @@ class NotificationService(os_service.Service):
                       {'name': ext.name,
                        'type': ', '.join(handler.event_types),
                        'error': ack_on_error})
-            # NOTE(gordc): this could be a set check but oslo.messaging issue
+            # NOTE(gordc): this could be a set check but oslo_messaging issue
             # https://bugs.launchpad.net/oslo.messaging/+bug/1398511
             # This ensures we don't create multiple duplicate consumers.
             for new_tar in handler.get_targets(cfg.CONF):
@@ -216,7 +238,7 @@ class NotificationService(os_service.Service):
                              pipeline.SamplePipelineEndpoint)
             listener = messaging.get_notification_listener(
                 transport,
-                [oslo.messaging.Target(
+                [oslo_messaging.Target(
                     topic='%s-%s' % (self.NOTIFICATION_IPC, pipe.name))],
                 [pipe_endpoint(self.ctxt, pipe)])
             listener.start()
@@ -227,3 +249,19 @@ class NotificationService(os_service.Service):
             self.partition_coordinator.stop()
         utils.kill_listeners(self.listeners + self.pipeline_listeners)
         super(NotificationService, self).stop()
+
+    def reload_pipeline(self):
+        LOG.info(_LI("Reloading notification agent and listeners."))
+
+        self.pipe_manager = self._get_pipe_manager(
+            self.transport, self.pipeline_manager)
+
+        # re-start the main queue listeners.
+        utils.kill_listeners(self.listeners)
+        self._configure_main_queue_listeners(
+            self.pipe_manager, self.event_pipe_manager)
+
+        # re-start the pipeline listeners if workload partitioning
+        # is enabled.
+        if cfg.CONF.notification.workload_partitioning:
+            self._refresh_agent(None)

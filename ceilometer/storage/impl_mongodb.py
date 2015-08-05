@@ -20,23 +20,20 @@
 # under the License.
 """MongoDB storage backend"""
 
-import calendar
 import copy
 import datetime
-import json
-import operator
 import uuid
 
 import bson.code
 import bson.objectid
 from oslo_config import cfg
+from oslo_log import log
 from oslo_utils import timeutils
 import pymongo
 import six
 
 import ceilometer
 from ceilometer.i18n import _
-from ceilometer.openstack.common import log
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -86,265 +83,21 @@ class Connection(pymongo_base.Connection):
                                        AVAILABLE_CAPABILITIES)
     CONNECTION_POOL = pymongo_utils.ConnectionPool()
 
-    STANDARD_AGGREGATES = dict(
-        emit_initial=dict(
-            sum='',
-            count='',
-            avg='',
-            min='',
-            max=''
-        ),
-        emit_body=dict(
-            sum='sum: this.counter_volume,',
-            count='count: NumberInt(1),',
-            avg='acount: NumberInt(1), asum: this.counter_volume,',
-            min='min: this.counter_volume,',
-            max='max: this.counter_volume,'
-        ),
-        reduce_initial=dict(
-            sum='',
-            count='',
-            avg='',
-            min='',
-            max=''
-        ),
-        reduce_body=dict(
-            sum='sum: values[0].sum,',
-            count='count: values[0].count,',
-            avg='acount: values[0].acount, asum: values[0].asum,',
-            min='min: values[0].min,',
-            max='max: values[0].max,'
-        ),
-        reduce_computation=dict(
-            sum='res.sum += values[i].sum;',
-            count='res.count = NumberInt(res.count + values[i].count);',
-            avg=('res.acount = NumberInt(res.acount + values[i].acount);'
-                 'res.asum += values[i].asum;'),
-            min='if ( values[i].min < res.min ) {res.min = values[i].min;}',
-            max='if ( values[i].max > res.max ) {res.max = values[i].max;}'
-        ),
-        finalize=dict(
-            sum='',
-            count='',
-            avg='value.avg = value.asum / value.acount;',
-            min='',
-            max=''
-        ),
-    )
+    STANDARD_AGGREGATES = dict([(a.name, a) for a in [
+        pymongo_utils.SUM_AGGREGATION, pymongo_utils.AVG_AGGREGATION,
+        pymongo_utils.MIN_AGGREGATION, pymongo_utils.MAX_AGGREGATION,
+        pymongo_utils.COUNT_AGGREGATION,
+    ]])
 
-    UNPARAMETERIZED_AGGREGATES = dict(
-        emit_initial=dict(
-            stddev=(
-                ''
-            )
-        ),
-        emit_body=dict(
-            stddev='sdsum: this.counter_volume,'
-                   'sdcount: 1,'
-                   'weighted_distances: 0,'
-                   'stddev: 0,'
-        ),
-        reduce_initial=dict(
-            stddev=''
-        ),
-        reduce_body=dict(
-            stddev='sdsum: values[0].sdsum,'
-                   'sdcount: values[0].sdcount,'
-                   'weighted_distances: values[0].weighted_distances,'
-                   'stddev: values[0].stddev,'
-        ),
-        reduce_computation=dict(
-            stddev=(
-                'var deviance = (res.sdsum / res.sdcount) - values[i].sdsum;'
-                'var weight = res.sdcount / ++res.sdcount;'
-                'res.weighted_distances += (Math.pow(deviance, 2) * weight);'
-                'res.sdsum += values[i].sdsum;'
-            )
-        ),
-        finalize=dict(
-            stddev=(
-                'value.stddev = Math.sqrt(value.weighted_distances /'
-                '  value.sdcount);'
-            )
-        ),
-    )
-
-    PARAMETERIZED_AGGREGATES = dict(
-        validate=dict(
-            cardinality=lambda p: p in ['resource_id', 'user_id', 'project_id',
-                                        'source']
-        ),
-        emit_initial=dict(
-            cardinality=(
-                'aggregate["cardinality/%(aggregate_param)s"] = 1;'
-                'var distinct_%(aggregate_param)s = {};'
-                'distinct_%(aggregate_param)s[this["%(aggregate_param)s"]]'
-                '   = true;'
-            )
-        ),
-        emit_body=dict(
-            cardinality=(
-                'distinct_%(aggregate_param)s : distinct_%(aggregate_param)s,'
-                '%(aggregate_param)s : this["%(aggregate_param)s"],'
-            )
-        ),
-        reduce_initial=dict(
-            cardinality=''
-        ),
-        reduce_body=dict(
-            cardinality=(
-                'aggregate : values[0].aggregate,'
-                'distinct_%(aggregate_param)s:'
-                '  values[0].distinct_%(aggregate_param)s,'
-                '%(aggregate_param)s : values[0]["%(aggregate_param)s"],'
-            )
-        ),
-        reduce_computation=dict(
-            cardinality=(
-                'if (!(values[i]["%(aggregate_param)s"] in'
-                '      res.distinct_%(aggregate_param)s)) {'
-                '  res.distinct_%(aggregate_param)s[values[i]'
-                '    ["%(aggregate_param)s"]] = true;'
-                '  res.aggregate["cardinality/%(aggregate_param)s"] += 1;}'
-            )
-        ),
-        finalize=dict(
-            cardinality=''
-        ),
-    )
-
-    EMIT_STATS_COMMON = """
-        var aggregate = {};
-        %(aggregate_initial_placeholder)s
-        emit(%(key_val)s, { unit: this.counter_unit,
-                            aggregate : aggregate,
-                            %(aggregate_body_placeholder)s
-                            groupby : %(groupby_val)s,
-                            duration_start : this.timestamp,
-                            duration_end : this.timestamp,
-                            period_start : %(period_start_val)s,
-                            period_end : %(period_end_val)s} )
-    """
-
-    MAP_STATS_PERIOD_VAR = """
-        var period = %(period)d * 1000;
-        var period_first = %(period_first)d * 1000;
-        var period_start = period_first
-                           + (Math.floor(new Date(this.timestamp.getTime()
-                                         - period_first) / period)
-                              * period);
-    """
-
-    MAP_STATS_GROUPBY_VAR = """
-        var groupby_fields = %(groupby_fields)s;
-        var groupby = {};
-        var groupby_key = {};
-        for ( var i=0; i<groupby_fields.length; i++ ) {
-        if (groupby_fields[i].search("resource_metadata") != -1) {
-            var key = "resource_metadata";
-            var j = groupby_fields[i].indexOf('.');
-            var value = groupby_fields[i].slice(j+1, groupby_fields[i].length);
-            groupby[groupby_fields[i]] = this[key][value];
-            groupby_key[groupby_fields[i]] = this[key][value];
-        } else {
-            groupby[groupby_fields[i]] = this[groupby_fields[i]]
-            groupby_key[groupby_fields[i]] = this[groupby_fields[i]]
-            }
-        }
-    """
-
-    PARAMS_MAP_STATS = {
-        'key_val': '\'statistics\'',
-        'groupby_val': 'null',
-        'period_start_val': 'this.timestamp',
-        'period_end_val': 'this.timestamp',
-        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
-        'aggregate_body_placeholder': '%(aggregate_body_val)s'
-    }
-
-    MAP_STATS = bson.code.Code("function () {" +
-                               EMIT_STATS_COMMON % PARAMS_MAP_STATS +
-                               "}")
-
-    PARAMS_MAP_STATS_PERIOD = {
-        'key_val': 'period_start',
-        'groupby_val': 'null',
-        'period_start_val': 'new Date(period_start)',
-        'period_end_val': 'new Date(period_start + period)',
-        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
-        'aggregate_body_placeholder': '%(aggregate_body_val)s'
-    }
-
-    MAP_STATS_PERIOD = bson.code.Code(
-        "function () {" +
-        MAP_STATS_PERIOD_VAR +
-        EMIT_STATS_COMMON % PARAMS_MAP_STATS_PERIOD +
-        "}")
-
-    PARAMS_MAP_STATS_GROUPBY = {
-        'key_val': 'groupby_key',
-        'groupby_val': 'groupby',
-        'period_start_val': 'this.timestamp',
-        'period_end_val': 'this.timestamp',
-        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
-        'aggregate_body_placeholder': '%(aggregate_body_val)s'
-    }
-
-    MAP_STATS_GROUPBY = bson.code.Code(
-        "function () {" +
-        MAP_STATS_GROUPBY_VAR +
-        EMIT_STATS_COMMON % PARAMS_MAP_STATS_GROUPBY +
-        "}")
-
-    PARAMS_MAP_STATS_PERIOD_GROUPBY = {
-        'key_val': 'groupby_key',
-        'groupby_val': 'groupby',
-        'period_start_val': 'new Date(period_start)',
-        'period_end_val': 'new Date(period_start + period)',
-        'aggregate_initial_placeholder': '%(aggregate_initial_val)s',
-        'aggregate_body_placeholder': '%(aggregate_body_val)s'
-    }
-
-    MAP_STATS_PERIOD_GROUPBY = bson.code.Code(
-        "function () {" +
-        MAP_STATS_PERIOD_VAR +
-        MAP_STATS_GROUPBY_VAR +
-        "    groupby_key['period_start'] = period_start\n" +
-        EMIT_STATS_COMMON % PARAMS_MAP_STATS_PERIOD_GROUPBY +
-        "}")
-
-    REDUCE_STATS = bson.code.Code("""
-    function (key, values) {
-        %(aggregate_initial_val)s
-        var res = { unit: values[0].unit,
-                    aggregate: values[0].aggregate,
-                    %(aggregate_body_val)s
-                    groupby: values[0].groupby,
-                    period_start: values[0].period_start,
-                    period_end: values[0].period_end,
-                    duration_start: values[0].duration_start,
-                    duration_end: values[0].duration_end };
-        for ( var i=1; i<values.length; i++ ) {
-            %(aggregate_computation_val)s
-            if ( values[i].duration_start < res.duration_start )
-               res.duration_start = values[i].duration_start;
-            if ( values[i].duration_end > res.duration_end )
-               res.duration_end = values[i].duration_end;
-            if ( values[i].period_start < res.period_start )
-               res.period_start = values[i].period_start;
-            if ( values[i].period_end > res.period_end )
-               res.period_end = values[i].period_end;        }
-        return res;
-    }
-    """)
-
-    FINALIZE_STATS = bson.code.Code("""
-    function (key, value) {
-        %(aggregate_val)s
-        value.duration = (value.duration_end - value.duration_start) / 1000;
-        value.period = NumberInt(%(period)d);
-        return value;
-    }""")
+    AGGREGATES = dict([(a.name, a) for a in [
+        pymongo_utils.SUM_AGGREGATION,
+        pymongo_utils.AVG_AGGREGATION,
+        pymongo_utils.MIN_AGGREGATION,
+        pymongo_utils.MAX_AGGREGATION,
+        pymongo_utils.COUNT_AGGREGATION,
+        pymongo_utils.STDDEV_AGGREGATION,
+        pymongo_utils.CARDINALITY_AGGREGATION,
+    ]])
 
     SORT_OPERATION_MAPPING = {'desc': (pymongo.DESCENDING, '$lt'),
                               'asc': (pymongo.ASCENDING, '$gt')}
@@ -393,10 +146,12 @@ class Connection(pymongo_base.Connection):
         # connection since we instantiate a Pymongo client each time someone
         # requires a new storage connection.
         self.conn = self.CONNECTION_POOL.connect(url)
-
+        self.version = self.conn.server_info()['versionArray']
         # Require MongoDB 2.4 to use $setOnInsert
-        if self.conn.server_info()['versionArray'] < [2, 4]:
-            raise storage.StorageBadVersion("Need at least MongoDB 2.4")
+        if self.version < pymongo_utils.MINIMUM_COMPATIBLE_MONGODB_VERSION:
+            raise storage.StorageBadVersion(
+                "Need at least MongoDB %s" %
+                pymongo_utils.MINIMUM_COMPATIBLE_MONGODB_VERSION)
 
         connection_options = pymongo.uri_parser.parse_uri(url)
         self.db = getattr(self.conn, connection_options['database'])
@@ -411,10 +166,10 @@ class Connection(pymongo_base.Connection):
 
     @staticmethod
     def update_ttl(ttl, ttl_index_name, index_field, coll):
-        """Update or ensure time_to_live indexes.
+        """Update or create time_to_live indexes.
 
         :param ttl: time to live in seconds.
-        :param ttl_index_name: name of the index we want to update or ensure.
+        :param ttl_index_name: name of the index we want to update or create.
         :param index_field: field with the index that we need to update.
         :param coll: collection which indexes need to be updated.
         """
@@ -430,7 +185,7 @@ class Connection(pymongo_base.Connection):
                 index={'keyPattern': {index_field: pymongo.ASCENDING},
                        'expireAfterSeconds': ttl})
 
-        coll.ensure_index([(index_field, pymongo.ASCENDING)],
+        coll.create_index([(index_field, pymongo.ASCENDING)],
                           expireAfterSeconds=ttl,
                           name=ttl_index_name)
 
@@ -453,13 +208,13 @@ class Connection(pymongo_base.Connection):
         background = dict(user_id=False, project_id=True)
         for primary in ['user_id', 'project_id']:
             name = 'resource_%sidx' % name_qualifier[primary]
-            self.db.resource.ensure_index([
+            self.db.resource.create_index([
                 (primary, pymongo.ASCENDING),
                 ('source', pymongo.ASCENDING),
             ], name=name, background=background[primary])
 
             name = 'meter_%sidx' % name_qualifier[primary]
-            self.db.meter.ensure_index([
+            self.db.meter.create_index([
                 ('resource_id', pymongo.ASCENDING),
                 (primary, pymongo.ASCENDING),
                 ('counter_name', pymongo.ASCENDING),
@@ -467,17 +222,14 @@ class Connection(pymongo_base.Connection):
                 ('source', pymongo.ASCENDING),
             ], name=name, background=background[primary])
 
-        self.db.resource.ensure_index([('last_sample_timestamp',
+        self.db.resource.create_index([('last_sample_timestamp',
                                         pymongo.DESCENDING)],
                                       name='last_sample_timestamp_idx',
                                       sparse=True)
-        self.db.meter.ensure_index([('timestamp', pymongo.DESCENDING)],
+        self.db.meter.create_index([('timestamp', pymongo.DESCENDING)],
                                    name='timestamp_idx')
-        # remove API v1 related table
-        self.db.user.drop()
-        self.db.project.drop()
 
-        # update or ensure time_to_live index
+        # update or create time_to_live index
         ttl = cfg.CONF.database.metering_time_to_live
         self.update_ttl(ttl, 'meter_ttl', 'timestamp', self.db.meter)
         self.update_ttl(ttl, 'resource_ttl', 'last_sample_timestamp',
@@ -501,7 +253,7 @@ class Connection(pymongo_base.Connection):
         data = copy.deepcopy(data)
         data['resource_metadata'] = pymongo_utils.improve_keys(
             data.pop('resource_metadata'))
-        resource = self.db.resource.find_and_modify(
+        resource = self.db.resource.find_one_and_update(
             {'_id': data['resource_id']},
             {'$set': {'project_id': data['project_id'],
                       'user_id': data['user_id'],
@@ -518,7 +270,7 @@ class Connection(pymongo_base.Connection):
                            },
              },
             upsert=True,
-            new=True,
+            return_document=pymongo.ReturnDocument.AFTER,
         )
 
         # only update last sample timestamp if actually later (the usual
@@ -526,7 +278,7 @@ class Connection(pymongo_base.Connection):
         last_sample_timestamp = resource.get('last_sample_timestamp')
         if (last_sample_timestamp is None or
                 last_sample_timestamp <= data['timestamp']):
-            self.db.resource.update(
+            self.db.resource.update_one(
                 {'_id': data['resource_id']},
                 {'$set': {'metadata': data['resource_metadata'],
                           'last_sample_timestamp': data['timestamp']}}
@@ -540,7 +292,7 @@ class Connection(pymongo_base.Connection):
         first_sample_timestamp = resource.get('first_sample_timestamp')
         if (first_sample_timestamp is not None and
                 first_sample_timestamp > data['timestamp']):
-            self.db.resource.update(
+            self.db.resource.update_one(
                 {'_id': data['resource_id']},
                 {'$set': {'first_sample_timestamp': data['timestamp']}}
             )
@@ -550,7 +302,8 @@ class Connection(pymongo_base.Connection):
         # a new key '_id').
         record = copy.copy(data)
         record['recorded_at'] = timeutils.utcnow()
-        self.db.meter.insert(record)
+
+        self.db.meter.insert_one(record)
 
     def clear_expired_metering_data(self, ttl):
         """Clear expired data from the backend storage system.
@@ -593,47 +346,6 @@ class Connection(pymongo_base.Connection):
         return dict(criteria_equ, ** criteria_cmp)
 
     @classmethod
-    def _build_paginate_query(cls, marker, sort_keys=None, sort_dir='desc'):
-        """Returns a query with sorting / pagination.
-
-        Pagination works by requiring sort_key and sort_dir.
-        We use the last item in previous page as the 'marker' for pagination.
-        So we return values that follow the passed marker in the order.
-        :param q: The query dict passed in.
-        :param marker: the last item of the previous page; we return the next
-                       results after this item.
-        :param sort_keys: array of attributes by which results be sorted.
-        :param sort_dir: direction in which results be sorted (asc, desc).
-        :return: sort parameters, query to use
-        """
-        all_sort = []
-        sort_keys = sort_keys or []
-        all_sort, _op = cls._build_sort_instructions(sort_keys, sort_dir)
-
-        if marker is not None:
-            sort_criteria_list = []
-
-            for i in range(len(sort_keys)):
-                # NOTE(fengqian): Generate the query criteria recursively.
-                # sort_keys=[k1, k2, k3], maker_value=[v1, v2, v3]
-                # sort_flags = ['$lt', '$gt', 'lt'].
-                # The query criteria should be
-                # {'k3': {'$lt': 'v3'}, 'k2': {'eq': 'v2'}, 'k1':
-                #     {'eq': 'v1'}},
-                # {'k2': {'$gt': 'v2'}, 'k1': {'eq': 'v1'}},
-                # {'k1': {'$lt': 'v1'}} with 'OR' operation.
-                # Each recurse will generate one items of three.
-                sort_criteria_list.append(cls._recurse_sort_keys(
-                                          sort_keys[:(len(sort_keys) - i)],
-                                          marker, _op))
-
-            metaquery = {"$or": sort_criteria_list}
-        else:
-            metaquery = {}
-
-        return all_sort, metaquery
-
-    @classmethod
     def _build_sort_instructions(cls, sort_keys=None, sort_dir='desc'):
         """Returns a sort_instruction and paging operator.
 
@@ -655,43 +367,10 @@ class Connection(pymongo_base.Connection):
 
         return sort_instructions, operation
 
-    @classmethod
-    def paginate_query(cls, q, db_collection, limit=None, marker=None,
-                       sort_keys=None, sort_dir='desc'):
-        """Returns a query result with sorting / pagination.
-
-        Pagination works by requiring sort_key and sort_dir.
-        We use the last item in previous page as the 'marker' for pagination.
-        So we return values that follow the passed marker in the order.
-
-        :param q: the query dict passed in.
-        :param db_collection: Database collection that be query.
-        :param limit: maximum number of items to return.
-        :param marker: the last item of the previous page; we return the next
-                       results after this item.
-        :param sort_keys: array of attributes by which results be sorted.
-        :param sort_dir: direction in which results be sorted (asc, desc).
-
-        :return: The query with sorting/pagination added.
-        """
-
-        sort_keys = sort_keys or []
-        all_sort, query = cls._build_paginate_query(marker,
-                                                    sort_keys,
-                                                    sort_dir)
-        q.update(query)
-
-        # NOTE(Fengqian): MongoDB collection.find can not handle limit
-        # when it equals None, it will raise TypeError, so we treat
-        # None as 0 for the value of limit.
-        if limit is None:
-            limit = 0
-        return db_collection.find(q, limit=limit, sort=all_sort)
-
     def _get_time_constrained_resources(self, query,
                                         start_timestamp, start_timestamp_op,
                                         end_timestamp, end_timestamp_op,
-                                        metaquery, resource):
+                                        metaquery, resource, limit):
         """Return an iterable of models.Resource instances
 
         Items are constrained by sample timestamp.
@@ -738,7 +417,12 @@ class Connection(pymongo_base.Connection):
                                  query=query)
 
         try:
-            for r in self.db[out].find(sort=sort_instructions):
+            if limit is not None:
+                results = self.db[out].find(sort=sort_instructions,
+                                            limit=limit)
+            else:
+                results = self.db[out].find(sort=sort_instructions)
+            for r in results:
                 resource = r['value']
                 yield models.Resource(
                     resource_id=r['_id'],
@@ -751,7 +435,7 @@ class Connection(pymongo_base.Connection):
         finally:
             self.db[out].drop()
 
-    def _get_floating_resources(self, query, metaquery, resource):
+    def _get_floating_resources(self, query, metaquery, resource, limit):
         """Return an iterable of models.Resource instances
 
         Items are unconstrained by timestamp.
@@ -770,7 +454,13 @@ class Connection(pymongo_base.Connection):
                      for i in keys]
         sort_instructions = self._build_sort_instructions(sort_keys)[0]
 
-        for r in self.db.resource.find(query, sort=sort_instructions):
+        if limit is not None:
+            results = self.db.resource.find(query, sort=sort_instructions,
+                                            limit=limit)
+        else:
+            results = self.db.resource.find(query, sort=sort_instructions)
+
+        for r in results:
             yield models.Resource(
                 resource_id=r['_id'],
                 user_id=r['user_id'],
@@ -785,7 +475,7 @@ class Connection(pymongo_base.Connection):
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
                       end_timestamp=None, end_timestamp_op=None,
-                      metaquery=None, resource=None, pagination=None):
+                      metaquery=None, resource=None, limit=None):
         """Return an iterable of models.Resource instances
 
         :param user: Optional ID for user that owns the resource.
@@ -797,11 +487,10 @@ class Connection(pymongo_base.Connection):
         :param end_timestamp_op: Optional end time operator, like lt, le.
         :param metaquery: Optional dict with metadata to match on.
         :param resource: Optional resource filter.
-        :param pagination: Optional pagination query.
+        :param limit: Maximum number of results to return.
         """
-        if pagination:
-            raise ceilometer.NotImplementedError('Pagination not implemented')
-
+        if limit == 0:
+            return
         metaquery = pymongo_utils.improve_keys(metaquery, metaquery=True) or {}
 
         query = {}
@@ -818,39 +507,43 @@ class Connection(pymongo_base.Connection):
                                                         start_timestamp_op,
                                                         end_timestamp,
                                                         end_timestamp_op,
-                                                        metaquery, resource)
+                                                        metaquery, resource,
+                                                        limit)
         else:
-            return self._get_floating_resources(query, metaquery, resource)
+            return self._get_floating_resources(query, metaquery, resource,
+                                                limit)
 
-    def _aggregate_param(self, fragment_key, aggregate):
-        fragment_map = self.STANDARD_AGGREGATES[fragment_key]
+    @staticmethod
+    def _make_period_dict(period, first_ts):
+        """Create a period field for _id of grouped fields.
 
-        if not aggregate:
-            return ''.join([f for f in fragment_map.values()])
+        :param period: Period duration in seconds
+        :param first_ts: First timestamp for first period
+        :return:
+        """
+        if period >= 0:
+            period_unique_dict = {
+                "period_start":
+                    {
+                        "$divide": [
+                            {"$subtract": [
+                                {"$subtract": ["$timestamp",
+                                               first_ts]},
+                                {"$mod": [{"$subtract": ["$timestamp",
+                                                         first_ts]},
+                                          period * 1000]
+                                 }
+                            ]},
+                            period * 1000
+                        ]
+                    }
 
-        fragments = ''
-
-        for a in aggregate:
-            if a.func in self.STANDARD_AGGREGATES[fragment_key]:
-                fragment_map = self.STANDARD_AGGREGATES[fragment_key]
-                fragments += fragment_map[a.func]
-            elif a.func in self.UNPARAMETERIZED_AGGREGATES[fragment_key]:
-                fragment_map = self.UNPARAMETERIZED_AGGREGATES[fragment_key]
-                fragments += fragment_map[a.func]
-            elif a.func in self.PARAMETERIZED_AGGREGATES[fragment_key]:
-                fragment_map = self.PARAMETERIZED_AGGREGATES[fragment_key]
-                v = self.PARAMETERIZED_AGGREGATES['validate'].get(a.func)
-                if not (v and v(a.param)):
-                    raise storage.StorageBadAggregate('Bad aggregate: %s.%s'
-                                                      % (a.func, a.param))
-                params = dict(aggregate_param=a.param)
-                fragments += (fragment_map[a.func] % params)
-            else:
-                raise ceilometer.NotImplementedError(
-                    'Selectable aggregate function %s'
-                    ' is not supported' % a.func)
-
-        return fragments
+            }
+        else:
+            # Note(ityaptin) Hack for older MongoDB versions (2.4.+ and older).
+            # Since 2.6+ we could use $literal operator
+            period_unique_dict = {"$period_start": {"$add": [0, 0]}}
+        return period_unique_dict
 
     def get_meter_statistics(self, sample_filter, period=None, groupby=None,
                              aggregate=None):
@@ -859,97 +552,150 @@ class Connection(pymongo_base.Connection):
         Items are containing meter statistics described by the query
         parameters. The filter must have a meter value set.
         """
+
         if (groupby and set(groupby) -
             set(['user_id', 'project_id', 'resource_id', 'source',
                  'resource_metadata.instance_type'])):
             raise ceilometer.NotImplementedError(
                 "Unable to group by these fields")
-
         q = pymongo_utils.make_query_from_filter(sample_filter)
 
-        if period:
-            if sample_filter.start_timestamp:
-                period_start = sample_filter.start_timestamp
-            else:
-                period_start = self.db.meter.find(
-                    limit=1, sort=[('timestamp',
-                                    pymongo.ASCENDING)])[0]['timestamp']
-            period_start = int(calendar.timegm(period_start.utctimetuple()))
-            map_params = {'period': period,
-                          'period_first': period_start,
-                          'groupby_fields': json.dumps(groupby)}
-            if groupby:
-                map_fragment = self.MAP_STATS_PERIOD_GROUPBY
-            else:
-                map_fragment = self.MAP_STATS_PERIOD
+        group_stage = {}
+        project_stage = {
+            "unit": "$_id.unit",
+            "name": "$_id.name",
+            "first_timestamp": "$first_timestamp",
+            "last_timestamp": "$last_timestamp",
+            "period_start": "$_id.period_start",
+        }
+
+        # Add timestamps to $group stage
+        group_stage.update({"first_timestamp": {"$min": "$timestamp"},
+                            "last_timestamp": {"$max": "$timestamp"}})
+
+        # Define a _id field for grouped documents
+        unique_group_field = {"name": "$counter_name",
+                              "unit": "$counter_unit"}
+
+        # Define a first timestamp for periods
+        if sample_filter.start_timestamp:
+            first_timestamp = sample_filter.start_timestamp
         else:
-            if groupby:
-                map_params = {'groupby_fields': json.dumps(groupby)}
-                map_fragment = self.MAP_STATS_GROUPBY
+            first_timestamp_cursor = self.db.meter.find(
+                limit=1, sort=[('timestamp',
+                                pymongo.ASCENDING)])
+            if first_timestamp_cursor.count():
+                first_timestamp = first_timestamp_cursor[0]['timestamp']
             else:
-                map_params = dict()
-                map_fragment = self.MAP_STATS
+                first_timestamp = utils.EPOCH_TIME
 
-        sub = self._aggregate_param
+        # Add a start_period field to unique identifier of grouped documents
+        if period:
+            period_dict = self._make_period_dict(period,
+                                                 first_timestamp)
+            unique_group_field.update(period_dict)
 
-        map_params['aggregate_initial_val'] = sub('emit_initial', aggregate)
-        map_params['aggregate_body_val'] = sub('emit_body', aggregate)
+        # Add a groupby fields to unique identifier of grouped documents
+        if groupby:
+            unique_group_field.update(dict((field.replace(".", "/"),
+                                            "$%s" % field)
+                                      for field in groupby))
 
-        map_stats = map_fragment % map_params
+        group_stage.update({"_id": unique_group_field})
 
-        reduce_params = dict(
-            aggregate_initial_val=sub('reduce_initial', aggregate),
-            aggregate_body_val=sub('reduce_body', aggregate),
-            aggregate_computation_val=sub('reduce_computation', aggregate)
-        )
-        reduce_stats = self.REDUCE_STATS % reduce_params
+        self._compile_aggregate_stages(aggregate, group_stage, project_stage)
 
-        finalize_params = dict(aggregate_val=sub('finalize', aggregate),
-                               period=(period if period else 0))
-        finalize_stats = self.FINALIZE_STATS % finalize_params
+        # Aggregation stages list. It's work one by one and uses documents
+        # from previous stages.
+        aggregation_query = [{'$match': q},
+                             {"$sort": {"timestamp": 1}},
+                             {"$group": group_stage},
+                             {"$sort": {"_id.period_start": 1}},
+                             {"$project": project_stage}]
 
-        results = self.db.meter.map_reduce(
-            map_stats,
-            reduce_stats,
-            {'inline': 1},
-            finalize=finalize_stats,
-            query=q,
-        )
+        # results is dict in pymongo<=2.6.3 and CommandCursor in >=3.0
+        results = self.db.meter.aggregate(aggregation_query,
+                                          **self._make_aggregation_params())
+        return [self._stats_result_to_model(point, groupby, aggregate,
+                                            period, first_timestamp)
+                for point in self._get_results(results)]
 
-        # FIXME(terriyu) Fix get_meter_statistics() so we don't use sorted()
-        # to return the results
-        return sorted(
-            (self._stats_result_to_model(r['value'], groupby, aggregate)
-             for r in results['results']),
-            key=operator.attrgetter('period_start'))
-
-    @staticmethod
-    def _stats_result_aggregates(result, aggregate):
+    def _stats_result_aggregates(self, result, aggregate):
         stats_args = {}
-        for attr in ['count', 'min', 'max', 'sum', 'avg']:
+        for attr in Connection.STANDARD_AGGREGATES.keys():
             if attr in result:
                 stats_args[attr] = result[attr]
 
         if aggregate:
             stats_args['aggregate'] = {}
-            for a in aggregate:
-                ak = '%s%s' % (a.func, '/%s' % a.param if a.param else '')
-                if ak in result:
-                    stats_args['aggregate'][ak] = result[ak]
-                elif 'aggregate' in result:
-                    stats_args['aggregate'][ak] = result['aggregate'].get(ak)
+            for agr in aggregate:
+                stats_args['aggregate'].update(
+                    Connection.AGGREGATES[agr.func].finalize(
+                        result, agr.param, self.version))
         return stats_args
 
-    @staticmethod
-    def _stats_result_to_model(result, groupby, aggregate):
-        stats_args = Connection._stats_result_aggregates(result, aggregate)
+    def _stats_result_to_model(self, result, groupby, aggregate, period,
+                               first_timestamp):
+        if period is None:
+            period = 0
+        first_timestamp = pymongo_utils.from_unix_timestamp(first_timestamp)
+        stats_args = self._stats_result_aggregates(result, aggregate)
+
         stats_args['unit'] = result['unit']
-        stats_args['duration'] = result['duration']
-        stats_args['duration_start'] = result['duration_start']
-        stats_args['duration_end'] = result['duration_end']
-        stats_args['period'] = result['period']
-        stats_args['period_start'] = result['period_start']
-        stats_args['period_end'] = result['period_end']
-        stats_args['groupby'] = (dict(
-            (g, result['groupby'][g]) for g in groupby) if groupby else None)
+        stats_args['duration'] = (result["last_timestamp"] -
+                                  result["first_timestamp"]).total_seconds()
+        stats_args['duration_start'] = result['first_timestamp']
+        stats_args['duration_end'] = result['last_timestamp']
+        stats_args['period'] = period
+        start = result.get("period_start", 0) * period
+
+        stats_args['period_start'] = (first_timestamp +
+                                      datetime.timedelta(seconds=start))
+        stats_args['period_end'] = (first_timestamp +
+                                    datetime.timedelta(seconds=start + period)
+                                    if period else result['last_timestamp'])
+
+        stats_args['groupby'] = (
+            dict((g, result['_id'].get(g.replace(".", "/")))
+                 for g in groupby) if groupby else None)
         return models.Statistics(**stats_args)
+
+    def _compile_aggregate_stages(self, aggregate, group_stage, project_stage):
+        if not aggregate:
+            for aggregation in Connection.STANDARD_AGGREGATES.values():
+                group_stage.update(
+                    aggregation.group(version_array=self.version)
+                )
+                project_stage.update(
+                    aggregation.project(
+                        version_array=self.version
+                    )
+                )
+        else:
+            for description in aggregate:
+                aggregation = Connection.AGGREGATES.get(description.func)
+                if aggregation:
+                    if not aggregation.validate(description.param):
+                        raise storage.StorageBadAggregate(
+                            'Bad aggregate: %s.%s' % (description.func,
+                                                      description.param))
+                    group_stage.update(
+                        aggregation.group(description.param,
+                                          version_array=self.version)
+                    )
+                    project_stage.update(
+                        aggregation.project(description.param,
+                                            version_array=self.version)
+                    )
+
+    @staticmethod
+    def _get_results(results):
+        if isinstance(results, dict):
+            return results.get('result', [])
+        else:
+            return results
+
+    def _make_aggregation_params(self):
+        if self.version >= pymongo_utils.COMPLETE_AGGREGATE_COMPATIBLE_VERSION:
+            return {"allowDiskUse": True}
+        return {}

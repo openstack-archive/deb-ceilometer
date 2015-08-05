@@ -217,8 +217,8 @@ class Sample(Base):
     timestamp = Column(PreciseTimestamp(), default=lambda: timeutils.utcnow())
     recorded_at = Column(PreciseTimestamp(),
                          default=lambda: timeutils.utcnow())
-    message_signature = Column(String(1000))
-    message_id = Column(String(1000))
+    message_signature = Column(String(64))
+    message_id = Column(String(128))
 
 
 class FullSample(Base):
@@ -253,7 +253,7 @@ class Alarm(Base):
         Index('ix_alarm_user_id', 'user_id'),
         Index('ix_alarm_project_id', 'project_id'),
     )
-    alarm_id = Column(String(255), primary_key=True)
+    alarm_id = Column(String(128), primary_key=True)
     enabled = Column(Boolean)
     name = Column(Text)
     type = Column(String(50))
@@ -283,8 +283,8 @@ class AlarmChange(Base):
     __table_args__ = (
         Index('ix_alarm_history_alarm_id', 'alarm_id'),
     )
-    event_id = Column(String(255), primary_key=True)
-    alarm_id = Column(String(255))
+    event_id = Column(String(128), primary_key=True)
+    alarm_id = Column(String(128))
     on_behalf_of = Column(String(255))
     project_id = Column(String(255))
     user_id = Column(String(255))
@@ -343,8 +343,8 @@ class TraitText(Base):
         Index('ix_trait_text_event_id_key', 'event_id', 'key'),
     )
     event_id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    key = Column(Integer, primary_key=True)
-    value = Column(Text)
+    key = Column(String(255), primary_key=True)
+    value = Column(String(255))
 
 
 class TraitInt(Base):
@@ -355,7 +355,7 @@ class TraitInt(Base):
         Index('ix_trait_int_event_id_key', 'event_id', 'key'),
     )
     event_id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    key = Column(Integer, primary_key=True)
+    key = Column(String(255), primary_key=True)
     value = Column(Integer)
 
 
@@ -367,7 +367,7 @@ class TraitFloat(Base):
         Index('ix_trait_float_event_id_key', 'event_id', 'key'),
     )
     event_id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    key = Column(Integer, primary_key=True)
+    key = Column(String(255), primary_key=True)
     value = Column(Float(53))
 
 
@@ -379,5 +379,5 @@ class TraitDatetime(Base):
         Index('ix_trait_datetime_event_id_key', 'event_id', 'key'),
     )
     event_id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    key = Column(Integer, primary_key=True)
+    key = Column(String(255), primary_key=True)
     value = Column(PreciseTimestamp())

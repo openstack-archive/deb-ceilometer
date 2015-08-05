@@ -17,11 +17,11 @@
 
 """
 
-import oslo.messaging
 from oslo_config import cfg
+from oslo_log import log
+import oslo_messaging
 
 from ceilometer.agent import plugin_base
-from ceilometer.openstack.common import log
 from ceilometer import sample
 
 OPTS = [
@@ -61,12 +61,12 @@ class NetworkNotificationBase(plugin_base.NotificationBase):
 
     @staticmethod
     def get_targets(conf):
-        """Return a sequence of oslo.messaging.Target
+        """Return a sequence of oslo_messaging.Target
 
         This sequence is defining the exchange and topics to be connected for
         this plugin.
         """
-        return [oslo.messaging.Target(topic=topic,
+        return [oslo_messaging.Target(topic=topic,
                                       exchange=conf.neutron_control_exchange)
                 for topic in conf.notification_topics]
 
@@ -82,7 +82,7 @@ class NetworkNotificationBase(plugin_base.NotificationBase):
                 resource['id'] = message['payload']['id']
             resources = [resource]
         else:
-            resources = message['payload'].get(self.resource_name + 's')
+            resources = message['payload'].get(self.resource_name + 's', [])
 
         resource_message = message.copy()
         for resource in resources:

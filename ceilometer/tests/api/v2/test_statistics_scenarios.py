@@ -183,7 +183,7 @@ class TestMaxResourceVolume(v2.FunctionalTest,
                                  'value': 'user-id'}],
                              period=10000000000000)
         self.assertEqual(400, resp.status_code)
-        self.assertIn("Invalid period", resp.body)
+        self.assertIn(b"Invalid period", resp.body)
 
     def test_start_timestamp(self):
         data = self.get_json(self.PATH, q=[{'field': 'resource_id',
@@ -1460,7 +1460,7 @@ class TestSelectableAggregates(v2.FunctionalTest,
         # add a large number of datapoints that won't impact on cardinality
         # if the computation logic is tolerant of different DB behavior on
         # larger numbers of samples per-period
-        for i in xrange(200):
+        for i in range(200):
             s = sample.Sample(
                 'instance',
                 sample.TYPE_GAUGE,

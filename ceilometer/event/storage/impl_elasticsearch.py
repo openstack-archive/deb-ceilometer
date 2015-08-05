@@ -16,13 +16,18 @@ import operator
 
 import elasticsearch as es
 from elasticsearch import helpers
+from oslo_log import log
 from oslo_utils import netutils
 from oslo_utils import timeutils
 import six
 
 from ceilometer.event.storage import base
 from ceilometer.event.storage import models
+from ceilometer.i18n import _LE, _LI
+from ceilometer import storage
 from ceilometer import utils
+
+LOG = log.getLogger(__name__)
 
 
 AVAILABLE_CAPABILITIES = {
@@ -93,23 +98,24 @@ class Connection(base.Connection):
                                    'traits': traits,
                                    'raw': ev.raw}}
 
-        problem_events = []
+        error = None
         for ok, result in helpers.streaming_bulk(
                 self.conn, _build_bulk_index(events)):
             if not ok:
                 __, result = result.popitem()
                 if result['status'] == 409:
-                    problem_events.append((models.Event.DUPLICATE,
-                                           result['_id']))
+                    LOG.info(_LI('Duplicate event detected, skipping it: %s')
+                             % result)
                 else:
-                    problem_events.append((models.Event.UNKNOWN_PROBLEM,
-                                           result['_id']))
+                    LOG.exception(_LE('Failed to record event: %s') % result)
+                    error = storage.StorageUnknownWriteError(result)
 
         if self._refresh_on_write:
             self.conn.indices.refresh(index='%s_*' % self.index_name)
             while self.conn.cluster.pending_tasks(local=True)['tasks']:
                 pass
-        return problem_events
+        if error:
+            raise error
 
     def _make_dsl_from_filter(self, indices, ev_filter):
         q_args = {}
@@ -166,11 +172,15 @@ class Connection(base.Connection):
                                     {'filter': {'bool': {'must': filters}}}}}
         return q_args
 
-    def get_events(self, event_filter):
+    def get_events(self, event_filter, limit=None):
+        if limit == 0:
+            return
         iclient = es.client.IndicesClient(self.conn)
         indices = iclient.get_mapping('%s_*' % self.index_name).keys()
         if indices:
             filter_args = self._make_dsl_from_filter(indices, event_filter)
+            if limit is not None:
+                filter_args['size'] = limit
             results = self.conn.search(fields=['_id', 'timestamp',
                                                '_type', '_source'],
                                        sort='timestamp:asc',
@@ -187,6 +197,8 @@ class Connection(base.Connection):
                         if t_map['name'] == key:
                             dtype = t_map['data_type']
                             break
+                    else:
+                        dtype = models.Trait.TEXT_TYPE
                     trait_list.append(models.Trait(
                         name=key, dtype=dtype,
                         value=models.Trait.convert_value(dtype, value)))

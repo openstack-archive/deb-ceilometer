@@ -23,11 +23,12 @@ MEDIA_TYPE_XML = 'application/vnd.openstack.telemetry-%s+xml'
 
 class RootController(object):
 
-    v2 = v2.V2Controller()
+    def __init__(self):
+        self.v2 = v2.V2Controller()
 
     @pecan.expose('json')
     def index(self):
-        base_url = pecan.request.host_url
+        base_url = pecan.request.application_url
         available = [{'tag': 'v2', 'date': '2013-02-13T00:00:00Z', }]
         collected = [version_descriptor(base_url, v['tag'], v['date'])
                      for v in available]

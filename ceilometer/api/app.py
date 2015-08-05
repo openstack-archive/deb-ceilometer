@@ -16,8 +16,8 @@
 import logging
 import os
 
-
 from oslo_config import cfg
+from oslo_log import log
 from paste import deploy
 import pecan
 from werkzeug import serving
@@ -27,9 +27,7 @@ from ceilometer.api import hooks
 from ceilometer.api import middleware
 from ceilometer.i18n import _
 from ceilometer.i18n import _LW
-from ceilometer.openstack.common import log
 from ceilometer import service
-from ceilometer import storage
 
 LOG = log.getLogger(__name__)
 
@@ -48,6 +46,10 @@ API_OPTS = [
     cfg.BoolOpt('pecan_debug',
                 default=False,
                 help='Toggle Pecan Debug Middleware.'),
+    cfg.IntOpt('default_api_return_limit',
+               default=1000,
+               help='Default maximum number of items returned by API request.'
+               ),
 ]
 
 CONF.register_opts(OPTS)
@@ -63,11 +65,8 @@ def get_pecan_config():
 def setup_app(pecan_config=None, extra_hooks=None):
     # FIXME: Replace DBHook with a hooks.TransactionHook
     app_hooks = [hooks.ConfigHook(),
-                 hooks.DBHook(
-                     storage.get_connection_from_config(cfg.CONF, 'metering'),
-                     storage.get_connection_from_config(cfg.CONF, 'event'),
-                     storage.get_connection_from_config(cfg.CONF, 'alarm'),),
-                 hooks.PipelineHook(),
+                 hooks.DBHook(),
+                 hooks.NotifierHook(),
                  hooks.TranslationHook()]
     if extra_hooks:
         app_hooks.extend(extra_hooks)
