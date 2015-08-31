@@ -2,9 +2,7 @@ Source: ceilometer
 Section: web
 Priority: optional
 Maintainer: PKG OpenStack <openstack-devel@lists.alioth.debian.org>
-Uploaders: Julien Danjou <acid@debian.org>,
-           Thomas Goirand <zigo@debian.org>,
-           Mehdi Abaakouk <sileht@sileht.net>,
+Uploaders: Thomas Goirand <zigo@debian.org>,
 Build-Depends: debhelper (>= 9),
                dh-python,
                dh-systemd,
@@ -19,15 +17,15 @@ Build-Depends-Indep: alembic (>= 0.7.2),
                      python-awsauth,
                      python-babel,
                      python-ceilometerclient (>= 1.0.13),
-                     python-coverage,
                      python-contextlib2,
+                     python-coverage,
                      python-croniter,
                      python-elasticsearch (>= 1.3.0),
                      python-eventlet (>= 0.17.4),
                      python-fixtures (>= 1.3.1),
                      python-gabbi (>= 0.12.0),
                      python-glanceclient (>= 1:0.18.0),
-                     python-hacking,
+                     python-hacking (>= 0.9.2),
                      python-happybase,
                      python-httplib2,
                      python-jsonpath-rw,
@@ -35,14 +33,14 @@ Build-Depends-Indep: alembic (>= 0.7.2),
                      python-kafka,
                      python-keystoneclient (>= 1:1.6.0),
                      python-keystonemiddleware (>= 2.0.0),
-                     python-kombu (>= 2.4.8),
+                     python-kombu,
                      python-lxml,
                      python-migrate (>= 0.9.6),
                      python-mock (>= 1.3),
-                     python-msgpack,
+                     python-msgpack (>= 0.4.0),
                      python-mysqldb,
-                     python-neutronclient (>= 2.3.11),
-                     python-novaclient (>= 2:2.22.0),
+                     python-neutronclient (>= 1:2.6.0),
+                     python-novaclient (>= 2:2.26.0),
                      python-oslo.concurrency (>= 2.1.0),
                      python-oslo.config (>= 1:1.11.0),
                      python-oslo.context (>= 0.2.0),
@@ -62,18 +60,18 @@ Build-Depends-Indep: alembic (>= 0.7.2),
                      python-pastedeploy,
                      python-pecan (>= 0.8.0),
                      python-psycopg2,
-                     python-pymongo (>= 3.0.1),
+                     python-pymongo (>= 3.0.2),
                      python-pymysql,
                      python-pysnmp4,
                      python-requests (>= 2.5.2),
                      python-retrying,
                      python-six (>= 1.9.0),
-                     python-sphinxcontrib-docbookrestapi,
-                     python-sphinxcontrib-httpdomain,
+                     python-sphinxcontrib.docbookrestapi,
+                     python-sphinxcontrib.httpdomain,
                      python-sphinxcontrib-pecanwsme,
-                     python-sqlalchemy,
+                     python-sqlalchemy (>= 0.9.6),
                      python-stevedore (>= 1.5.0),
-                     python-swiftclient,
+                     python-swiftclient (>= 1:2.2.0),
                      python-tempest-lib (>= 0.6.1),
                      python-testscenarios,
                      python-testtools (>= 1.4.0),
@@ -99,19 +97,20 @@ Depends: alembic (>= 0.7.2),
          python-croniter,
          python-eventlet (>= 0.17.4),
          python-glanceclient (>= 1:0.18.0),
-         python-greenlet (>= 0.4),
+         python-greenlet,
+         python-happybase,
          python-jsonpath-rw,
          python-jsonschema,
          python-kafka,
          python-keystoneclient (>= 1:1.6.0),
          python-keystonemiddleware (>= 2.0.0),
-         python-kombu (>= 2.4.8),
+         python-kombu,
          python-lxml,
-         python-migrate (>= 0.9.6),
-         python-msgpack,
+         python-migrate (>= 0.9.7),
+         python-msgpack (>= 0.4.0),
          python-mysqldb,
-         python-neutronclient (>= 2.3.11),
-         python-novaclient (>= 2:2.22.0),
+         python-neutronclient (>= 1:2.6.0),
+         python-novaclient (>= 2:2.26.0),
          python-oslo.concurrency (>= 2.1.0),
          python-oslo.config (>= 1:1.11.0),
          python-oslo.context (>= 0.2.0),
@@ -125,8 +124,9 @@ Depends: alembic (>= 0.7.2),
          python-oslo.serialization (>= 1.4.0),
          python-oslo.service,
          python-oslo.utils (>= 1.9.0),
-         python-pbr (>= 1.3),
+         python-oslo.vmware (>= 1.16.0),
          python-pastedeploy,
+         python-pbr (>= 1.3),
          python-pecan (>= 0.8.0),
          python-pymongo,
          python-pymysql,
@@ -134,9 +134,9 @@ Depends: alembic (>= 0.7.2),
          python-requests (>= 2.5.2),
          python-retrying,
          python-six (>= 1.9.0),
-         python-sqlalchemy,
+         python-sqlalchemy (>= 0.9.6),
          python-stevedore (>= 1.5.0),
-         python-swiftclient,
+         python-swiftclient (>= 1:2.2.0),
          python-tooz (>= 0.16.0),
          python-tz,
          python-webob,
@@ -153,6 +153,8 @@ Description: OpenStack efficient metering counters system - Python libraries
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the Python libraries that are needed for all parts of
  Ceilometer.
 
@@ -163,7 +165,7 @@ Depends: adduser,
          python-ceilometer (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
-Provides: ${python:Provides}
+Provides: ${python:Provides},
 Description: OpenStack efficient metering counters system - common files
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
@@ -171,6 +173,8 @@ Description: OpenStack efficient metering counters system - common files
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
  .
  This package contains files that are needed for all parts of Ceilometer.
 
@@ -180,6 +184,7 @@ Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
          ${python:Depends},
+Suggests: mongodb,
 Description: OpenStack efficient metering counters system - collector service
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
@@ -188,16 +193,17 @@ Description: OpenStack efficient metering counters system - collector service
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the collector service.
 
 Package: ceilometer-polling
 Architecture: all
-Depends:
- ceilometer-common (= ${binary:Version}),
- ${misc:Depends},
- ${ostack-lsb-base},
- ${python:Depends}
-Suggests: mongodb
+Depends: ceilometer-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends},
+Suggests: mongodb,
 Description: OpenStack efficient metering counters system - polling service
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
@@ -205,6 +211,8 @@ Description: OpenStack efficient metering counters system - polling service
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
  .
  This package contains the polling service.
 
@@ -216,6 +224,7 @@ Depends: adduser,
          ${misc:Depends},
          ${ostack-lsb-base},
          ${python:Depends},
+Suggests: mongodb,
 Description: OpenStack efficient metering counters system (API service)
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
@@ -223,6 +232,8 @@ Description: OpenStack efficient metering counters system (API service)
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
  .
  This package contains the API service.
 
@@ -240,6 +251,8 @@ Description: OpenStack efficient metering counters system - compute agent
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the compute agent.
 
 Package: ceilometer-agent-central
@@ -256,11 +269,14 @@ Description: OpenStack efficient metering counters system - central agent
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the central agent.
 
 Package: ceilometer-agent-ipmi
 Architecture: all
 Depends: ceilometer-common (= ${binary:Version}),
+         ipmitool,
          ${misc:Depends},
          ${ostack-lsb-base},
          ${python:Depends},
@@ -272,6 +288,8 @@ Description: OpenStack efficient metering counters system - IPMI agent
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the IPMI agent daemon.
 
 Package: ceilometer-agent-notification
@@ -280,13 +298,15 @@ Depends: ceilometer-common (= ${binary:Version}),
          ${misc:Depends},
          ${ostack-lsb-base},
          ${python:Depends},
-Description: OpenStack efficient metering counters system - agent notification
+Description: OpenStack efficient metering counters system - notification agent
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
  all current and future OpenStack components. The delivery of counters must be
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
  .
  This package contains the notification agent daemon.
 
@@ -304,6 +324,8 @@ Description: OpenStack efficient metering counters system - alarm evaluator
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the alarm evaluator daemon.
 
 Package: ceilometer-alarm-notifier
@@ -320,6 +342,8 @@ Description: OpenStack efficient metering counters system - alarm notifier
  projects, and agents doing data collections should be independent of the
  overall system.
  .
+ (A ceilometer is an instrument that measures cloud coverage.)
+ .
  This package contains the alarm notifier daemon.
 
 Package: ceilometer-doc
@@ -334,5 +358,7 @@ Description: OpenStack efficient metering counters system - doc
  traceable and auditable, the counters must be easily extensible to support new
  projects, and agents doing data collections should be independent of the
  overall system.
+ .
+ (A ceilometer is an instrument that measures cloud coverage.)
  .
  This package contains the documentation.

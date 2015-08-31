@@ -1,10 +1,8 @@
 #!/usr/bin/make -f
 
-#export DH_VERBOSE=1
-
+export HOME="$(CURDIR)/debian/test"
 include /usr/share/openstack-pkg-tools/pkgos.make
-
-export OSLO_PACKAGE_VERSION=$(VERSION)
+export OSLO_PACKAGE_VERSION=$(shell dpkg-parsechangelog | grep Version: | cut -d' ' -f2 | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//' -e 's/~/.0/' | head -n 1)
 
 %:
 	dh $@  --with python2,systemd,sphinxdoc
@@ -12,7 +10,6 @@ export OSLO_PACKAGE_VERSION=$(VERSION)
 override_dh_clean:
 	dh_clean
 	rm -rf .testrepository
-	rm -rf ceilometer.egg-info
 	rm -f debian/ceilometer-common.config debian/ceilometer-common.postinst debian/ceilometer-api.config debian/ceilometer-api.postinst
 
 override_dh_install:
@@ -39,9 +36,9 @@ override_dh_auto_build:
 
 override_dh_auto_clean:
 	dh_auto_clean
-	rm -rf debian/*.upstart
-	rm -rf debian/ceilometer-common.postinst
+	rm -rf .testrepository
 	find . -iname '*.pyc' -delete
+	rm -f debian/*.init debian/*.service debian/*.upstart
 
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
