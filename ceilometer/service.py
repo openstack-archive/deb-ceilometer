@@ -21,10 +21,10 @@ import sys
 from oslo_config import cfg
 import oslo_i18n
 from oslo_log import log
+from oslo_reports import guru_meditation_report as gmr
 
-from ceilometer.i18n import _
 from ceilometer import messaging
-from ceilometer import utils
+from ceilometer import version
 
 
 OPTS = [
@@ -33,14 +33,6 @@ OPTS = [
                help='Name of this node, which must be valid in an AMQP '
                'key. Can be an opaque identifier. For ZeroMQ only, must '
                'be a valid host name, FQDN, or IP address.'),
-    cfg.IntOpt('collector_workers',
-               default=1,
-               help='Number of workers for collector service. A single '
-               'collector is enabled by default.'),
-    cfg.IntOpt('notification_workers',
-               default=1,
-               help='Number of workers for notification service. A single '
-               'notification agent is enabled by default.'),
     cfg.IntOpt('http_timeout',
                default=600,
                help='Timeout seconds for HTTP requests. Set it to None to '
@@ -87,27 +79,40 @@ CLI_OPTS = [
                 help='Disables X.509 certificate validation when an '
                      'SSL connection to Identity Service is established.'),
 ]
+
 cfg.CONF.register_cli_opts(CLI_OPTS, group="service_credentials")
+
+API_OPT = cfg.IntOpt('workers',
+                     default=1,
+                     min=1,
+                     deprecated_group='DEFAULT',
+                     deprecated_name='api_workers',
+                     help='Number of workers for api, default value is 1.')
+cfg.CONF.register_opt(API_OPT, 'api')
+
+NOTI_OPT = cfg.IntOpt('workers',
+                      default=1,
+                      min=1,
+                      deprecated_group='DEFAULT',
+                      deprecated_name='notification_workers',
+                      help='Number of workers for notification service, '
+                           'default value is 1.')
+cfg.CONF.register_opt(NOTI_OPT, 'notification')
+
+COLL_OPT = cfg.IntOpt('workers',
+                      default=1,
+                      min=1,
+                      deprecated_group='DEFAULT',
+                      deprecated_name='collector_workers',
+                      help='Number of workers for collector service. '
+                           'default value is 1.')
+cfg.CONF.register_opt(COLL_OPT, 'collector')
+
 
 LOG = log.getLogger(__name__)
 
 
-class WorkerException(Exception):
-    """Exception for errors relating to service workers."""
-
-
-def get_workers(name):
-    workers = (cfg.CONF.get('%s_workers' % name) or
-               utils.cpu_count())
-    if workers and workers < 1:
-        msg = (_("%(worker_name)s value of %(workers)s is invalid, "
-                 "must be greater than 0") %
-               {'worker_name': '%s_workers' % name, 'workers': str(workers)})
-        raise WorkerException(msg)
-    return workers
-
-
-def prepare_service(argv=None):
+def prepare_service(argv=None, config_files=None):
     oslo_i18n.enable_lazy()
     log.register_options(cfg.CONF)
     log_levels = (cfg.CONF.default_log_levels +
@@ -115,6 +120,13 @@ def prepare_service(argv=None):
     log.set_defaults(default_log_levels=log_levels)
     if argv is None:
         argv = sys.argv
-    cfg.CONF(argv[1:], project='ceilometer', validate_default_values=True)
+    cfg.CONF(argv[1:], project='ceilometer', validate_default_values=True,
+             version=version.version_info.version_string(),
+             default_config_files=config_files)
     log.setup(cfg.CONF, 'ceilometer')
+    # NOTE(liusheng): guru cannot run with service under apache daemon, so when
+    # ceilometer-api running with mod_wsgi, the argv is [], we don't start
+    # guru.
+    if argv:
+        gmr.TextGuruMeditation.setup_autorun(version)
     messaging.setup()

@@ -27,8 +27,9 @@ from ceilometer.i18n import _
 OPTS = [
     cfg.StrOpt('hypervisor_inspector',
                default='libvirt',
-               choices=('hyperv', 'libvirt', 'vmware', 'xenapi'),
-               help='Inspector to use for inspecting the hypervisor layer.'),
+               help='Inspector to use for inspecting the hypervisor layer. '
+                    'Known inspectors are libvirt, hyperv, vmware, xenapi '
+                    'and powervm.'),
 ]
 
 cfg.CONF.register_opts(OPTS)
@@ -183,9 +184,21 @@ class NoDataException(InspectorException):
     pass
 
 
+class NoSanityException(InspectorException):
+    pass
+
+
 # Main virt inspector abstraction layering over the hypervisor API.
 #
 class Inspector(object):
+
+    def check_sanity(self):
+        """Check the sanity of hypervisor inspector.
+
+        Each subclass could overwrite it to throw any exception
+        when detecting mis-configured inspector
+        """
+        pass
 
     def inspect_cpus(self, instance):
         """Inspect the CPU statistics for an instance.
@@ -241,6 +254,16 @@ class Inspector(object):
         :param duration: the last 'n' seconds, over which the value should be
                inspected
         :return: the amount of memory used
+        """
+        raise ceilometer.NotImplementedError
+
+    def inspect_memory_resident(self, instance, duration=None):
+        """Inspect the resident memory statistics for an instance.
+
+        :param instance: the target instance
+        :param duration: the last 'n' seconds, over which the value should be
+               inspected
+        :return: the amount of resident memory
         """
         raise ceilometer.NotImplementedError
 

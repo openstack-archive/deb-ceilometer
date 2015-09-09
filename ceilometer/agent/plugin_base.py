@@ -93,7 +93,7 @@ class NotificationBase(PluginBase):
         super(NotificationBase, self).__init__()
         # NOTE(gordc): this is filter rule used by oslo.messaging to dispatch
         # messages to an endpoint.
-        if self.event_types is not None:
+        if self.event_types:
             self.filter_rule = oslo_messaging.NotificationFilter(
                 event_type='|'.join(self.event_types))
         self.manager = manager
@@ -178,8 +178,8 @@ class PollsterPermanentError(Exception):
     error.
     """
 
-    def __init__(self, resource):
-        self.fail_res = resource
+    def __init__(self, resources):
+        self.fail_res_list = resources
 
 
 @six.add_metaclass(abc.ABCMeta)

@@ -24,7 +24,6 @@ import copy
 import datetime
 import decimal
 import hashlib
-import multiprocessing
 import struct
 
 from oslo_concurrency import processutils
@@ -73,8 +72,10 @@ def decode_unicode(input):
         # the tuple would become list. So we have to generate the value as
         # list here.
         return [decode_unicode(element) for element in input]
-    elif isinstance(input, six.text_type):
+    elif six.PY2 and isinstance(input, six.text_type):
         return input.encode('utf-8')
+    elif six.PY3 and isinstance(input, six.binary_type):
+        return input.decode('utf-8')
     else:
         return input
 
@@ -198,13 +199,6 @@ def update_nested(original_dict, updates):
         else:
             dict_to_update[key] = updates[key]
     return dict_to_update
-
-
-def cpu_count():
-    try:
-        return multiprocessing.cpu_count() or 1
-    except NotImplementedError:
-        return 1
 
 
 def uniq(dupes, attrs):

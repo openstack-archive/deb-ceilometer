@@ -18,7 +18,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from keystoneclient.openstack.common.apiclient import exceptions
+from keystoneclient import exceptions
 from oslo_config import cfg
 from oslo_log import log
 import pecan
@@ -59,7 +59,7 @@ LOG = log.getLogger(__name__)
 def gnocchi_abort():
     pecan.abort(410, ("This telemetry installation is configured to use "
                       "Gnocchi. Please use the Gnocchi API available on "
-                      "the metric endpoint to retreive data."))
+                      "the metric endpoint to retrieve data."))
 
 
 def aodh_redirect(url):

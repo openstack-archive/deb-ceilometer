@@ -30,6 +30,8 @@ LOG = log.getLogger(__name__)
 class ScalingTransformer(transformer.TransformerBase):
     """Transformer to apply a scaling conversion."""
 
+    grouping_keys = ['resource_id']
+
     def __init__(self, source=None, target=None, **kwargs):
         """Initialize transformer with configured parameters.
 
@@ -43,10 +45,9 @@ class ScalingTransformer(transformer.TransformerBase):
         self.source = source
         self.target = target
         self.scale = target.get('scale')
-        LOG.debug(_('scaling conversion transformer with source:'
-                    ' %(source)s target: %(target)s:')
-                  % {'source': source,
-                     'target': target})
+        LOG.debug('scaling conversion transformer with source:'
+                  ' %(source)s target: %(target)s:', {'source': source,
+                                                      'target': target})
         super(ScalingTransformer, self).__init__(**kwargs)
 
     def _scale(self, s):
@@ -89,10 +90,10 @@ class ScalingTransformer(transformer.TransformerBase):
 
     def handle_sample(self, context, s):
         """Handle a sample, converting if necessary."""
-        LOG.debug(_('handling sample %s'), (s,))
+        LOG.debug('handling sample %s', s)
         if self.source.get('unit', s.unit) == s.unit:
             s = self._convert(s)
-            LOG.debug(_('converted to: %s'), (s,))
+            LOG.debug('converted to: %s', s)
         return s
 
 
@@ -111,7 +112,7 @@ class RateOfChangeTransformer(ScalingTransformer):
 
     def handle_sample(self, context, s):
         """Handle a sample, converting if necessary."""
-        LOG.debug(_('handling sample %s'), (s,))
+        LOG.debug('handling sample %s', s)
         key = s.name + s.resource_id
         prev = self.cache.get(key)
         timestamp = timeutils.parse_isotime(s.timestamp)
@@ -121,9 +122,16 @@ class RateOfChangeTransformer(ScalingTransformer):
             prev_volume = prev[0]
             prev_timestamp = prev[1]
             time_delta = timeutils.delta_seconds(prev_timestamp, timestamp)
-            # we only allow negative deltas for noncumulative samples, whereas
-            # for cumulative we assume that a reset has occurred in the interim
-            # so that the current volume gives a lower bound on growth
+            # disallow violations of the arrow of time
+            if time_delta < 0:
+                LOG.warn(_('dropping out of time order sample: %s'), (s,))
+                # Reset the cache to the newer sample.
+                self.cache[key] = prev
+                return None
+            # we only allow negative volume deltas for noncumulative
+            # samples, whereas for cumulative we assume that a reset has
+            # occurred in the interim so that the current volume gives a
+            # lower bound on growth
             volume_delta = (s.volume - prev_volume
                             if (prev_volume <= s.volume or
                                 s.type != sample.TYPE_CUMULATIVE)
@@ -132,7 +140,7 @@ class RateOfChangeTransformer(ScalingTransformer):
                               if time_delta else 0.0)
 
             s = self._convert(s, rate_of_change)
-            LOG.debug(_('converted to: %s'), (s,))
+            LOG.debug('converted to: %s', s)
         else:
             LOG.warn(_('dropping sample with no predecessor: %s'),
                      (s,))

@@ -12,11 +12,14 @@
 # under the License.
 
 import fnmatch
+import functools
+import itertools
 import os
+import pkg_resources
 import six
 import yaml
 
-import jsonpath_rw
+from jsonpath_rw_ext import parser
 from oslo_config import cfg
 from oslo_log import log
 import oslo_messaging
@@ -33,6 +36,8 @@ OPTS = [
 ]
 
 cfg.CONF.register_opts(OPTS, group='meter')
+cfg.CONF.import_opt('disable_non_metric_meters', 'ceilometer.notification',
+                    group='notification')
 
 LOG = log.getLogger(__name__)
 
@@ -40,6 +45,7 @@ LOG = log.getLogger(__name__)
 class MeterDefinitionException(Exception):
     def __init__(self, message, definition_cfg):
         super(MeterDefinitionException, self).__init__(message)
+        self.message = message
         self.definition_cfg = definition_cfg
 
     def __str__(self):
@@ -49,51 +55,75 @@ class MeterDefinitionException(Exception):
 
 class MeterDefinition(object):
 
+    JSONPATH_RW_PARSER = parser.ExtentedJsonPathParser()
+
     def __init__(self, definition_cfg):
         self.cfg = definition_cfg
-        self._validate_type()
+
+        self._event_type = self.cfg.get('event_type')
+        if not self._event_type:
+            raise MeterDefinitionException(
+                _LE("Required field event_type not specified"), self.cfg)
+        if isinstance(self._event_type, six.string_types):
+            self._event_type = [self._event_type]
+
+        if ('type' not in self.cfg.get('lookup', []) and
+                self.cfg['type'] not in sample.TYPES):
+            raise MeterDefinitionException(
+                _LE("Invalid type %s specified") % self.cfg['type'], self.cfg)
+
+        self._field_getter = {}
+        for name, field in self.cfg.items():
+            if name in ["event_type", "lookup"] or not field:
+                continue
+            elif isinstance(field, six.integer_types):
+                self._field_getter[name] = field
+            else:
+                parts = self.parse_jsonpath(field)
+                self._field_getter[name] = functools.partial(
+                    self._parse_jsonpath_field, parts)
+
+    def parse_jsonpath(self, field):
+        try:
+            parts = self.JSONPATH_RW_PARSER.parse(field)
+        except Exception as e:
+            raise MeterDefinitionException(_LE(
+                "Parse error in JSONPath specification "
+                "'%(jsonpath)s': %(err)s")
+                % dict(jsonpath=field, err=e), self.cfg)
+        return parts
 
     def match_type(self, meter_name):
-        try:
-            event_type = self.cfg['event_type']
-        except KeyError as err:
-            raise MeterDefinitionException(
-                _LE("Required field %s not specified") % err.args[0], self.cfg)
-
-        if isinstance(event_type, six.string_types):
-            event_type = [event_type]
-        for t in event_type:
+        for t in self._event_type:
             if fnmatch.fnmatch(meter_name, t):
                 return True
 
-    def parse_fields(self, field, message):
-        fval = self.cfg.get(field)
-        if not fval:
+    def parse_fields(self, field, message, all_values=False):
+        getter = self._field_getter.get(field)
+        if not getter:
             return
-        if isinstance(fval, six.integer_types):
-            return fval
-        try:
-            parts = jsonpath_rw.parse(fval)
-        except Exception as e:
-            raise MeterDefinitionException(
-                _LE("Parse error in JSONPath specification "
-                    "'%(jsonpath)s': %(err)s")
-                % dict(jsonpath=parts, err=e), self.cfg)
+        elif callable(getter):
+            return getter(message, all_values)
+        else:
+            return getter
+
+    @staticmethod
+    def _parse_jsonpath_field(parts, message, all_values):
         values = [match.value for match in parts.find(message)
                   if match.value is not None]
         if values:
-            return values[0]
-
-    def _validate_type(self):
-        if self.cfg['type'] not in sample.TYPES:
-            raise MeterDefinitionException(
-                _LE("Invalid type %s specified") % self.cfg['type'], self.cfg)
+            if not all_values:
+                return values[0]
+            return values
 
 
 def get_config_file():
     config_file = cfg.CONF.meter.meter_definitions_cfg_file
     if not os.path.exists(config_file):
         config_file = cfg.CONF.find_file(config_file)
+    if not config_file:
+        config_file = pkg_resources.resource_filename(
+            __name__, "data/meters.yaml")
     return config_file
 
 
@@ -126,7 +156,7 @@ def setup_meters_config():
     else:
         LOG.debug(_LE("No Meter Definitions configuration file found!"
                   " Using default config."))
-        meters_config = []
+        meters_config = {}
 
     LOG.info(_LE("Meter Definitions: %s"), meters_config)
 
@@ -134,13 +164,21 @@ def setup_meters_config():
 
 
 def load_definitions(config_def):
+    if not config_def:
+        return []
     return [MeterDefinition(event_def)
-            for event_def in reversed(config_def['metric'])]
+            for event_def in reversed(config_def['metric'])
+            if (event_def['volume'] != 1 or
+                not cfg.CONF.notification.disable_non_metric_meters)]
+
+
+class InvalidPayload(Exception):
+    pass
 
 
 class ProcessMeterNotifications(plugin_base.NotificationBase):
 
-    event_types = None
+    event_types = []
 
     def __init__(self, manager):
         super(ProcessMeterNotifications, self).__init__(manager)
@@ -167,6 +205,7 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
             conf.swift_control_exchange,
             conf.magnetodb_control_exchange,
             conf.ceilometer_control_exchange,
+            conf.magnum_control_exchange,
             ]
 
         for exchange in exchanges:
@@ -175,21 +214,71 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
                            for topic in conf.notification_topics)
         return targets
 
+    @staticmethod
+    def _normalise_as_list(value, d, body, length):
+        values = d.parse_fields(value, body, True)
+        if not values:
+            if value in d.cfg.get('lookup'):
+                LOG.warning('Could not find %s values', value)
+                raise InvalidPayload
+            values = [d.cfg[value]]
+        elif value in d.cfg.get('lookup') and length != len(values):
+            LOG.warning('Not all fetched meters contain "%s" field', value)
+            raise InvalidPayload
+        return values if isinstance(values, list) else [values]
+
     def process_notification(self, notification_body):
         for d in self.definitions:
             if d.match_type(notification_body['event_type']):
                 userid = self.get_user_id(d, notification_body)
                 projectid = self.get_project_id(d, notification_body)
                 resourceid = d.parse_fields('resource_id', notification_body)
-                yield sample.Sample.from_notification(
-                    name=d.cfg['name'],
-                    type=d.cfg['type'],
-                    unit=d.cfg['unit'],
-                    volume=d.parse_fields('volume', notification_body),
-                    resource_id=resourceid,
-                    user_id=userid,
-                    project_id=projectid,
-                    message=notification_body)
+                ts = d.parse_fields('timestamp', notification_body)
+                if d.cfg.get('lookup'):
+                    meters = d.parse_fields('name', notification_body, True)
+                    if not meters:  # skip if no meters in payload
+                        break
+                    try:
+                        resources = self._normalise_as_list(
+                            'resource_id', d, notification_body, len(meters))
+                        volumes = self._normalise_as_list(
+                            'volume', d, notification_body, len(meters))
+                        units = self._normalise_as_list(
+                            'unit', d, notification_body, len(meters))
+                        types = self._normalise_as_list(
+                            'type', d, notification_body, len(meters))
+                        users = (self._normalise_as_list(
+                            'user_id', d, notification_body, len(meters))
+                            if 'user_id' in d.cfg['lookup'] else [userid])
+                        projs = (self._normalise_as_list(
+                            'project_id', d, notification_body, len(meters))
+                            if 'project_id' in d.cfg['lookup']
+                            else [projectid])
+                        times = (self._normalise_as_list(
+                            'timestamp', d, notification_body, len(meters))
+                            if 'timestamp' in d.cfg['lookup'] else [ts])
+                    except InvalidPayload:
+                        break
+                    for m, v, unit, t, r, p, user, ts in zip(
+                            meters, volumes, itertools.cycle(units),
+                            itertools.cycle(types), itertools.cycle(resources),
+                            itertools.cycle(projs), itertools.cycle(users),
+                            itertools.cycle(times)):
+                        yield sample.Sample.from_notification(
+                            name=m, type=t, unit=unit, volume=v,
+                            resource_id=r, user_id=user, project_id=p,
+                            message=notification_body, timestamp=ts)
+                else:
+                    yield sample.Sample.from_notification(
+                        name=d.cfg['name'],
+                        type=d.cfg['type'],
+                        unit=d.cfg['unit'],
+                        volume=d.parse_fields('volume', notification_body),
+                        resource_id=resourceid,
+                        user_id=userid,
+                        project_id=projectid,
+                        message=notification_body,
+                        timestamp=ts)
 
     @staticmethod
     def get_user_id(d, notification_body):

@@ -1,4 +1,3 @@
-#
 # Copyright 2012-2014 eNovance <licensing@enovance.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -21,7 +20,6 @@ import oslo_messaging
 from stevedore import extension
 
 from ceilometer.event import converter as event_converter
-from ceilometer.i18n import _
 from ceilometer import messaging
 
 LOG = logging.getLogger(__name__)
@@ -30,7 +28,7 @@ LOG = logging.getLogger(__name__)
 class EventsNotificationEndpoint(object):
     def __init__(self, manager):
         super(EventsNotificationEndpoint, self).__init__()
-        LOG.debug(_('Loading event definitions'))
+        LOG.debug('Loading event definitions')
         self.ctxt = context.get_admin_context()
         self.event_converter = event_converter.setup_events(
             extension.ExtensionManager(
@@ -52,7 +50,7 @@ class EventsNotificationEndpoint(object):
         # source of the notification. This will have to get added back later.
         notification = messaging.convert_to_old_notification_format(
             'info', ctxt, publisher_id, event_type, payload, metadata)
-        self.process_notification(notification)
+        return self.process_notification(notification)
 
     def error(self, ctxt, publisher_id, event_type, payload, metadata):
         """Convert error message to Ceilometer Event.
@@ -69,7 +67,7 @@ class EventsNotificationEndpoint(object):
         # source of the notification. This will have to get added back later.
         notification = messaging.convert_to_old_notification_format(
             'error', ctxt, publisher_id, event_type, payload, metadata)
-        self.process_notification(notification)
+        return self.process_notification(notification)
 
     def process_notification(self, notification):
         try:

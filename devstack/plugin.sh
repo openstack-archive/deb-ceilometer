@@ -155,7 +155,7 @@ function _ceilometer_prepare_virt_drivers {
         fi
 
         if [[ "$VIRT_DRIVER" = 'vsphere' ]]; then
-            pip_instal_gr oslo.vmware
+            pip_install_gr oslo.vmware
         fi
     fi
 }
@@ -168,9 +168,8 @@ function _ceilometer_create_accounts {
         create_service_user "ceilometer" "admin"
 
         if [[ "$KEYSTONE_CATALOG_BACKEND" = 'sql' ]]; then
-            local ceilometer_service=$(get_or_create_service "ceilometer" \
-                "metering" "OpenStack Telemetry Service")
-            get_or_create_endpoint $ceilometer_service \
+            get_or_create_service "ceilometer" "metering" "OpenStack Telemetry Service"
+            get_or_create_endpoint "metering" \
                 "$REGION_NAME" \
                 "$(ceilometer_service_url)/" \
                 "$(ceilometer_service_url)/" \
@@ -234,7 +233,6 @@ function _ceilometer_configure_storage_backend {
 
 # Configure Ceilometer
 function configure_ceilometer {
-    sudo install -d -o $STACK_USER -m 755 $CEILOMETER_CONF_DIR $CEILOMETER_API_LOG_DIR
 
     iniset_rpc_backend ceilometer $CEILOMETER_CONF
 
@@ -257,6 +255,7 @@ function configure_ceilometer {
     cp $CEILOMETER_DIR/etc/ceilometer/event_definitions.yaml $CEILOMETER_CONF_DIR
     cp $CEILOMETER_DIR/etc/ceilometer/gnocchi_archive_policy_map.yaml $CEILOMETER_CONF_DIR
     cp $CEILOMETER_DIR/etc/ceilometer/gnocchi_resources.yaml $CEILOMETER_CONF_DIR
+    cp $CEILOMETER_DIR/ceilometer/meter/data/meters.yaml $CEILOMETER_CONF_DIR
 
     if [ "$CEILOMETER_PIPELINE_INTERVAL" ]; then
         sed -i "s/interval:.*/interval: ${CEILOMETER_PIPELINE_INTERVAL}/" $CEILOMETER_CONF_DIR/pipeline.yaml
@@ -325,6 +324,7 @@ function install_ceilometer {
     _ceilometer_prepare_virt_drivers
     install_ceilometerclient
     setup_develop $CEILOMETER_DIR
+    sudo install -d -o $STACK_USER -m 755 $CEILOMETER_CONF_DIR $CEILOMETER_API_LOG_DIR
 }
 
 # install_ceilometerclient() - Collect source and prepare
@@ -340,9 +340,9 @@ function install_ceilometerclient {
 
 # start_ceilometer() - Start running processes, including screen
 function start_ceilometer {
-    run_process ceilometer-acentral "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces central --config-file $CEILOMETER_CONF"
+    run_process ceilometer-acentral "$CEILOMETER_BIN_DIR/ceilometer-agent-central --config-file $CEILOMETER_CONF"
     run_process ceilometer-anotification "$CEILOMETER_BIN_DIR/ceilometer-agent-notification --config-file $CEILOMETER_CONF"
-    run_process ceilometer-aipmi "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces ipmi --config-file $CEILOMETER_CONF"
+    run_process ceilometer-aipmi "$CEILOMETER_BIN_DIR/ceilometer-agent-ipmi --config-file $CEILOMETER_CONF"
 
     if [[ "$CEILOMETER_USE_MOD_WSGI" == "False" ]]; then
         run_process ceilometer-api "$CEILOMETER_BIN_DIR/ceilometer-api -d -v --log-dir=$CEILOMETER_API_LOG_DIR --config-file $CEILOMETER_CONF"
@@ -360,10 +360,10 @@ function start_ceilometer {
     # Start the compute agent late to allow time for the collector to
     # fully wake up and connect to the message bus. See bug #1355809
     if [[ "$VIRT_DRIVER" = 'libvirt' ]]; then
-        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces compute --config-file $CEILOMETER_CONF" $LIBVIRT_GROUP
+        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-agent-compute --config-file $CEILOMETER_CONF" $LIBVIRT_GROUP
     fi
     if [[ "$VIRT_DRIVER" = 'vsphere' ]]; then
-        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespace compute --config-file $CEILOMETER_CONF"
+        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-agent-compute --config-file $CEILOMETER_CONF"
     fi
 
     # Only die on API if it was actually intended to be turned on

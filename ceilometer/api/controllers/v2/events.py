@@ -30,6 +30,7 @@ import wsmeext.pecan as wsme_pecan
 
 from ceilometer.api.controllers.v2 import base
 from ceilometer.api.controllers.v2 import utils as v2_utils
+from ceilometer.api import rbac
 from ceilometer.event.storage import models as event_models
 from ceilometer.i18n import _
 from ceilometer import storage
@@ -156,6 +157,18 @@ class Event(base.Base):
         )
 
 
+def _add_user_proj_filter():
+    traits_filter = []
+    # Returns user_id, proj_id for non-admins
+    user_id, proj_id = rbac.get_limited_to(pecan.request.headers)
+    # If non-admin, filter events by user and project
+    if (user_id and proj_id):
+        traits_filter.append({"key": "project_id", "string": proj_id,
+                              "op": "eq"})
+        traits_filter.append({"key": "user_id", "string": user_id, "op": "eq"})
+    return traits_filter
+
+
 def _event_query_to_event_filter(q):
     evt_model_filter = {
         'event_type': None,
@@ -163,7 +176,7 @@ def _event_query_to_event_filter(q):
         'start_timestamp': None,
         'end_timestamp': None
     }
-    traits_filter = []
+    traits_filter = _add_user_proj_filter()
 
     for i in q:
         if not i.op:
@@ -194,7 +207,7 @@ class TraitsController(rest.RestController):
         :param event_type: Event type to filter traits by
         :param trait_name: Trait to return values for
         """
-        LOG.debug(_("Getting traits for %s") % event_type)
+        LOG.debug("Getting traits for %s", event_type)
         return [Trait._convert_storage_trait(t)
                 for t in pecan.request.event_storage_conn
                 .get_traits(event_type, trait_name)]
@@ -237,7 +250,7 @@ class EventTypesController(rest.RestController):
 class EventsController(rest.RestController):
     """Works on Events."""
 
-    @v2_utils.requires_admin
+    @v2_utils.requires_context
     @wsme_pecan.wsexpose([Event], [EventQuery], int)
     def get_all(self, q=None, limit=None):
         """Return all events matching the query filters.
@@ -245,6 +258,7 @@ class EventsController(rest.RestController):
         :param q: Filter arguments for which Events to return
         :param limit: Maximum number of samples to be returned.
         """
+        rbac.enforce("events:index", pecan.request)
         q = q or []
         limit = v2_utils.enforce_limit(limit)
         event_filter = _event_query_to_event_filter(q)
@@ -257,14 +271,17 @@ class EventsController(rest.RestController):
                 pecan.request.event_storage_conn.get_events(event_filter,
                                                             limit)]
 
-    @v2_utils.requires_admin
+    @v2_utils.requires_context
     @wsme_pecan.wsexpose(Event, wtypes.text)
     def get_one(self, message_id):
         """Return a single event with the given message id.
 
         :param message_id: Message ID of the Event to be returned
         """
-        event_filter = storage.EventFilter(message_id=message_id)
+        rbac.enforce("events:show", pecan.request)
+        t_filter = _add_user_proj_filter()
+        event_filter = storage.EventFilter(traits_filter=t_filter,
+                                           message_id=message_id)
         events = [event for event
                   in pecan.request.event_storage_conn.get_events(event_filter)]
         if not events:

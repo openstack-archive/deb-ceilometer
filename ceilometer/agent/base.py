@@ -43,6 +43,11 @@ from ceilometer import utils
 LOG = log.getLogger(__name__)
 
 OPTS = [
+    cfg.BoolOpt('batch_polled_samples',
+                default=True,
+                help='To reduce polling agent load, samples are sent to the '
+                     'notification agent in a batch. To gain higher '
+                     'throughput at the cost of load set this to False.'),
     cfg.IntOpt('shuffle_time_before_polling_task',
                default=0,
                help='To reduce large requests at same time to Nova or other '
@@ -112,6 +117,9 @@ class PollingTask(object):
         resource_factory = lambda: Resources(agent_manager)
         self.resources = collections.defaultdict(resource_factory)
 
+        self._batch = cfg.CONF.batch_polled_samples
+        self._telemetry_secret = cfg.CONF.publisher.telemetry_secret
+
     def add(self, pollster, source):
         self.pollster_matches[source.name].add(pollster)
         key = Resources.key(source.name, pollster)
@@ -121,11 +129,9 @@ class PollingTask(object):
         """Polling sample and notify."""
         cache = {}
         discovery_cache = {}
+        poll_history = {}
         for source_name in self.pollster_matches:
             for pollster in self.pollster_matches[source_name]:
-                LOG.info(_("Polling pollster %(poll)s in the context of "
-                           "%(src)s"),
-                         dict(poll=pollster.name, src=source_name))
                 key = Resources.key(source_name, pollster)
                 candidate_res = list(
                     self.resources[key].get(discovery_cache))
@@ -136,63 +142,66 @@ class PollingTask(object):
                 # Remove duplicated resources and black resources. Using
                 # set() requires well defined __hash__ for each resource.
                 # Since __eq__ is defined, 'not in' is safe here.
-                seen = []
-                duplicated = []
                 polling_resources = []
                 black_res = self.resources[key].blacklist
+                history = poll_history.get(pollster.name, [])
                 for x in candidate_res:
-                    if x not in seen:
-                        seen.append(x)
+                    if x not in history:
+                        history.append(x)
                         if x not in black_res:
                             polling_resources.append(x)
-                    else:
-                        duplicated.append(x)
-
-                # Warn duplicated resources for the 1st time
-                if self.resources[key].last_dup != duplicated:
-                    self.resources[key].last_dup = duplicated
-                    LOG.warning(_(
-                        'Found following duplicated resoures for '
-                        '%(name)s in context of %(source)s:%(list)s. '
-                        'Check pipeline configuration.')
-                        % ({'name': pollster.name,
-                            'source': source_name,
-                            'list': duplicated
-                            }))
+                poll_history[pollster.name] = history
 
                 # If no resources, skip for this pollster
                 if not polling_resources:
-                    LOG.info(_("Skip polling pollster %s, no resources"
-                               " found"), pollster.name)
+                    p_context = 'new ' if history else ''
+                    LOG.info(_("Skip pollster %(name)s, no %(p_context)s"
+                               "resources found this cycle"),
+                             {'name': pollster.name, 'p_context': p_context})
                     continue
 
+                LOG.info(_("Polling pollster %(poll)s in the context of "
+                           "%(src)s"),
+                         dict(poll=pollster.name, src=source_name))
                 try:
                     samples = pollster.obj.get_samples(
                         manager=self.manager,
                         cache=cache,
                         resources=polling_resources
                     )
+                    sample_batch = []
+
                     for sample in samples:
                         sample_dict = (
                             publisher_utils.meter_message_from_counter(
-                                sample, cfg.CONF.publisher.telemetry_secret
+                                sample, self._telemetry_secret
                             ))
-                        self.manager.notifier.info(
-                            self.manager.context.to_dict(),
-                            'telemetry.api',
-                            [sample_dict]
-                        )
+                        if self._batch:
+                            sample_batch.append(sample_dict)
+                        else:
+                            self._send_notification([sample_dict])
+
+                    if sample_batch:
+                        self._send_notification(sample_batch)
+
                 except plugin_base.PollsterPermanentError as err:
                     LOG.error(_(
                         'Prevent pollster %(name)s for '
                         'polling source %(source)s anymore!')
                         % ({'name': pollster.name, 'source': source_name}))
-                    self.resources[key].blacklist.append(err.fail_res)
+                    self.resources[key].blacklist.extend(err.fail_res_list)
                 except Exception as err:
                     LOG.warning(_(
                         'Continue after error from %(name)s: %(error)s')
                         % ({'name': pollster.name, 'error': err}),
                         exc_info=True)
+
+    def _send_notification(self, samples):
+        self.manager.notifier.info(
+            self.manager.context.to_dict(),
+            'telemetry.polling',
+            {'samples': samples}
+        )
 
 
 class AgentManager(service_base.BaseService):
@@ -287,15 +296,11 @@ class AgentManager(service_base.BaseService):
             polling_task = None
             for pollster in self.extensions:
                 if source.support_meter(pollster.name):
+                    polling_task = polling_tasks.get(source.get_interval())
                     if not polling_task:
                         polling_task = self.create_polling_task()
+                        polling_tasks[source.get_interval()] = polling_task
                     polling_task.add(pollster, source)
-            if polling_task:
-                polling_tasks[source.name] = {
-                    'task': polling_task,
-                    'interval': source.get_interval()
-                }
-
         return polling_tasks
 
     def construct_group_id(self, discovery_group_id):
@@ -313,15 +318,13 @@ class AgentManager(service_base.BaseService):
 
         pollster_timers = []
         data = self.setup_polling_tasks()
-        for name, polling_task in data.items():
-            interval = polling_task['interval']
-            task = polling_task['task']
+        for interval, polling_task in data.items():
             delay_time = (interval + delay_polling_time if delay_start
                           else delay_polling_time)
             pollster_timers.append(self.tg.add_timer(interval,
                                    self.interval_task,
                                    initial_delay=delay_time,
-                                   task=task))
+                                   task=polling_task))
         self.tg.add_timer(cfg.CONF.coordination.heartbeat,
                           self.partition_coordinator.heartbeat)
 

@@ -86,6 +86,7 @@ class BasePipelineTestCase(base.BaseTestCase):
 
     class TransformerClass(transformer.TransformerBase):
         samples = []
+        grouping_keys = ['counter_name']
 
         def __init__(self, append_name='_update'):
             self.__class__.samples = []
@@ -111,6 +112,7 @@ class BasePipelineTestCase(base.BaseTestCase):
 
     class TransformerClassDrop(transformer.TransformerBase):
         samples = []
+        grouping_keys = ['resource_id']
 
         def __init__(self):
             self.__class__.samples = []
@@ -119,6 +121,8 @@ class BasePipelineTestCase(base.BaseTestCase):
             self.__class__.samples.append(counter)
 
     class TransformerClassException(object):
+        grouping_keys = ['resource_id']
+
         @staticmethod
         def handle_sample(ctxt, counter):
             raise Exception()
@@ -302,6 +306,72 @@ class BasePipelineTestCase(base.BaseTestCase):
         self.assertEqual(2, len(self.TransformerClass.samples))
         self.assertEqual('a_update', getattr(publisher.samples[0], "name"))
         self.assertEqual('b_update', getattr(publisher.samples[1], "name"))
+
+    @mock.patch('ceilometer.pipeline.LOG')
+    def test_none_volume_counter(self, LOG):
+        self._set_pipeline_cfg('counters', ['empty_volume'])
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        publisher = pipeline_manager.pipelines[0].publishers[0]
+
+        test_s = sample.Sample(
+            name='empty_volume',
+            type=self.test_counter.type,
+            volume=None,
+            unit=self.test_counter.unit,
+            user_id=self.test_counter.user_id,
+            project_id=self.test_counter.project_id,
+            resource_id=self.test_counter.resource_id,
+            timestamp=self.test_counter.timestamp,
+            resource_metadata=self.test_counter.resource_metadata,
+        )
+
+        with pipeline_manager.publisher(None) as p:
+            p([test_s])
+
+        LOG.warning.assert_called_once_with(
+            'metering data %(counter_name)s for %(resource_id)s '
+            '@ %(timestamp)s has no volume (volume: %(counter_volume)s), the '
+            'sample will be dropped'
+            % {'counter_name': test_s.name,
+               'resource_id': test_s.resource_id,
+               'timestamp': test_s.timestamp,
+               'counter_volume': test_s.volume})
+
+        self.assertEqual(0, len(publisher.samples))
+
+    @mock.patch('ceilometer.pipeline.LOG')
+    def test_fake_volume_counter(self, LOG):
+        self._set_pipeline_cfg('counters', ['fake_volume'])
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        publisher = pipeline_manager.pipelines[0].publishers[0]
+
+        test_s = sample.Sample(
+            name='fake_volume',
+            type=self.test_counter.type,
+            volume='fake_value',
+            unit=self.test_counter.unit,
+            user_id=self.test_counter.user_id,
+            project_id=self.test_counter.project_id,
+            resource_id=self.test_counter.resource_id,
+            timestamp=self.test_counter.timestamp,
+            resource_metadata=self.test_counter.resource_metadata,
+        )
+
+        with pipeline_manager.publisher(None) as p:
+            p([test_s])
+
+        LOG.warning.assert_called_once_with(
+            'metering data %(counter_name)s for %(resource_id)s '
+            '@ %(timestamp)s has volume which is not a number '
+            '(volume: %(counter_volume)s), the sample will be dropped'
+            % {'counter_name': test_s.name,
+               'resource_id': test_s.resource_id,
+               'timestamp': test_s.timestamp,
+               'counter_volume': test_s.volume})
+
+        self.assertEqual(0, len(publisher.samples))
 
     def test_counter_dont_match(self):
         counter_cfg = ['nomatch']
@@ -749,39 +819,6 @@ class BasePipelineTestCase(base.BaseTestCase):
         self.assertEqual('a_update',
                          getattr(publisher.samples[0], 'name'))
 
-    def test_variable_counter(self):
-        transformer_cfg = [{
-            'name': "update",
-            'parameters': {}
-        }]
-        self._set_pipeline_cfg('transformers', transformer_cfg)
-        self._set_pipeline_cfg('counters', ['a:*'])
-        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
-                                                    self.transformer_manager)
-
-        self.test_counter = sample.Sample(
-            name='a:b',
-            type=self.test_counter.type,
-            volume=self.test_counter.volume,
-            unit=self.test_counter.unit,
-            user_id=self.test_counter.user_id,
-            project_id=self.test_counter.project_id,
-            resource_id=self.test_counter.resource_id,
-            timestamp=self.test_counter.timestamp,
-            resource_metadata=self.test_counter.resource_metadata,
-        )
-
-        with pipeline_manager.publisher(None) as p:
-            p([self.test_counter])
-
-        publisher = pipeline_manager.pipelines[0].publishers[0]
-        self.assertEqual(1, len(publisher.samples))
-        self.assertEqual(1, len(self.TransformerClass.samples))
-        self.assertEqual('a:b_update',
-                         getattr(publisher.samples[0], "name"))
-        self.assertEqual('a:b',
-                         getattr(self.TransformerClass.samples[0], "name"))
-
     def test_global_unit_conversion(self):
         scale = 'volume / ((10**6) * 60)'
         transformer_cfg = [
@@ -1010,7 +1047,7 @@ class BasePipelineTestCase(base.BaseTestCase):
                                                 offset=0)
 
     def test_rate_of_change_no_predecessor(self):
-        s = "100.0 / (10**9 * resource_metadata.get('cpu_number', 1))"
+        s = "100.0 / (10**9 * (resource_metadata.cpu_number or 1))"
         transformer_cfg = [
             {
                 'name': 'rate_of_change',
@@ -1049,6 +1086,80 @@ class BasePipelineTestCase(base.BaseTestCase):
         self.assertEqual(0, len(publisher.samples))
         pipe.flush(None)
         self.assertEqual(0, len(publisher.samples))
+
+    @mock.patch('ceilometer.transformer.conversions.LOG')
+    def test_rate_of_change_out_of_order(self, the_log):
+        s = "100.0 / (10**9 * (resource_metadata.cpu_number or 1))"
+        transformer_cfg = [
+            {
+                'name': 'rate_of_change',
+                'parameters': {
+                    'source': {},
+                    'target': {'name': 'cpu_util',
+                               'unit': '%',
+                               'type': sample.TYPE_GAUGE,
+                               'scale': s}
+                }
+            },
+        ]
+        self._set_pipeline_cfg('transformers', transformer_cfg)
+        self._set_pipeline_cfg('counters', ['cpu'])
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        pipe = pipeline_manager.pipelines[0]
+
+        now = timeutils.utcnow()
+        earlier = now - datetime.timedelta(seconds=10)
+        later = now + datetime.timedelta(seconds=10)
+
+        counters = [
+            sample.Sample(
+                name='cpu',
+                type=sample.TYPE_CUMULATIVE,
+                volume=125000000000,
+                unit='ns',
+                user_id='test_user',
+                project_id='test_proj',
+                resource_id='test_resource',
+                timestamp=now.isoformat(),
+                resource_metadata={'cpu_number': 4}
+            ),
+            sample.Sample(
+                name='cpu',
+                type=sample.TYPE_CUMULATIVE,
+                volume=120000000000,
+                unit='ns',
+                user_id='test_user',
+                project_id='test_proj',
+                resource_id='test_resource',
+                timestamp=earlier.isoformat(),
+                resource_metadata={'cpu_number': 4}
+            ),
+            sample.Sample(
+                name='cpu',
+                type=sample.TYPE_CUMULATIVE,
+                volume=130000000000,
+                unit='ns',
+                user_id='test_user',
+                project_id='test_proj',
+                resource_id='test_resource',
+                timestamp=later.isoformat(),
+                resource_metadata={'cpu_number': 4}
+            ),
+        ]
+
+        pipe.publish_data(None, counters)
+        publisher = pipe.publishers[0]
+        self.assertEqual(1, len(publisher.samples))
+        pipe.flush(None)
+        self.assertEqual(1, len(publisher.samples))
+
+        cpu_util_sample = publisher.samples[0]
+        self.assertEqual(12.5, cpu_util_sample.volume)
+        the_log.warn.assert_called_with(
+            'dropping out of time order sample: %s',
+            (counters[1],)
+        )
 
     def test_resources(self):
         resources = ['test1://', 'test2://']
@@ -1790,3 +1901,48 @@ class BasePipelineTestCase(base.BaseTestCase):
     def test_unique_pipeline_names(self):
         self._dup_pipeline_name_cfg()
         self._exception_create_pipelinemanager()
+
+    def test_get_pipeline_grouping_key(self):
+        transformer_cfg = [
+            {
+                'name': 'update',
+                'parameters': {}
+            },
+            {
+                'name': 'unit_conversion',
+                'parameters': {
+                    'source': {},
+                    'target': {'name': 'cpu_mins',
+                               'unit': 'min',
+                               'scale': 'volume'},
+                }
+            },
+            {
+                'name': 'update',
+                'parameters': {}
+            },
+        ]
+        self._set_pipeline_cfg('transformers', transformer_cfg)
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        self.assertEqual(set(['resource_id', 'counter_name']),
+                         set(pipeline.get_pipeline_grouping_key(
+                             pipeline_manager.pipelines[0])))
+
+    def test_get_pipeline_duplicate_grouping_key(self):
+        transformer_cfg = [
+            {
+                'name': 'update',
+                'parameters': {}
+            },
+            {
+                'name': 'update',
+                'parameters': {}
+            },
+        ]
+        self._set_pipeline_cfg('transformers', transformer_cfg)
+        pipeline_manager = pipeline.PipelineManager(self.pipeline_cfg,
+                                                    self.transformer_manager)
+        self.assertEqual(['counter_name'],
+                         pipeline.get_pipeline_grouping_key(
+                             pipeline_manager.pipelines[0]))

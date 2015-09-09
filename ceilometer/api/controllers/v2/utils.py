@@ -46,7 +46,7 @@ def enforce_limit(limit):
             limit = cfg.CONF.api.default_api_return_limit
             LOG.info(_LI('No limit value provided, result set will be'
                          'limited to %(limit)d.'), {'limit': limit})
-        if limit and limit < 0:
+        if not limit or limit <= 0:
             raise base.ClientSideError(_("Limit must be positive"))
         return limit
 
@@ -350,6 +350,20 @@ def requires_admin(func):
             # for handling the error
             ex = base.ProjectNotAuthorized(proj_limit)
             pecan.core.abort(status_code=ex.code, detail=ex.msg)
+        return func(*args, **kwargs)
+
+    return wrapped
+
+
+def requires_context(func):
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        req_usr = pecan.request.headers.get('X-User-Id')
+        proj_usr = pecan.request.headers.get('X-Project-Id')
+        if ((not req_usr) or (not proj_usr)):
+            pecan.core.abort(status_code=403,
+                             detail='RBAC Authorization Failed')
         return func(*args, **kwargs)
 
     return wrapped

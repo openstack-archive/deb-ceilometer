@@ -16,7 +16,7 @@
 import fnmatch
 import os
 
-import jsonpath_rw
+from jsonpath_rw_ext import parser
 from oslo_config import cfg
 from oslo_log import log
 from oslo_utils import timeutils
@@ -58,6 +58,8 @@ class EventDefinitionException(Exception):
 
 
 class TraitDefinition(object):
+
+    JSONPATH_RW_PARSER = parser.ExtentedJsonPathParser()
 
     def __init__(self, name, trait_cfg, plugin_manager):
         self.cfg = trait_cfg
@@ -106,7 +108,7 @@ class TraitDefinition(object):
             else:
                 fields = '|'.join('(%s)' % path for path in fields)
         try:
-            self.fields = jsonpath_rw.parse(fields)
+            self.fields = self.JSONPATH_RW_PARSER.parse(fields)
         except Exception as e:
             raise EventDefinitionException(
                 _("Parse error in JSONPath specification "
@@ -369,7 +371,7 @@ def setup_events(trait_plugin_mgr):
     """Setup the event definitions from yaml config file."""
     config_file = get_config_file()
     if config_file is not None:
-        LOG.debug(_("Event Definitions configuration file: %s"), config_file)
+        LOG.debug("Event Definitions configuration file: %s", config_file)
 
         with open(config_file) as cf:
             config = cf.read()
@@ -392,8 +394,8 @@ def setup_events(trait_plugin_mgr):
             raise
 
     else:
-        LOG.debug(_("No Event Definitions configuration file found!"
-                  " Using default config."))
+        LOG.debug("No Event Definitions configuration file found!"
+                  " Using default config.")
         events_config = []
 
     LOG.info(_("Event Definitions: %s"), events_config)

@@ -18,7 +18,7 @@ function generate_testr_results {
     if [ -f .testrepository/0 ]; then
         sudo .tox/functional/bin/testr last --subunit > $WORKSPACE/testrepository.subunit
         sudo mv $WORKSPACE/testrepository.subunit $BASE/logs/testrepository.subunit
-        sudo .tox/functional/bin/python /usr/local/jenkins/slave_scripts/subunit2html.py $BASE/logs/testrepository.subunit $BASE/logs/testr_results.html
+        sudo /usr/os-testr-env/bin/subunit2html $BASE/logs/testrepository.subunit $BASE/logs/testr_results.html
         sudo gzip -9 $BASE/logs/testrepository.subunit
         sudo gzip -9 $BASE/logs/testr_results.html
         sudo chown jenkins:jenkins $BASE/logs/testrepository.subunit.gz $BASE/logs/testr_results.html.gz
@@ -31,14 +31,18 @@ export CEILOMETER_DIR="$BASE/new/ceilometer"
 # Go to the ceilometer dir
 cd $CEILOMETER_DIR
 
-sudo chown -R jenkins:stack $CEILOMETER_DIR
+if [[ -z "$STACK_USER" ]]; then
+    export STACK_USER=stack
+fi
+
+sudo chown -R $STACK_USER:stack $CEILOMETER_DIR
 
 # Run tests
 echo "Running ceilometer functional test suite"
 set +e
 
 # NOTE(ityaptin) Expected a script param which contains a backend name
-CEILOMETER_TEST_BACKEND="$1" sudo -E -H -u jenkins tox -efunctional
+CEILOMETER_TEST_BACKEND="$1" sudo -E -H -u ${STACK_USER:-${USER}} tox -efunctional
 EXIT_CODE=$?
 set -e
 

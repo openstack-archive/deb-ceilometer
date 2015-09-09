@@ -26,10 +26,13 @@ from oslo_config import cfg
 from oslo_log import log
 from oslo_utils import netutils
 import pymongo
+import pymongo.errors
 import six
 from six.moves.urllib import parse
 
 from ceilometer.i18n import _
+
+ERROR_INDEX_WITH_DIFFERENT_SPEC_ALREADY_EXISTS = 86
 
 LOG = log.getLogger(__name__)
 
@@ -45,7 +48,7 @@ OP_SIGN = {'lt': '$lt', 'le': '$lte', 'ne': '$ne', 'gt': '$gt', 'ge': '$gte'}
 MINIMUM_COMPATIBLE_MONGODB_VERSION = [2, 4]
 COMPLETE_AGGREGATE_COMPATIBLE_VERSION = [2, 6]
 
-TRIVIAL_LAMBDA = lambda result, param=None: result
+FINALIZE_AGGREGATION_LAMBDA = lambda result, param=None: float(result)
 CARDINALITY_VALIDATION = (lambda name, param: param in ['resource_id',
                                                         'user_id',
                                                         'project_id',
@@ -455,6 +458,19 @@ class MongoProxy(object):
         # exception.
         return CursorProxy(self.conn.find(*args, **kwargs))
 
+    def create_index(self, keys, name=None, *args, **kwargs):
+        try:
+            self.conn.create_index(keys, name=name, *args, **kwargs)
+        except pymongo.errors.OperationFailure as e:
+            if e.code is ERROR_INDEX_WITH_DIFFERENT_SPEC_ALREADY_EXISTS:
+                LOG.info(_("Index %s will be recreate.") % name)
+                self._recreate_index(keys, name, *args, **kwargs)
+
+    @safe_mongo_call
+    def _recreate_index(self, keys, name, *args, **kwargs):
+        self.conn.drop_index(name)
+        self.conn.create_index(keys, name=name, *args, **kwargs)
+
     def __getattr__(self, item):
         """Wrap MongoDB connection.
 
@@ -503,7 +519,7 @@ class AggregationFields(object):
                  finalize=None,
                  parametrized=False,
                  validate=None):
-        self._finalize = finalize or TRIVIAL_LAMBDA
+        self._finalize = finalize or FINALIZE_AGGREGATION_LAMBDA
         self.group = lambda *args: group(*args) if parametrized else group
         self.project = (lambda *args: project(*args)
                         if parametrized else project)

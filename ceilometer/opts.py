@@ -30,15 +30,12 @@ import ceilometer.compute.virt.libvirt.inspector
 import ceilometer.compute.virt.vmware.inspector
 import ceilometer.compute.virt.xenapi.inspector
 import ceilometer.coordination
-import ceilometer.data_processing.notifications
 import ceilometer.dispatcher
 import ceilometer.dispatcher.file
 import ceilometer.energy.kwapi
 import ceilometer.event.converter
 import ceilometer.hardware.discovery
-import ceilometer.identity.notifications
 import ceilometer.image.glance
-import ceilometer.image.notifications
 import ceilometer.ipmi.notifications.ironic
 import ceilometer.ipmi.platform.intel_node_manager
 import ceilometer.ipmi.pollsters
@@ -49,16 +46,13 @@ import ceilometer.notification
 import ceilometer.nova_client
 import ceilometer.objectstore.rgw
 import ceilometer.objectstore.swift
-import ceilometer.orchestration.notifications
 import ceilometer.pipeline
-import ceilometer.profiler.notifications
 import ceilometer.publisher.messaging
 import ceilometer.publisher.utils
 import ceilometer.sample
 import ceilometer.service
 import ceilometer.storage
 import ceilometer.utils
-import ceilometer.volume.notifications
 
 
 def list_opts():
@@ -71,24 +65,18 @@ def list_opts():
                          ceilometer.compute.util.OPTS,
                          ceilometer.compute.virt.inspector.OPTS,
                          ceilometer.compute.virt.libvirt.inspector.OPTS,
-                         ceilometer.data_processing.notifications.OPTS,
                          ceilometer.dispatcher.OPTS,
-                         ceilometer.identity.notifications.OPTS,
                          ceilometer.image.glance.OPTS,
-                         ceilometer.image.notifications.OPTS,
                          ceilometer.ipmi.notifications.ironic.OPTS,
                          ceilometer.middleware.OPTS,
                          ceilometer.network.notifications.OPTS,
                          ceilometer.nova_client.OPTS,
                          ceilometer.objectstore.swift.OPTS,
-                         ceilometer.orchestration.notifications.OPTS,
                          ceilometer.pipeline.OPTS,
-                         ceilometer.profiler.notifications.OPTS,
                          ceilometer.sample.OPTS,
                          ceilometer.service.OPTS,
                          ceilometer.storage.OLD_OPTS,
-                         ceilometer.utils.OPTS,
-                         ceilometer.volume.notifications.OPTS,)),
+                         ceilometer.utils.OPTS,)),
         ('alarm',
          itertools.chain(ceilometer.alarm.notifier.rest.OPTS,
                          ceilometer.alarm.service.OPTS,
@@ -97,10 +85,13 @@ def list_opts():
                          ceilometer.api.controllers.v2.alarms.ALARM_API_OPTS)),
         ('api',
          itertools.chain(ceilometer.api.OPTS,
-                         ceilometer.api.app.API_OPTS,)),
+                         ceilometer.api.app.API_OPTS,
+                         [ceilometer.service.API_OPT])),
         # deprecated path, new one is 'polling'
         ('central', ceilometer.agent.manager.OPTS),
-        ('collector', ceilometer.collector.OPTS),
+        ('collector',
+         itertools.chain(ceilometer.collector.OPTS,
+                         [ceilometer.service.COLL_OPT])),
         ('compute', ceilometer.compute.discovery.OPTS),
         ('coordination', ceilometer.coordination.OPTS),
         ('database', ceilometer.storage.OPTS),
@@ -110,7 +101,9 @@ def list_opts():
         ('ipmi',
          itertools.chain(ceilometer.ipmi.platform.intel_node_manager.OPTS,
                          ceilometer.ipmi.pollsters.OPTS)),
-        ('notification', ceilometer.notification.OPTS),
+        ('notification',
+         itertools.chain(ceilometer.notification.OPTS,
+                         [ceilometer.service.NOTI_OPT])),
         ('polling', ceilometer.agent.manager.OPTS),
         ('publisher', ceilometer.publisher.utils.OPTS),
         ('publisher_notifier', ceilometer.publisher.messaging.NOTIFIER_OPTS),
