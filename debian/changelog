@@ -3,6 +3,7 @@ ceilometer (1:5.0.0~b3-1) experimental; urgency=medium
   * New upstream release.
   * Fixed (build-)depends for this release.
   * Realign Ceilometer packaging with MOS.
+  * Not using transition packages for sphinxcontrib stuff.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 31 Aug 2015 20:55:14 +0200
 
