@@ -10,6 +10,7 @@ ceilometer (1:5.0.0~b2-1) experimental; urgency=medium
 
   * New upstream release.
   * Fixed (build-)depends for this release.
+  * Not using sphinxcontrib transition packages anymore.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 05 Aug 2015 13:05:25 +0200
 
