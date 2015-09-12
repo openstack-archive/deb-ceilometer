@@ -14,4 +14,5 @@
 # Author: Thomas Goirand <zigo@debian.org>
 DESC="OpenStack Ceilometer Agent Compute"
 PROJECT_NAME=ceilometer
-NAME=${PROJECT_NAME}-agent-compute
+NAME=${PROJECT_NAME}-polling
+DAEMON_ARGS=" --namespaces compute"
