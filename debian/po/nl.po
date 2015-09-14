@@ -1,14 +1,14 @@
 # Dutch translation of ceilometer debconf templates.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the ceilometer package.
-# Frans Spiesschaert <Frans.Spiesschaert@yucom.be>, 2014.
+# Frans Spiesschaert <Frans.Spiesschaert@yucom.be>, 2014, 2015.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
 "POT-Creation-Date: 2015-06-26 13:18+0000\n"
-"PO-Revision-Date: 2014-10-09 22:14+0200\n"
+"PO-Revision-Date: 2015-08-29 22:05+0200\n"
 "Last-Translator: Frans Spiesschaert <Frans.Spiesschaert@yucom.be>\n"
 "Language-Team: Debian Dutch l10n Team <debian-l10n-dutch@lists.debian.org>\n"
 "Language: nl\n"
@@ -16,6 +16,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Gtranslator 2.91.6\n"
 
 #. Type: boolean
 #. Description
@@ -125,7 +126,7 @@ msgstr ""
 #. Description
 #: ../ceilometer-common.templates:2001
 msgid "Perform automatic dbsync for Ceilometer?"
-msgstr ""
+msgstr "Automatisch dbsync voor Ceilometer uitvoeren?"
 
 #. Type: boolean
 #. Description
@@ -134,6 +135,9 @@ msgid ""
 "Ceilometer can automatically run ceilometer-dbsync after installation. For "
 "it to work, you need an up and running mongodb-server."
 msgstr ""
+"Na installatie kan Ceilometer automatisch de opdracht ceilometer-dbsync "
+"uitvoeren. Om dit te doen werken heeft u wel een volledig functionele "
+"mongodb-server nodig."
 
 #. Type: boolean
 #. Description
@@ -142,6 +146,8 @@ msgid ""
 "You can change this setting later on by running \"dpkg-reconfigure -plow "
 "ceilometer\"."
 msgstr ""
+"U kunt deze instelling later wijzigen door de opdracht \"dpkg-reconfigure -"
+"plow ceilometer\" uit te voeren."
 
 #. Type: string
 #. Description
