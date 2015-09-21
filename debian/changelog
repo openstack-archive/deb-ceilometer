@@ -4,6 +4,7 @@ ceilometer (1:5.0.0~b3-2) UNRELEASED; urgency=medium
   * Get the ceilometer-agent-compute to use "ceilometer-polling --namespace
     compute".
   * Updated nl.po
+  * Now ceilometer-api depends on python-openstackclient.
 
  -- Thomas Goirand <zigo@debian.org>  Sat, 12 Sep 2015 15:26:48 +0000
 
