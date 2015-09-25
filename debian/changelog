@@ -6,6 +6,7 @@ ceilometer (1:5.0.0~rc1-1) experimental; urgency=medium
     compute".
   * Updated nl.po
   * Now ceilometer-api depends on python-openstackclient.
+  * Fixed (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Sat, 12 Sep 2015 15:26:48 +0000
 
