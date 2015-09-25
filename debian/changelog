@@ -1,5 +1,6 @@
-ceilometer (1:5.0.0~b3-2) UNRELEASED; urgency=medium
+ceilometer (1:5.0.0~rc1-1) experimental; urgency=medium
 
+  * New upstream release.
   * Get the ceilometer-agent-central use "ceilometer-polling --central".
   * Get the ceilometer-agent-compute to use "ceilometer-polling --namespace
     compute".
