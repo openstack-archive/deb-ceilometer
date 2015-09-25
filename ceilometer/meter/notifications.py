@@ -57,13 +57,17 @@ class MeterDefinition(object):
 
     JSONPATH_RW_PARSER = parser.ExtentedJsonPathParser()
 
+    REQUIRED_FIELDS = ['name', 'type', 'event_type', 'unit', 'volume',
+                       'resource_id']
+
     def __init__(self, definition_cfg):
         self.cfg = definition_cfg
-
-        self._event_type = self.cfg.get('event_type')
-        if not self._event_type:
+        missing = [field for field in self.REQUIRED_FIELDS
+                   if not self.cfg.get(field)]
+        if missing:
             raise MeterDefinitionException(
-                _LE("Required field event_type not specified"), self.cfg)
+                _LE("Required fields %s not specified") % missing, self.cfg)
+        self._event_type = self.cfg.get('event_type')
         if isinstance(self._event_type, six.string_types):
             self._event_type = [self._event_type]
 
@@ -78,6 +82,13 @@ class MeterDefinition(object):
                 continue
             elif isinstance(field, six.integer_types):
                 self._field_getter[name] = field
+            elif isinstance(field, dict) and name == 'metadata':
+                meta = {}
+                for key, val in field.items():
+                    parts = self.parse_jsonpath(val)
+                    meta[key] = functools.partial(self._parse_jsonpath_field,
+                                                  parts)
+                self._field_getter['metadata'] = meta
             else:
                 parts = self.parse_jsonpath(field)
                 self._field_getter[name] = functools.partial(
@@ -102,6 +113,11 @@ class MeterDefinition(object):
         getter = self._field_getter.get(field)
         if not getter:
             return
+        elif isinstance(getter, dict):
+            dict_val = {}
+            for key, val in getter.items():
+                dict_val[key] = val(message, all_values)
+            return dict_val
         elif callable(getter):
             return getter(message, all_values)
         else:
@@ -234,6 +250,7 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
                 projectid = self.get_project_id(d, notification_body)
                 resourceid = d.parse_fields('resource_id', notification_body)
                 ts = d.parse_fields('timestamp', notification_body)
+                metadata = d.parse_fields('metadata', notification_body)
                 if d.cfg.get('lookup'):
                     meters = d.parse_fields('name', notification_body, True)
                     if not meters:  # skip if no meters in payload
@@ -267,7 +284,8 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
                         yield sample.Sample.from_notification(
                             name=m, type=t, unit=unit, volume=v,
                             resource_id=r, user_id=user, project_id=p,
-                            message=notification_body, timestamp=ts)
+                            message=notification_body, timestamp=ts,
+                            metadata=metadata)
                 else:
                     yield sample.Sample.from_notification(
                         name=d.cfg['name'],
@@ -278,7 +296,7 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
                         user_id=userid,
                         project_id=projectid,
                         message=notification_body,
-                        timestamp=ts)
+                        timestamp=ts, metadata=metadata)
 
     @staticmethod
     def get_user_id(d, notification_body):

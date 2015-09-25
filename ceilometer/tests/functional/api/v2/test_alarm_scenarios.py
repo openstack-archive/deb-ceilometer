@@ -2309,6 +2309,23 @@ class TestAlarms(v2.FunctionalTest,
                          updated_history[0]['detail'])
         self.assertEqual(history, updated_history)
 
+    def test_record_alarm_history_statistic(self):
+        alarm = self._get_alarm('a')
+        history = self._get_alarm_history(alarm)
+        self.assertEqual([], history)
+        self.assertEqual('avg', alarm['threshold_rule']['statistic'])
+
+        rule = alarm['threshold_rule'].copy()
+        rule['statistic'] = 'min'
+        data = dict(threshold_rule=rule)
+        self._update_alarm(alarm, data)
+        new_alarm = self._get_alarm('a')
+        history = self._get_alarm_history(new_alarm)
+        self.assertEqual(1, len(history))
+        self.assertEqual("min", jsonutils.loads(history[0]['detail'])
+                         ['rule']["statistic"])
+        self.assertEqual('min', new_alarm['threshold_rule']['statistic'])
+
     def test_get_recorded_alarm_history_on_create(self):
         new_alarm = {
             'name': 'new_alarm',
@@ -2457,7 +2474,7 @@ class TestAlarms(v2.FunctionalTest,
         history = self._get_alarm_history(self._get_alarm('a'), auth)
         self.assertEqual([], history)
 
-    def test_get_recorded_alarm_history_preserved_after_deletion(self):
+    def test_delete_alarm_history_after_deletion(self):
         alarm = self._get_alarm('a')
         history = self._get_alarm_history(alarm)
         self.assertEqual([], history)
@@ -2469,45 +2486,24 @@ class TestAlarms(v2.FunctionalTest,
                     headers=self.auth_headers,
                     status=204)
         history = self._get_alarm_history(alarm)
-        self.assertEqual(2, len(history))
-        self._assert_is_subset(dict(alarm_id=alarm['alarm_id'],
-                                    on_behalf_of=alarm['project_id'],
-                                    project_id=alarm['project_id'],
-                                    type='deletion',
-                                    user_id=alarm['user_id']),
-                               history[0])
-        alarm['rule'] = alarm['threshold_rule']
-        del alarm['threshold_rule']
-        self._assert_in_json(alarm, history[0]['detail'])
-        detail = '{"name": "renamed"}'
-        self._assert_is_subset(dict(alarm_id=alarm['alarm_id'],
-                                    detail=detail,
-                                    on_behalf_of=alarm['project_id'],
-                                    project_id=alarm['project_id'],
-                                    type='rule change',
-                                    user_id=alarm['user_id']),
-                               history[1])
+        self.assertEqual(0, len(history))
 
     def test_get_alarm_history_ordered_by_recentness(self):
         alarm = self._get_alarm('a')
         for i in moves.xrange(10):
             self._update_alarm(alarm, dict(name='%s' % i))
         alarm = self._get_alarm('a')
-        self._delete_alarm(alarm)
         history = self._get_alarm_history(alarm)
-        self.assertEqual(11, len(history), 'hist: %s' % history)
+        self.assertEqual(10, len(history), 'hist: %s' % history)
         self._assert_is_subset(dict(alarm_id=alarm['alarm_id'],
-                                    type='deletion'),
+                                    type='rule change'),
                                history[0])
-        alarm['rule'] = alarm['threshold_rule']
-        del alarm['threshold_rule']
-        self._assert_in_json(alarm, history[0]['detail'])
-        for i in moves.xrange(1, 10):
+        for i in moves.xrange(1, 11):
             detail = '{"name": "%s"}' % (10 - i)
             self._assert_is_subset(dict(alarm_id=alarm['alarm_id'],
                                         detail=detail,
                                         type='rule change'),
-                                   history[i])
+                                   history[i - 1])
 
     def test_get_alarm_history_constrained_by_timestamp(self):
         alarm = self._get_alarm('a')
@@ -2530,19 +2526,18 @@ class TestAlarms(v2.FunctionalTest,
 
     def test_get_alarm_history_constrained_by_type(self):
         alarm = self._get_alarm('a')
-        self._delete_alarm(alarm)
-        query = dict(field='type', op='eq', value='deletion')
+        self._update_alarm(alarm, dict(name='renamed2'))
+        query = dict(field='type', op='eq', value='rule change')
         history = self._get_alarm_history(alarm, query=query)
         self.assertEqual(1, len(history))
+        detail = '{"name": "renamed2"}'
         self._assert_is_subset(dict(alarm_id=alarm['alarm_id'],
+                                    detail=detail,
                                     on_behalf_of=alarm['project_id'],
                                     project_id=alarm['project_id'],
-                                    type='deletion',
+                                    type='rule change',
                                     user_id=alarm['user_id']),
                                history[0])
-        alarm['rule'] = alarm['threshold_rule']
-        del alarm['threshold_rule']
-        self._assert_in_json(alarm, history[0]['detail'])
 
     def test_get_alarm_history_constrained_by_alarm_id_failed(self):
         alarm = self._get_alarm('b')
@@ -2627,26 +2622,18 @@ class TestAlarms(v2.FunctionalTest,
             PayloadMatcher(), mock.ANY)
 
     def test_alarm_sends_notification(self):
-        # Hit the AlarmController (with alarm_id supplied) ...
-        data = self.get_json('/alarms')
-        del_alarm_name = "name1"
-        for d in data:
-            if d['name'] == del_alarm_name:
-                del_alarm_id = d['alarm_id']
-
+        alarm = self._get_alarm('a')
         with mock.patch.object(messaging, 'get_notifier') as get_notifier:
             notifier = get_notifier.return_value
-
-            self.delete('/alarms/%s' % del_alarm_id,
-                        headers=self.auth_headers, status=204)
+            self._update_alarm(alarm, dict(name='new_name'))
             get_notifier.assert_called_once_with(mock.ANY,
                                                  publisher_id='ceilometer.api')
         calls = notifier.info.call_args_list
         self.assertEqual(1, len(calls))
         args, _ = calls[0]
         context, event_type, payload = args
-        self.assertEqual('alarm.deletion', event_type)
-        self.assertEqual(del_alarm_name, payload['detail']['name'])
+        self.assertEqual('alarm.rule_change', event_type)
+        self.assertEqual('new_name', payload['detail']['name'])
         self.assertTrue(set(['alarm_id', 'detail', 'event_id', 'on_behalf_of',
                              'project_id', 'timestamp', 'type',
                              'user_id']).issubset(payload.keys()))

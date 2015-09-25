@@ -37,6 +37,7 @@
 #   CEILOMETER_BACKEND:            Database backend (e.g. 'mysql', 'mongodb', 'es')
 #   CEILOMETER_COORDINATION_URL:   URL for group membership service provided by tooz.
 #   CEILOMETER_EVENTS:             Set to True to enable event collection
+#   CEILOMETER_EVENT_ALARM:        Set to True to enable publisher for event alarming
 
 # Save trace setting
 XTRACE=$(set +o | grep xtrace)
@@ -255,10 +256,14 @@ function configure_ceilometer {
     cp $CEILOMETER_DIR/etc/ceilometer/event_definitions.yaml $CEILOMETER_CONF_DIR
     cp $CEILOMETER_DIR/etc/ceilometer/gnocchi_archive_policy_map.yaml $CEILOMETER_CONF_DIR
     cp $CEILOMETER_DIR/etc/ceilometer/gnocchi_resources.yaml $CEILOMETER_CONF_DIR
-    cp $CEILOMETER_DIR/ceilometer/meter/data/meters.yaml $CEILOMETER_CONF_DIR
 
     if [ "$CEILOMETER_PIPELINE_INTERVAL" ]; then
         sed -i "s/interval:.*/interval: ${CEILOMETER_PIPELINE_INTERVAL}/" $CEILOMETER_CONF_DIR/pipeline.yaml
+    fi
+    if [ "$CEILOMETER_EVENT_ALARM" == "True" ]; then
+        if ! grep -q '^ *- notifier://?topic=alarm.all$' $CEILOMETER_CONF_DIR/event_pipeline.yaml; then
+            sed -i '/^ *publishers:$/,+1s|^\( *\)-.*$|\1- notifier://?topic=alarm.all\n&|' $CEILOMETER_CONF_DIR/event_pipeline.yaml
+        fi
     fi
 
     # The compute and central agents need these credentials in order to
@@ -340,9 +345,9 @@ function install_ceilometerclient {
 
 # start_ceilometer() - Start running processes, including screen
 function start_ceilometer {
-    run_process ceilometer-acentral "$CEILOMETER_BIN_DIR/ceilometer-agent-central --config-file $CEILOMETER_CONF"
+    run_process ceilometer-acentral "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces central --config-file $CEILOMETER_CONF"
     run_process ceilometer-anotification "$CEILOMETER_BIN_DIR/ceilometer-agent-notification --config-file $CEILOMETER_CONF"
-    run_process ceilometer-aipmi "$CEILOMETER_BIN_DIR/ceilometer-agent-ipmi --config-file $CEILOMETER_CONF"
+    run_process ceilometer-aipmi "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces ipmi --config-file $CEILOMETER_CONF"
 
     if [[ "$CEILOMETER_USE_MOD_WSGI" == "False" ]]; then
         run_process ceilometer-api "$CEILOMETER_BIN_DIR/ceilometer-api -d -v --log-dir=$CEILOMETER_API_LOG_DIR --config-file $CEILOMETER_CONF"
@@ -360,10 +365,10 @@ function start_ceilometer {
     # Start the compute agent late to allow time for the collector to
     # fully wake up and connect to the message bus. See bug #1355809
     if [[ "$VIRT_DRIVER" = 'libvirt' ]]; then
-        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-agent-compute --config-file $CEILOMETER_CONF" $LIBVIRT_GROUP
+        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces compute --config-file $CEILOMETER_CONF" $LIBVIRT_GROUP
     fi
     if [[ "$VIRT_DRIVER" = 'vsphere' ]]; then
-        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-agent-compute --config-file $CEILOMETER_CONF"
+        run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces compute --config-file $CEILOMETER_CONF"
     fi
 
     # Only die on API if it was actually intended to be turned on

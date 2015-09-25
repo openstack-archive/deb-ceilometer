@@ -1,0 +1,715 @@
+# German translations for ceilometer.
+# Copyright (C) 2015 ORGANIZATION
+# This file is distributed under the same license as the ceilometer project.
+#
+# Translators:
+# Carsten Duch <cad@teuto.net>, 2014
+# Christian Berendt <berendt@b1-systems.de>, 2014
+# Ettore Atalan <atalanttore@googlemail.com>, 2014
+# OpenStack Infra <zanata@openstack.org>, 2015. #zanata
+# Tom Cocozzello <tjcocozz@us.ibm.com>, 2015. #zanata
+msgid ""
+msgstr ""
+"Project-Id-Version: ceilometer 5.0.0.0b4.dev127\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2015-09-23 14:39+0000\n"
+"PO-Revision-Date: 2015-09-04 06:32+0000\n"
+"Last-Translator: openstackjenkins <jenkins@openstack.org>\n"
+"Language-Team: German (http://www.transifex.com/openstack/ceilometer/"
+"language/de/)\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.0\n"
+
+#, python-format
+msgid "%(entity)s %(id)s Not Found"
+msgstr "%(entity)s %(id)s nicht gefunden"
+
+#, python-format
+msgid "%(rule)s must be set for %(type)s type alarm"
+msgstr "%(rule)s muss für den Alarmtyp %(type)s gesetzt sein"
+
+#, python-format
+msgid "%(rule1)s and %(rule2)s cannot be set at the same time"
+msgstr "%(rule1)s und %(rule2)s können nicht gleichzeitig festgelegt werden"
+
+#, python-format
+msgid "%d datapoints are unknown"
+msgstr "%d Datenpunkte sind unbekannt"
+
+#, python-format
+msgid "%d samples removed from database"
+msgstr "%d Beispiele aus Datenbank entfernt"
+
+#, python-format
+msgid "Action %(scheme)s for alarm %(alarm_id)s is unknown, cannot notify"
+msgstr ""
+"Aktion %(scheme)s für Alarm %(alarm_id)s ist unbekannt; keine "
+"Benachrichtigung möglich"
+
+#, python-format
+msgid "Alarm %(alarm_id)s not found in project %(project)s"
+msgstr "Alarm %(alarm_id)s nicht gefunden in Projekt %(project)s"
+
+#, python-format
+msgid "Alarm %s not found"
+msgstr "Alarm %s nicht gefunden"
+
+msgid "Alarm combination rule should contain at least two different alarm ids."
+msgstr ""
+"Alarmkombinationsregel sollte mindestens zwei unterschiedliche Alarm-IDs "
+"enthalten."
+
+msgid "Alarm incorrect"
+msgstr "Alaram inkorrekt"
+
+#, python-format
+msgid "Alarm quota exceeded for user %(u)s on project %(p)s"
+msgstr "Alarmquote überschritten für Benutzer %(u)s bei Projekt %(p)s"
+
+#, python-format
+msgid ""
+"Alarm when %(meter_name)s is %(comparison_operator)s a %(statistic)s of "
+"%(threshold)s over %(period)s seconds"
+msgstr ""
+"Alarm, wenn %(meter_name)s %(comparison_operator)s ein %(statistic)s von "
+"%(threshold)s über %(period)s Sekunden ist"
+
+#, python-format
+msgid "Alarm with name=%s exists"
+msgstr "Alarm mit Name=%s existiert"
+
+#, python-format
+msgid "Alarm with name='%s' exists"
+msgstr "Alarm mit name='%s' vorhanden"
+
+#, python-format
+msgid "Alarms %(alarm_ids)s are in unknown state"
+msgstr "Alarme %(alarm_ids)s sind in unbekanntem Status"
+
+#, python-format
+msgid "Arithmetic transformer must use at least one meter in expression '%s'"
+msgstr ""
+"Arithmetiktransformer muss mindestens eine Messgröße im Ausdruck '%s' "
+"verwenden"
+
+#, python-format
+msgid "Cannot create table %(table_name)s   it already exists. Ignoring error"
+msgstr ""
+"Tabelle %(table_name)s kann nicht erstellt werden, da sie bereits vorhanden "
+"ist. Fehler wird ignoriert"
+
+#, python-format
+msgid "Cannot specify alarm %s itself in combination rule"
+msgstr ""
+"Der Alarm %s selbst kann nicht in der Kombinationsregel angegeben werden"
+
+#, python-format
+msgid "Combined state of alarms %s"
+msgstr "Kombinierter Alarmstatus %s"
+
+msgid "Configuration:"
+msgstr "Konfiguration:"
+
+#, python-format
+msgid "Connecting to %(db)s on %(nodelist)s"
+msgstr "Verbindung mit %(db)s auf %(nodelist)s wird hergestellt"
+
+#, python-format
+msgid "Continue after error from %(name)s: %(error)s"
+msgstr "Fortfahren nach Fehler von %(name)s: %(error)s"
+
+#, python-format
+msgid "Could not connect to XenAPI: %s"
+msgstr "Es konnte keine Verbindung zu XenAPI hergestellt werden: %s"
+
+#, python-format
+msgid "Could not get CPU Util for %(id)s: %(e)s"
+msgstr "Abruf von CPU-Auslastung nicht möglich für %(id)s: %(e)s"
+
+#, python-format
+msgid "Could not get Memory Usage for %(id)s: %(e)s"
+msgstr "Abruf von Speicherbelegung nicht möglich für %(id)s: %(e)s"
+
+#, python-format
+msgid "Could not get VM %s CPU Utilization"
+msgstr "CPU-Auslastung für VM %s konnte nicht abgerufen werden"
+
+#, python-format
+msgid "Couldn't obtain IP address of instance %s"
+msgstr "IP-Adresse von Instanz %s konnte nicht abgerufen werden"
+
+msgid ""
+"Dispatcher target was not set, no meter will be posted. Set the target in "
+"the ceilometer.conf file"
+msgstr ""
+"Dispatcher-Ziel nicht definiert, es werden keine Messgrößen übergeben. Das "
+"Ziel in der Datei 'ceilometer.conf' definieren."
+
+#, python-format
+msgid "Dropping Notification %(type)s (uuid:%(msgid)s)"
+msgstr "Löschen von Benachrichtigung %(type)s (UUID:%(msgid)s)"
+
+#, python-format
+msgid "Dropping metering data with TTL %d"
+msgstr "Löschen von Messdaten mit TTL %d"
+
+#, python-format
+msgid "Duplicate VM name found: %s"
+msgstr "Doppelter VM Name gefunden: %s"
+
+#, python-format
+msgid ""
+"Error from libvirt while looking up instance <name=%(name)s, id=%(id)s>: "
+"[Error Code %(error_code)s] %(ex)s"
+msgstr ""
+"Fehler von libvirt während Suche nach Instanz <name=%(name)s, id=%(id)s>: "
+"[Fehlercode %(error_code)s] %(ex)s"
+
+#, python-format
+msgid "Error parsing HTTP response: %s"
+msgstr "Fehler bei Auswertung der HTTP-Antwort %s"
+
+#, python-format
+msgid "Error while posting alarm: %s"
+msgstr "Fehler beim Übergeben von Alarm: %s"
+
+#, python-format
+msgid "Error while putting alarm: %s"
+msgstr "Fehler beim Verwenden von Alarm: %s"
+
+msgid "Event"
+msgstr "Ereignis"
+
+#, python-format
+msgid "Event Definitions: %s"
+msgstr "Ereignisdefinitionen: %s"
+
+msgid "Expired residual resource and meter definition data"
+msgstr "Abgelaufene Daten für residente Ressource und für Messdefinition"
+
+msgid "Expression evaluated to a NaN value!"
+msgstr "Ausdruck ergab einen NaN-Wert!"
+
+#, python-format
+msgid "FLOATING IP USAGE: %s"
+msgstr "NUTZUNG DER DYNAMISCHEN IP: %s"
+
+#, python-format
+msgid "Failed to evaluate alarm %s"
+msgstr "Alarm %s konnte nicht ausgewertet werden"
+
+#, python-format
+msgid "Failed to import extension for %(name)s: %(error)s"
+msgstr "Fehler beim Importieren der Erweiterung für %(name)s: %(error)s"
+
+#, python-format
+msgid ""
+"Failed to inspect data of instance <name=%(name)s, id=%(id)s>, domain state "
+"is SHUTOFF."
+msgstr ""
+"Fehler beim Überprüfen von Daten der Instanz <name=%(name)s, id=%(id)s>, "
+"Domänenstatus ist ABGESCHALTET."
+
+#, python-format
+msgid ""
+"Failed to inspect memory usage of %(instance_uuid)s, can not get info from "
+"libvirt: %(error)s"
+msgstr ""
+"Fehler beim Überprüfen der Speicherbelegung von %(instance_uuid)s, "
+"Informationen können nicht von libvirt abgerufen werden: %(error)s"
+
+#, python-format
+msgid ""
+"Failed to inspect memory usage of instance <name=%(name)s, id=%(id)s>, can "
+"not get info from libvirt."
+msgstr ""
+"Fehler beim Überprüfen der Speicherbelegung von Instanz <name=%(name)s, id="
+"%(id)s>, Informationen können nicht von libvirt abgerufen werden."
+
+#, python-format
+msgid "Failed to load any dispatchers for %s"
+msgstr "Es konnten keine Dispatcher für %s geladen werden"
+
+#, python-format
+msgid "Failed to load any notification handlers for %s"
+msgstr "Es konnten keine Benachrichtigungshandler für %s geladen werden"
+
+#, python-format
+msgid "Failed to parse the timestamp value %s"
+msgstr "Zeitmarkenwert %s konnte nicht analysiert werden"
+
+#, python-format
+msgid "Failed to publish %d datapoints, dropping them"
+msgstr "%d Datenpunkte konnten nicht veröffentlicht werden; werden gelöscht"
+
+#, python-format
+msgid "Failed to publish %d datapoints, queue them"
+msgstr ""
+"%d Datenpunkte konnten nicht veröffentlicht werden; in Warteschlange "
+"einreihen"
+
+#, python-format
+msgid "Failed to record metering data: %s"
+msgstr "Messdaten wurden nicht aufgezeichnet: %s"
+
+#, python-format
+msgid "Filter expression not valid: %s"
+msgstr "Filterausdruck nicht gültig: %s"
+
+#, python-format
+msgid "Ignoring instance %(name)s (%(instance_id)s) : %(error)s"
+msgstr "Instanz %(name)s (%(instance_id)s) wird ignoriert: %(error)s"
+
+#, python-format
+msgid "Ignoring instance %(name)s: %(error)s"
+msgstr "Instanz %(name)s wird ignoriert: %(error)s"
+
+#, python-format
+msgid "Ignoring pool %(pool_id)s: %(error)s"
+msgstr "Pool %(pool_id)s wird ignoriert: %(error)s"
+
+#, python-format
+msgid ""
+"Invalid YAML syntax in Event Definitions file %(file)s at line: %(line)s, "
+"column: %(column)s."
+msgstr ""
+"Ungültige YAML-Syntax in Ereignisdefinitionsdatei %(file)s in Zeile: "
+"%(line)s, Spalte: %(column)s."
+
+#, python-format
+msgid "Invalid period %(period)s: %(err)s"
+msgstr "Ungültiger Zeitraum %(period)s: %(err)s"
+
+#, python-format
+msgid "Invalid trait type '%(type)s' for trait %(trait)s"
+msgstr "Ungültiger Traittyp '%(type)s' für Trait %(trait)s"
+
+msgid "Limit must be positive"
+msgstr "Grenzwert muss positiv sein"
+
+#, python-format
+msgid "More than one event with id %s returned from storage driver"
+msgstr "Mehr als ein Ereignis mit der ID %s vom Speichertreiber zurückgegeben"
+
+#, python-format
+msgid "Multiple VM %s found in XenServer"
+msgstr "Mehrere VMs %s in XenServer gefunden"
+
+msgid "Must specify connection_url, and connection_password to use"
+msgstr ""
+"Angabe von connection_url und connection_password für die Verwendung "
+"erforderlich"
+
+#, python-format
+msgid "No plugin named %(plugin)s available for trait %(trait)s"
+msgstr "Kein Plug-in mit dem Namen %(plugin)s verfügbar für Trait %(trait)s"
+
+msgid "Node Manager init failed"
+msgstr "Initialisierung von Node Manager fehlgeschlagen"
+
+#, python-format
+msgid "Not Authorized to access %(aspect)s %(id)s"
+msgstr "Nicht berechtigt für den Zugriff auf %(aspect)s %(id)s"
+
+#, python-format
+msgid ""
+"Notifying alarm %(alarm_name)s %(alarm_id)s of %(severity)s priority from "
+"%(previous)s to %(current)s with action %(action)s because %(reason)s."
+msgstr ""
+"Benachrichtigung von Alarm %(alarm_name)s %(alarm_id)s mit Priorität "
+"%(severity)s von %(previous)s in %(current)s mit Aktion %(action)s wegen "
+"%(reason)s."
+
+#, python-format
+msgid "OpenDaylitght API returned %(status)s %(reason)s"
+msgstr "OpenDaylight-API hat Folgendes zurückgegeben: %(status)s %(reason)s"
+
+#, python-format
+msgid "Opencontrail API returned %(status)s %(reason)s"
+msgstr "Opencontrail-API hat Folgendes zurückgegeben: %(status)s %(reason)s"
+
+#, python-format
+msgid "Order-by expression not valid: %s"
+msgstr "Ausdruck für 'Sortieren nach' nicht gültig: %s"
+
+#, python-format
+msgid ""
+"Parse error in JSONPath specification '%(jsonpath)s' for %(trait)s: %(err)s"
+msgstr ""
+"Analysefehler in JSONPath-Spezifikation '%(jsonpath)s' für %(trait)s: %(err)s"
+
+msgid "Period must be positive."
+msgstr "Zeitraum muss positiv sein."
+
+#, python-format
+msgid "Pipeline %(pipeline)s: Continue after error from publisher %(pub)s"
+msgstr "Pipeline %(pipeline)s: Fortsetzen nach Fehler von Publisher %(pub)s"
+
+#, python-format
+msgid "Pipeline %(pipeline)s: Error flushing transformer %(trans)s"
+msgstr ""
+"Pipeline %(pipeline)s: Fehler bei Flushoperation für Transformer %(trans)s"
+
+#, python-format
+msgid ""
+"Pipeline %(pipeline)s: Exit after error from transformer %(trans)s for "
+"%(smp)s"
+msgstr ""
+"Pipeline %(pipeline)s: Beendigung nach Fehler von Transformer %(trans)s für "
+"%(smp)s"
+
+#, python-format
+msgid ""
+"Pipeline %(pipeline)s: Setup transformer instance %(name)s with parameter "
+"%(param)s"
+msgstr ""
+"Pipeline %(pipeline)s: Konfiguration von Transformerinstanz %(name)s mit "
+"Parameter %(param)s"
+
+#, python-format
+msgid "Pipeline config: %s"
+msgstr "Pipelinekonfiguration: %s"
+
+#, python-format
+msgid "Plugin specified, but no plugin name supplied for trait %s"
+msgstr "Plug-in angegeben, aber kein Plug-in-Name für Trait %s angegeben"
+
+#, python-format
+msgid "Polling %(mtr)s sensor failed for %(cnt)s times!"
+msgstr "Polling von %(mtr)s-Sensor %(cnt)s Mal fehlgeschlagen!"
+
+#, python-format
+msgid "Polling %(name)s faild for %(cnt)s times!"
+msgstr "Polling von %(name)s %(cnt)s Mal fehlgeschlagen!"
+
+#, python-format
+msgid "Polling pollster %(poll)s in the context of %(src)s"
+msgstr "Abfrage von Pollster %(poll)s im Kontext von %(src)s"
+
+#, python-format
+msgid "Pollster for %s is disabled!"
+msgstr "Pollster für %s ist inaktiviert!"
+
+#, python-format
+msgid "Prevent pollster %(name)s for polling source %(source)s anymore!"
+msgstr ""
+"Verhindern Sie, dass Pollster %(name)s Quelle %(source)s weiterhin abfragt!"
+
+#, python-format
+msgid ""
+"Publisher max local_queue length is exceeded, dropping %d oldest samples"
+msgstr ""
+"Maximale Länge von local_queue für Publisher ist überschritten, die %d "
+"ältesten Beispiele werden gelöscht"
+
+#, python-format
+msgid "Publishing policy is unknown (%s) force to default"
+msgstr ""
+"Veröffentlichungsrichtlinie ist unbekannt (%s); auf Standardeinstellung "
+"setzen"
+
+#, python-format
+msgid "Publishing policy set to %s"
+msgstr "Veröffentlichungsrichtlinie auf %s gesetzt"
+
+#, python-format
+msgid "RGW AdminOps API returned %(status)s %(reason)s"
+msgstr "RGW-AdminOps-API hat Folgendes zurückgegeben: %(status)s %(reason)s"
+
+#, python-format
+msgid ""
+"Remaining as %(state)s due to %(count)d samples %(disposition)s threshold, "
+"most recent: %(most_recent)s"
+msgstr ""
+"Verbleibend %(state)s aufgrund von %(count)d Stichproben %(disposition)s "
+"Schwellenwert, aktuellster: %(most_recent)s"
+
+#, python-format
+msgid "Remaining as %(state)s due to alarms %(alarm_ids)s in state %(state)s"
+msgstr ""
+"Verbleibt als %(state)s aufgrund von Alarmen %(alarm_ids)s in Status "
+"%(state)s"
+
+msgid "Request failed to connect to OpenDaylight with NorthBound REST API"
+msgstr ""
+"Anforderung konnte keine Verbindung mit OpenDaylight über NorthBound REST-"
+"API herstellen"
+
+#, python-format
+msgid "Required field %s not specified"
+msgstr "Erforderliches Feld %s nicht angegeben"
+
+#, python-format
+msgid "Required field in trait definition not specified: '%s'"
+msgstr "Erforderliches Feld in Traitdefinition nicht angegeben: '%s'"
+
+msgid "Resource"
+msgstr "Resource"
+
+msgid "Sample"
+msgstr "Beispiel"
+
+#, python-format
+msgid "Skip loading extension for %s"
+msgstr "Laden der Ausnahme für %s überspringen"
+
+#, python-format
+msgid "Starting server in PID %s"
+msgstr "Starten von Server in PID %s"
+
+#, python-format
+msgid "String %s is not a valid isotime"
+msgstr "Zeichenfolge %s ist kein gültiger Wert für 'isotime'"
+
+#, python-format
+msgid ""
+"The data type %(type)s is not supported. The supported data type list is: "
+"%(supported)s"
+msgstr ""
+"Der Datentyp %(type)s wird nicht unterstützt. Die Liste der unterstützten "
+"Datentypen lautet: %(supported)s"
+
+msgid "The path for the file publisher is required"
+msgstr "Der Pfad für den Datei-Publisher ist erforderlich"
+
+msgid "Time constraint names must be unique for a given alarm."
+msgstr "Zeitvorgabennamen müssen für einen angegebenen Alarm eindeutig sein."
+
+#, python-format
+msgid "Timezone %s is not valid"
+msgstr "Zeitzone %s ist nicht gültig"
+
+#, python-format
+msgid ""
+"Transition to %(state)s due to %(count)d samples %(disposition)s threshold, "
+"most recent: %(most_recent)s"
+msgstr ""
+"Übergang in %(state)s aufgrund von %(count)d Stichproben %(disposition)s "
+"Schwellenwert, aktuellster: %(most_recent)s"
+
+#, python-format
+msgid "Transition to %(state)s due to alarms %(alarm_ids)s in state %(state)s"
+msgstr ""
+"Übergang in %(state)s aufgrund von Alarmen %(alarm_ids)s in Status%(state)s"
+
+#, python-format
+msgid "UDP: Cannot decode data sent by %s"
+msgstr "UPD: Von %s gesendete Daten konnten nicht dekodiert werden"
+
+msgid "UDP: Unable to store meter"
+msgstr "UDP: Messgröße kann nicht gespeichert werden"
+
+#, python-format
+msgid "Unable to connect to the database server: %(errmsg)s."
+msgstr ""
+"Es kann keine Verbindung zum Datenbankserver hergestellt werden: %(errmsg)s."
+
+#, python-format
+msgid ""
+"Unable to convert the value %(value)s to the expected data type %(type)s."
+msgstr ""
+"Wert %(value)s kann nicht in den erwarteten Datentyp %(type)s umgewandelt "
+"werden."
+
+#, python-format
+msgid "Unable to discover resources: %s"
+msgstr "Ressourcen können nicht gefunden werden: %s"
+
+#, python-format
+msgid "Unable to evaluate expression %(expr)s: %(exc)s"
+msgstr "Auswertung nicht möglich für Ausdruck %(expr)s: %(exc)s"
+
+#, python-format
+msgid "Unable to load publisher %s"
+msgstr "Publisher %s kann nicht geladen werden"
+
+#, python-format
+msgid "Unable to load the hypervisor inspector: %s"
+msgstr "Hypervisorinspector %s kann nicht geladen werden"
+
+msgid "Unable to log in to XenAPI (is the Dom0 disk full?)"
+msgstr "Anmeldung bei XenAPI nicht möglich (Dom0-Datenträger voll?)"
+
+#, python-format
+msgid "Unable to notify alarm %s"
+msgstr "Alarm %s kann nicht benachrichtigt werden"
+
+msgid "Unable to notify for an alarm with no action"
+msgstr "Für einen Alarm ohne Aktion kann nicht benachrichtigt werden"
+
+#, python-format
+msgid "Unable to parse action %(action)s for alarm %(alarm_id)s"
+msgstr "Aktion %(action)s konnte nicht für %(alarm_id)s analysiert werden"
+
+#, python-format
+msgid "Unable to parse action %s"
+msgstr "Aktion %s konnte nicht analysiert werden"
+
+#, python-format
+msgid ""
+"Unable to reconnect to the primary mongodb after %(retries)d retries. Giving "
+"up."
+msgstr ""
+"Es kann keine erneute Verbindung zur primären mongodb nach %(retries)d "
+"Versuchen hergestellt werden. Abbruch."
+
+#, python-format
+msgid ""
+"Unable to reconnect to the primary mongodb: %(errmsg)s. Trying again in "
+"%(retry_interval)d seconds."
+msgstr ""
+"Es kann keine erneute Verbindung zur primären mongodb hergestellt werden: "
+"%(errmsg)s. Erneuter Versuch in %(retry_interval)d Sekunden."
+
+msgid "Unable to send sample over UDP"
+msgstr "Beispiel kann nicht über UDP gesendet werden"
+
+#, python-format
+msgid ""
+"Unexpected exception converting %(value)s to the expected data type %(type)s."
+msgstr ""
+"Unerwartete Ausnahme beim Konvertieren von %(value)s in den erwarteten "
+"Datentyp %(type)s."
+
+#, python-format
+msgid "Unknown discovery extension: %s"
+msgstr "Unbekannte Erkennungserweiterung: %s"
+
+#, python-format
+msgid "Unknown metadata type. Key (%s) will not be queryable."
+msgstr "Unbekannter Metadatentyp. Schlüssel (%s) wird nicht abfragbar sein."
+
+#, python-format
+msgid "Unknown status %(stat)s received on fw %(id)s,skipping sample"
+msgstr ""
+"Unbekannten Status %(stat)s erhalten für Firewall %(id)s; Beispiel wird "
+"übersprungen"
+
+#, python-format
+msgid "Unknown status %(stat)s received on member %(id)s,skipping sample"
+msgstr ""
+"Unbekannten Status %(stat)s erhalten für Mitglied %(id)s; Beispiel wird "
+"übersprungen"
+
+#, python-format
+msgid "Unknown status %(stat)s received on pool %(id)s, skipping sample"
+msgstr ""
+"Unbekannten Status %(stat)s erhalten für Pool %(id)s; Beispiel wird "
+"übersprungen"
+
+#, python-format
+msgid "Unknown status %(stat)s received on vip %(id)s, skipping sample"
+msgstr ""
+"Unbekannten Status %(stat)s erhalten für VIP %(id)s; Beispiel wird "
+"übersprungen"
+
+#, python-format
+msgid "Unknown status %(stat)s received on vpn %(id)s,skipping sample"
+msgstr ""
+"Unbekannten Status %(stat)s erhalten für VPN %(id)s; Beispiel wird "
+"übersprungen"
+
+#, python-format
+msgid "Unsupported action %s"
+msgstr "Nicht unterstützte Aktion %s"
+
+#, python-format
+msgid "VM %s not found in XenServer"
+msgstr "VM %s in XenServer nicht gefunden"
+
+#, python-format
+msgid "VM %s not found on Hyper-V"
+msgstr "VM %s wurde nicht auf Hyper-V gefunden"
+
+msgid "Wrong sensor type"
+msgstr "Falscher Sensortyp"
+
+msgid "XenAPI not installed"
+msgstr "XenAPI nicht installiert"
+
+#, python-format
+msgid "YAML error reading Event Definitions file %(file)s"
+msgstr "YAML-Fehler beim Lesen von Ereignisdefinitionsdatei %(file)s"
+
+#, python-format
+msgid "alarm %(id)s transitioning to %(state)s because %(reason)s"
+msgstr "Alarm %(id)s wird geändert in %(state)s aufgrund von %(reason)s"
+
+msgid "alarm evaluation cycle failed"
+msgstr "Der Zyklus für die Alarmauswertung ist fehlgeschlagen"
+
+msgid "alarm retrieval failed"
+msgstr "Abrufen des Alarms fehlgeschlagen"
+
+msgid "alarm state update failed"
+msgstr "Aktualisierung des Alarmzustands ist fehlgeschlagen"
+
+msgid "alarm stats retrieval failed"
+msgstr "Abrufen der Alarmstatistiken ist fehlgeschlagen"
+
+#, python-format
+msgid "alarm stats retrieval failed: %s"
+msgstr "Abrufen der Alarmstatistiken ist fehlgeschlagen: %s"
+
+#, python-format
+msgid "could not get CPU time for %(id)s: %(e)s"
+msgstr "Abruf von CPU-Zeit nicht möglich für %(id)s: %(e)s"
+
+msgid "detected decoupled pipeline config format"
+msgstr "entkoppeltes Pipeline-Konfigurationsformat erkannt"
+
+#, python-format
+msgid "dropping sample with no predecessor: %s"
+msgstr "Beispiel ohne Vorgänger wird gelöscht: %s"
+
+#, python-format
+msgid "initiating evaluation cycle on %d alarms"
+msgstr "Auswertungszyklus für %d Alarme wird eingeleitet"
+
+msgid "ipmitool output length mismatch"
+msgstr "Abweichung bei ipmitool-Ausgabelänge"
+
+msgid "max_bytes and backup_count should be numbers."
+msgstr "max_bytes und backup_count sollten Zahlen sein."
+
+#, python-format
+msgid "message signature invalid, discarding message: %r"
+msgstr "Nachrichtensignatur ungültig, Nachricht wird verworfen: %r"
+
+#, python-format
+msgid "metering data %(counter_name)s for %(resource_id)s: %(counter_volume)s"
+msgstr ""
+"Messung von Daten %(counter_name)s für %(resource_id)s: %(counter_volume)s"
+
+msgid "parse IPMI sensor data failed,No data retrieved from given input"
+msgstr ""
+"Analyse von IPMI-Sensordaten fehlgeschlagen, keine Daten von angegebener "
+"Eingabe abgerufen"
+
+msgid "parse IPMI sensor data failed,unknown sensor type"
+msgstr "Analyse von IPMI-Sensordaten fehlgeschlagen, unbekannter Sensortyp"
+
+msgid "running ipmitool failure"
+msgstr "Fehler beim Ausführen von ipmitool"
+
+#, python-format
+msgid "serving on 0.0.0.0:%(sport)s, view at http://127.0.0.1:%(vport)s"
+msgstr ""
+"Bereitstellung auf 0.0.0.0:%(sport)s, Ansicht unter http://127.0.0.1:"
+"%(vport)s"
+
+#, python-format
+msgid "serving on http://%(host)s:%(port)s"
+msgstr "Bereitstellung auf http://%(host)s:%(port)s"
+
+msgid "state invalid"
+msgstr "Zustand ungültig"
+
+msgid "state_timestamp should be datetime object"
+msgstr "state_timestamp sollte ein datetime-Objekt sein"
+
+msgid "timestamp should be datetime object"
+msgstr "timestamp sollte ein datetime-Objekt sein"

@@ -142,7 +142,7 @@ class ResourcesController(rest.RestController):
         q = q or []
         limit = utils.enforce_limit(limit)
         kwargs = utils.query_to_kwargs(
-            q, pecan.request.storage_conn.get_resources)
+            q, pecan.request.storage_conn.get_resources, ['limit'])
         resources = [
             Resource.from_db_and_links(r,
                                        self._resource_links(r.resource_id,

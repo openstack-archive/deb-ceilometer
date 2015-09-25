@@ -29,9 +29,8 @@ services. You may use one of the listed database backends below to store
 Ceilometer data.
 
 .. note::
-   Please notice, MongoDB (and some other backends like DB2 and HBase)
-   require pymongo_ to be installed on the system. The required minimum
-   version of pymongo is 2.4.
+   Please notice, MongoDB requires pymongo_ to be installed on the system. The
+   required minimum version of pymongo is 2.4.
 ..
 
 
@@ -104,17 +103,6 @@ HBase
     [database]
     connection = hbase://hbase-thrift-host:9090
 
-DB2
----
-
-   DB2 installation should follow fresh IBM DB2 NoSQL installation docs.
-
-   To use DB2 as the storage backend, change the 'database' section in
-   ceilometer.conf as follows::
-
-    [database]
-    connection = db2://username:password@host:27017/ceilometer
-
 
 .. _HappyBase: http://happybase.readthedocs.org/en/latest/index.html#
 .. _MongoDB: http://www.mongodb.org/
@@ -129,15 +117,24 @@ Installing the notification agent
 
 1. If you want to be able to retrieve image samples, you need to instruct
    Glance to send notifications to the bus by changing ``notifier_strategy``
-   to ``rabbit`` or ``qpid`` in ``glance-api.conf`` and restarting the
+   to ``rabbit`` in ``glance-api.conf`` and restarting the
    service.
 
 2. If you want to be able to retrieve volume samples, you need to instruct
    Cinder to send notifications to the bus by changing ``notification_driver``
-   to ``cinder.openstack.common.notifier.rpc_notifier`` and
-   ``control_exchange`` to ``cinder``, before restarting the service.
+   to ``messagingv2`` and ``control_exchange`` to ``cinder``, before restarting
+   the service.
 
-3. In order to retrieve object store statistics, ceilometer needs
+3. If you want to be able to retrieve instance samples, you need to instruct
+   Nova to send notifications to the bus by setting these values::
+
+      # nova-compute configuration for ceilometer
+      instance_usage_audit=True
+      instance_usage_audit_period=hour
+      notify_on_state_change=vm_and_task_state
+      notification_driver=messagingv2
+
+4. In order to retrieve object store statistics, ceilometer needs
    access to swift with ``ResellerAdmin`` role. You should give this
    role to your ``os_username`` user for tenant ``os_tenant_name``:
 
@@ -177,18 +174,18 @@ Installing the notification agent
         Please make sure that ceilometer's logging directory (if it's configured)
         is read and write accessible for the user swift is started by.
 
-4. Clone the ceilometer git repository to the management server::
+5. Clone the ceilometer git repository to the management server::
 
    $ cd /opt/stack
    $ git clone https://git.openstack.org/openstack/ceilometer.git
 
-5. As a user with ``root`` permissions or ``sudo`` privileges, run the
+6. As a user with ``root`` permissions or ``sudo`` privileges, run the
    ceilometer installer::
 
    $ cd ceilometer
    $ sudo python setup.py install
 
-6. Copy the sample configuration files from the source tree
+7. Copy the sample configuration files from the source tree
    to their final location.
 
    ::
@@ -198,13 +195,13 @@ Installing the notification agent
       $ cp etc/ceilometer/*.yaml /etc/ceilometer
       $ cp etc/ceilometer/ceilometer.conf.sample /etc/ceilometer/ceilometer.conf
 
-7. Edit ``/etc/ceilometer/ceilometer.conf``
+8. Edit ``/etc/ceilometer/ceilometer.conf``
 
-   1. Configure RPC
+   1. Configure messaging
 
-      Set the RPC-related options correctly so ceilometer's daemons
-      can communicate with each other and receive notifications from
-      the other projects.
+      Set the messaging related options correctly so ceilometer's daemons can
+      communicate with each other and receive notifications from the other
+      projects.
 
       In particular, look for the ``*_control_exchange`` options and
       make sure the names are correct. If you did not change the
@@ -214,8 +211,8 @@ Installing the notification agent
       .. note::
 
          Ceilometer makes extensive use of the messaging bus, but has
-         not yet been tested with ZeroMQ. We recommend using Rabbit or
-         qpid for now.
+         not yet been tested with ZeroMQ. We recommend using Rabbit
+         for now.
 
    2. Set the ``telemetry_secret`` value.
 
@@ -227,7 +224,7 @@ Installing the notification agent
    Refer to :doc:`/configuration` for details about any other options
    you might want to modify before starting the service.
 
-8. Start the notification daemon.
+9. Start the notification daemon.
 
    ::
 
@@ -272,11 +269,11 @@ Installing the collector
 
 4. Edit ``/etc/ceilometer/ceilometer.conf``
 
-   1. Configure RPC
+   1. Configure messaging
 
-      Set the RPC-related options correctly so ceilometer's daemons
-      can communicate with each other and receive notifications from
-      the other projects.
+      Set the messaging related options correctly so ceilometer's daemons can
+      communicate with each other and receive notifications from the other
+      projects.
 
       In particular, look for the ``*_control_exchange`` options and
       make sure the names are correct. If you did not change the
@@ -286,8 +283,8 @@ Installing the collector
       .. note::
 
          Ceilometer makes extensive use of the messaging bus, but has
-         not yet been tested with ZeroMQ. We recommend using Rabbit or
-         qpid for now.
+         not yet been tested with ZeroMQ. We recommend using Rabbit
+         for now.
 
    2. Set the ``telemetry_secret`` value.
 
@@ -312,90 +309,7 @@ Installing the collector
       or other tool for maintaining a long-running program in the
       background.
 
-
-Installing the Compute Agent
-============================
-
-.. index::
-   double: installing; compute agent
-
-.. note:: The compute agent must be installed on each nova compute node.
-
-1. Configure nova.
-
-   The ``nova`` compute service needs the following configuration to
-   be set in ``nova.conf``::
-
-      # nova-compute configuration for ceilometer
-      instance_usage_audit=True
-      instance_usage_audit_period=hour
-      notify_on_state_change=vm_and_task_state
-      notification_driver=nova.openstack.common.notifier.rpc_notifier
-
-2. Clone the ceilometer git repository to the server::
-
-   $ cd /opt/stack
-   $ git clone https://git.openstack.org/openstack/ceilometer.git
-
-3. As a user with ``root`` permissions or ``sudo`` privileges, run the
-   ceilometer installer::
-
-   $ cd ceilometer
-   $ sudo python setup.py install
-
-4. Copy the sample configuration files from the source tree
-   to their final location.
-
-   ::
-
-      $ mkdir -p /etc/ceilometer
-      $ cp etc/ceilometer/*.json /etc/ceilometer
-      $ cp etc/ceilometer/*.yaml /etc/ceilometer
-      $ cp etc/ceilometer/ceilometer.conf.sample /etc/ceilometer/ceilometer.conf
-
-5. Edit ``/etc/ceilometer/ceilometer.conf``
-
-   1. Configure RPC
-
-      Set the RPC-related options correctly so ceilometer's daemons
-      can communicate with each other and receive notifications from
-      the other projects.
-
-      In particular, look for the ``*_control_exchange`` options and
-      make sure the names are correct. If you did not change the
-      ``control_exchange`` settings for the other components, the
-      defaults should be correct.
-
-      .. note::
-
-         Ceilometer makes extensive use of the messaging bus, but has
-         not yet been tested with ZeroMQ. We recommend using Rabbit or
-         qpid for now.
-
-   2. Set the ``telemetry_secret`` value.
-
-      Set the ``telemetry_secret`` value to a large, random, value. Use
-      the same value in all ceilometer configuration files, on all
-      nodes, so that messages passing between the nodes can be
-      validated.
-
-   Refer to :doc:`/configuration` for details about any other options
-   you might want to modify before starting the service.
-
-6. Start the agent.
-
-   ::
-
-     $ ceilometer-agent-compute
-
-   .. note::
-
-      The default development configuration of the agent logs to
-      stderr, so you may want to run this step using a screen session
-      or other tool for maintaining a long-running program in the
-      background.
-
-Installing the Central Agent
+Installing the Polling Agent
 ============================
 
 .. index::
@@ -403,8 +317,9 @@ Installing the Central Agent
 
 .. note::
 
-   The central agent needs to be able to talk to keystone and any of
-   the services being polled for updates.
+   The polling agent needs to be able to talk to Keystone and any of
+   the services being polled for updates. It also needs to run on your compute
+   nodes to poll instances.
 
 1. Clone the ceilometer git repository to the server::
 
@@ -428,30 +343,20 @@ Installing the Central Agent
       $ cp etc/ceilometer/ceilometer.conf.sample /etc/ceilometer/ceilometer.conf
 
 4. Edit ``/etc/ceilometer/ceilometer.conf``
+   Set the messaging related options correctly so ceilometer's daemons can
+   communicate with each other and receive notifications from the other
+   projects.
 
-   1. Configure RPC
+   In particular, look for the ``*_control_exchange`` options and
+   make sure the names are correct. If you did not change the
+   ``control_exchange`` settings for the other components, the
+   defaults should be correct.
 
-      Set the RPC-related options correctly so ceilometer's daemons
-      can communicate with each other and receive notifications from
-      the other projects.
+   .. note::
 
-      In particular, look for the ``*_control_exchange`` options and
-      make sure the names are correct. If you did not change the
-      ``control_exchange`` settings for the other components, the
-      defaults should be correct.
-
-      .. note::
-
-         Ceilometer makes extensive use of the messaging bus, but has
-         not yet been tested with ZeroMQ. We recommend using Rabbit or
-         qpid for now.
-
-   2. Set the ``telemetry_secret`` value.
-
-      Set the ``telemetry_secret`` value to a large, random, value. Use
-      the same value in all ceilometer configuration files, on all
-      nodes, so that messages passing between the nodes can be
-      validated.
+      Ceilometer makes extensive use of the messaging bus, but has
+      not yet been tested with ZeroMQ. We recommend using Rabbit
+      for now.
 
    Refer to :doc:`/configuration` for details about any other options
    you might want to modify before starting the service.
@@ -460,7 +365,13 @@ Installing the Central Agent
 
    ::
 
-    $ ceilometer-agent-central
+    $ ceilometer-polling
+
+6. By default, the polling agent polls the `compute` and `central` namespaces.
+   You can specify which namespace to poll in the `ceilometer.conf`
+   configuration file or on the command line::
+
+     $ ceilometer-polling --polling-namespaces central,ipmi
 
 
 Installing the API Server
@@ -497,11 +408,11 @@ Installing the API Server
 
 4. Edit ``/etc/ceilometer/ceilometer.conf``
 
-   1. Configure RPC
+   1. Configure messaging
 
-      Set the RPC-related options correctly so ceilometer's daemons
-      can communicate with each other and receive notifications from
-      the other projects.
+      Set the messaging related options correctly so ceilometer's daemons can
+      communicate with each other and receive notifications from the other
+      projects.
 
       In particular, look for the ``*_control_exchange`` options and
       make sure the names are correct. If you did not change the
@@ -511,8 +422,8 @@ Installing the API Server
       .. note::
 
          Ceilometer makes extensive use of the messaging bus, but has
-         not yet been tested with ZeroMQ. We recommend using Rabbit or
-         qpid for now.
+         not yet been tested with ZeroMQ. We recommend using Rabbit
+         for now.
 
    Refer to :doc:`/configuration` for details about any other options
    you might want to modify before starting the service.
@@ -588,13 +499,7 @@ Configure the driver in ``heat.conf``
 
    ::
 
-        notification_driver=heat.openstack.common.notifier.rpc_notifier
-
-Or if migration to oslo.messaging is done for Icehouse:
-
-   ::
-
-        notification_driver=oslo.messaging.notifier.Notifier
+        notification_driver=messagingv2
 
 
 Configuring Sahara to send notifications
@@ -605,12 +510,12 @@ Configure the driver in ``sahara.conf``
    ::
 
         enable_notifications=true
-        notification_driver=messaging
+        notification_driver=messagingv2
 
-Also you need to configure RPC-related options correctly as written above
+Also you need to configure messaging related options correctly as written above
 for other parts of installation guide. Refer to :doc:`/configuration` for
-details about any other options you might want to modify before starting
-the service.
+details about any other options you might want to modify before starting the
+service.
 
 
 Configuring MagnetoDB to send notifications
@@ -620,7 +525,7 @@ Configure the driver in ``magnetodb-async-task-executor.conf``
 
    ::
 
-        notification_driver=messaging
+        notification_driver=messagingv2
 
 You also would need to restart the service magnetodb-async-task-executor
 (if it's already running) after changing the above configuration file.
@@ -632,13 +537,12 @@ Notifications queues
 .. index::
    double: installing; notifications queues
 
-By default, Ceilometer consumes notifications on the RPC bus sent to
+By default, Ceilometer consumes notifications on the messaging bus sent to
 **notification_topics** by using a queue/pool name that is identical to the
-topic name. You shouldn't have different applications consuming messages
-from this queue.
-If you want to also consume the topic notifications with a system other than
-Ceilometer, you should configure a separate queue that listens for the same
-messages.
+topic name. You shouldn't have different applications consuming messages from
+this queue. If you want to also consume the topic notifications with a system
+other than Ceilometer, you should configure a separate queue that listens for
+the same messages.
 
 Using multiple dispatchers
 ================================

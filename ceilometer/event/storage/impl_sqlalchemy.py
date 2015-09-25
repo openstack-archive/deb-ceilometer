@@ -265,6 +265,19 @@ class Connection(base.Connection):
             if trait_subq is not None:
                 query = query.join(trait_subq,
                                    trait_subq.c.ev_id == models.Event.id)
+            if event_filter.admin_proj:
+                no_proj_q = session.query(models.TraitText.event_id).filter(
+                    models.TraitText.key == 'project_id')
+                admin_q = (session.query(models.TraitText.event_id).filter(
+                    ~sa.exists().where(models.TraitText.event_id ==
+                                       no_proj_q.subquery().c.event_id)).union(
+                    session.query(models.TraitText.event_id).filter(sa.and_(
+                        models.TraitText.key == 'project_id',
+                        models.TraitText.value == event_filter.admin_proj,
+                        models.Event.id == models.TraitText.event_id))))
+                query = query.filter(sa.exists().where(
+                    models.Event.id ==
+                    admin_q.subquery().c.trait_text_event_id))
             if event_filter_conditions:
                 query = query.filter(sa.and_(*event_filter_conditions))
 

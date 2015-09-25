@@ -19,6 +19,7 @@
 # under the License.
 """Inspector for collecting data over SNMP"""
 
+import copy
 from pysnmp.entity.rfc3413.oneliner import cmdgen
 
 import six
@@ -61,57 +62,16 @@ PREFIX = 'type_prefix'
 
 
 class SNMPInspector(base.Inspector):
-    # CPU OIDs
-    _cpu_1_min_load_oid = "1.3.6.1.4.1.2021.10.1.3.1"
-    _cpu_5_min_load_oid = "1.3.6.1.4.1.2021.10.1.3.2"
-    _cpu_15_min_load_oid = "1.3.6.1.4.1.2021.10.1.3.3"
-    # Memory OIDs
-    _memory_total_oid = "1.3.6.1.4.1.2021.4.5.0"
-    _memory_avail_real_oid = "1.3.6.1.4.1.2021.4.6.0"
-    _memory_total_swap_oid = "1.3.6.1.4.1.2021.4.3.0"
-    _memory_avail_swap_oid = "1.3.6.1.4.1.2021.4.4.0"
-    _memory_buffer_oid = "1.3.6.1.4.1.2021.4.14.0"
-    _memory_cached_oid = "1.3.6.1.4.1.2021.4.15.0"
-    # Disk OIDs
-    _disk_index_oid = "1.3.6.1.4.1.2021.9.1.1"
-    _disk_path_oid = "1.3.6.1.4.1.2021.9.1.2"
-    _disk_device_oid = "1.3.6.1.4.1.2021.9.1.3"
-    _disk_size_oid = "1.3.6.1.4.1.2021.9.1.6"
-    _disk_used_oid = "1.3.6.1.4.1.2021.9.1.8"
-    # Network Interface OIDs
-    _interface_index_oid = "1.3.6.1.2.1.2.2.1.1"
-    _interface_name_oid = "1.3.6.1.2.1.2.2.1.2"
-    _interface_speed_oid = "1.3.6.1.2.1.2.2.1.5"
-    _interface_mac_oid = "1.3.6.1.2.1.2.2.1.6"
-    _interface_ip_oid = "1.3.6.1.2.1.4.20.1.2"
-    _interface_received_oid = "1.3.6.1.2.1.2.2.1.10"
-    _interface_transmitted_oid = "1.3.6.1.2.1.2.2.1.16"
-    _interface_error_oid = "1.3.6.1.2.1.2.2.1.20"
-    # System stats
-    _system_stats_cpu_idle_oid = "1.3.6.1.4.1.2021.11.11.0"
-    _system_stats_io_raw_sent_oid = "1.3.6.1.4.1.2021.11.57.0"
-    _system_stats_io_raw_received_oid = "1.3.6.1.4.1.2021.11.58.0"
-    # Network stats
-    _network_ip_out_requests_oid = "1.3.6.1.2.1.4.10.0"
-    _network_ip_in_receives_oid = "1.3.6.1.2.1.4.3.0"
     # Default port
     _port = 161
 
-    _disk_metadata = {
-        'path': (_disk_path_oid, str),
-        'device': (_disk_device_oid, str),
-    }
-
-    _net_metadata = {
-        'name': (_interface_name_oid, str),
-        'speed': (_interface_speed_oid, lambda x: int(x) / 8),
-        'mac': (_interface_mac_oid,
-                lambda x: x.prettyPrint().replace('0x', '')),
-    }
-
     _CACHE_KEY_OID = "snmp_cached_oid"
 
-    '''
+    # NOTE: The following mapping has been moved to the yaml file identified
+    # by the config options hardware.meter_definitions_file. However, we still
+    # keep the description here for code reading purpose.
+
+    """
 
      The following mapping define how to construct
      (value, metadata, extra) returned by inspect_generic
@@ -166,124 +126,7 @@ class SNMPInspector(base.Inspector):
      it could be used to add information into extra dict to be returned
      to construct the pollster how to build final sample, e.g.
          extra.update('project_id': xy, 'user_id': zw)
-    '''
-
-    MAPPING = {
-        'cpu.load.1min': {
-            'matching_type': EXACT,
-            'metric_oid': (_cpu_1_min_load_oid, lambda x: float(str(x))),
-            'metadata': {},
-            'post_op': None
-        },
-        'cpu.load.5min': {
-            'matching_type': EXACT,
-            'metric_oid': (_cpu_5_min_load_oid, lambda x: float(str(x))),
-            'metadata': {},
-            'post_op': None,
-        },
-        'cpu.load.15min': {
-            'matching_type': EXACT,
-            'metric_oid': (_cpu_15_min_load_oid, lambda x: float(str(x))),
-            'metadata': {},
-            'post_op': None,
-        },
-        'memory.total': {
-            'matching_type': EXACT,
-            'metric_oid': (_memory_total_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'memory.used': {
-            'matching_type': EXACT,
-            'metric_oid': (_memory_avail_real_oid, int),
-            'metadata': {},
-            'post_op': "_post_op_memory_avail_to_used",
-        },
-        'memory.swap.total': {
-            'matching_type': EXACT,
-            'metric_oid': (_memory_total_swap_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'memory.swap.avail': {
-            'matching_type': EXACT,
-            'metric_oid': (_memory_avail_swap_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'memory.buffer': {
-            'matching_type': EXACT,
-            'metric_oid': (_memory_buffer_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'memory.cached': {
-            'matching_type': EXACT,
-            'metric_oid': (_memory_cached_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'disk.size.total': {
-            'matching_type': PREFIX,
-            'metric_oid': (_disk_size_oid, int),
-            'metadata': _disk_metadata,
-            'post_op': None,
-        },
-        'disk.size.used': {
-            'matching_type': PREFIX,
-            'metric_oid': (_disk_used_oid, int),
-            'metadata': _disk_metadata,
-            'post_op': None,
-        },
-        'network.incoming.bytes': {
-            'matching_type': PREFIX,
-            'metric_oid': (_interface_received_oid, int),
-            'metadata': _net_metadata,
-            'post_op': "_post_op_net",
-        },
-        'network.outgoing.bytes': {
-            'matching_type': PREFIX,
-            'metric_oid': (_interface_transmitted_oid, int),
-            'metadata': _net_metadata,
-            'post_op': "_post_op_net",
-        },
-        'network.outgoing.errors': {
-            'matching_type': PREFIX,
-            'metric_oid': (_interface_error_oid, int),
-            'metadata': _net_metadata,
-            'post_op': "_post_op_net",
-        },
-        'network.ip.outgoing.datagrams': {
-            'matching_type': EXACT,
-            'metric_oid': (_network_ip_out_requests_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'network.ip.incoming.datagrams': {
-            'matching_type': EXACT,
-            'metric_oid': (_network_ip_in_receives_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'system_stats.cpu.idle': {
-            'matching_type': EXACT,
-            'metric_oid': (_system_stats_cpu_idle_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'system_stats.io.outgoing.blocks': {
-            'matching_type': EXACT,
-            'metric_oid': (_system_stats_io_raw_sent_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-        'system_stats.io.incoming.blocks': {
-            'matching_type': EXACT,
-            'metric_oid': (_system_stats_io_raw_received_oid, int),
-            'metadata': {},
-            'post_op': None,
-        },
-    }
+    """
 
     def __init__(self):
         super(SNMPInspector, self).__init__()
@@ -370,9 +213,9 @@ class SNMPInspector(base.Inspector):
                 new_oids.append(metadata[0])
         return new_oids
 
-    def inspect_generic(self, host, identifier, cache, extra_metadata=None):
+    def inspect_generic(self, host, cache, extra_metadata, param):
         # the snmp definition for the corresponding meter
-        meter_def = self.MAPPING[identifier]
+        meter_def = param
         # collect oids that needs to be queried
         oids_to_query = self._find_missing_oids(meter_def, cache)
         # query oids and populate into caches
@@ -389,7 +232,8 @@ class SNMPInspector(base.Inspector):
             meter_def['metric_oid'][0],
             meter_def['matching_type'],
             False)
-        extra_metadata = extra_metadata or {}
+        input_extra_metadata = extra_metadata
+
         for oid in oids_for_sample_values:
             suffix = oid[len(meter_def['metric_oid'][0]):]
             value = self.get_oid_value(oid_cache,
@@ -399,6 +243,7 @@ class SNMPInspector(base.Inspector):
             metadata = self.construct_metadata(oid_cache,
                                                meter_def['metadata'],
                                                suffix)
+            extra_metadata = copy.deepcopy(input_extra_metadata) or {}
             # call post_op for special cases
             if meter_def['post_op']:
                 func = getattr(self, meter_def['post_op'], None)
@@ -410,26 +255,43 @@ class SNMPInspector(base.Inspector):
 
     def _post_op_memory_avail_to_used(self, host, cache, meter_def,
                                       value, metadata, extra, suffix):
-        if self._memory_total_oid not in cache[self._CACHE_KEY_OID]:
-            self._query_oids(host, [self._memory_total_oid], cache, False)
-        value = int(cache[self._CACHE_KEY_OID][self._memory_total_oid]) - value
+        _memory_total_oid = "1.3.6.1.4.1.2021.4.5.0"
+        if _memory_total_oid not in cache[self._CACHE_KEY_OID]:
+            self._query_oids(host, [_memory_total_oid], cache, False)
+        value = int(cache[self._CACHE_KEY_OID][_memory_total_oid]) - value
         return value
 
     def _post_op_net(self, host, cache, meter_def,
                      value, metadata, extra, suffix):
         # add ip address into metadata
+        _interface_ip_oid = "1.3.6.1.2.1.4.20.1.2"
         oid_cache = cache.setdefault(self._CACHE_KEY_OID, {})
         if not self.find_matching_oids(oid_cache,
-                                       self._interface_ip_oid,
+                                       _interface_ip_oid,
                                        PREFIX):
             # populate the oid into cache
-            self._query_oids(host, [self._interface_ip_oid], cache, True)
+            self._query_oids(host, [_interface_ip_oid], cache, True)
         ip_addr = ''
         for k, v in six.iteritems(oid_cache):
-            if k.startswith(self._interface_ip_oid) and v == int(suffix[1:]):
-                ip_addr = k.replace(self._interface_ip_oid + ".", "")
+            if k.startswith(_interface_ip_oid) and v == int(suffix[1:]):
+                ip_addr = k.replace(_interface_ip_oid + ".", "")
         metadata.update(ip=ip_addr)
+        # update resource_id for each nic interface
+        self._suffix_resource_id(host, metadata, 'name', extra)
         return value
+
+    def _post_op_disk(self, host, cache, meter_def,
+                      value, metadata, extra, suffix):
+        self._suffix_resource_id(host, metadata, 'device', extra)
+        return value
+
+    @staticmethod
+    def _suffix_resource_id(host, metadata, key, extra):
+        prefix = metadata.get(key)
+        if prefix:
+            res_id = extra.get('resource_id') or host.hostname
+            res_id = res_id + ".%s" % metadata.get(key)
+            extra.update(resource_id=res_id)
 
     @staticmethod
     def _get_auth_strategy(host):
@@ -438,5 +300,14 @@ class SNMPInspector(base.Inspector):
                                                authKey=host.password)
         else:
             auth_strategy = cmdgen.CommunityData(host.username or 'public')
-
         return auth_strategy
+
+    def prepare_params(self, param):
+        processed = {}
+        processed['matching_type'] = param['matching_type']
+        processed['metric_oid'] = (param['oid'], eval(param['type']))
+        processed['post_op'] = param.get('post_op', None)
+        processed['metadata'] = {}
+        for k, v in six.iteritems(param.get('metadata', {})):
+            processed['metadata'][k] = (v['oid'], eval(v['type']))
+        return processed

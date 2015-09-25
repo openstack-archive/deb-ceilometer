@@ -18,25 +18,34 @@
 import shutil
 
 import eventlet
+from keystoneclient import exceptions as ks_exceptions
 import mock
+from novaclient import client as novaclient
 from oslo_service import service as os_service
 from oslo_utils import fileutils
 from oslo_utils import timeutils
 from oslotest import base
 from oslotest import mockpatch
+import requests
 import six
 from stevedore import extension
 import yaml
 
-from ceilometer.agent import base as agent_base
 from ceilometer.agent import manager
 from ceilometer.agent import plugin_base
+from ceilometer.hardware import discovery
 from ceilometer import pipeline
 from ceilometer.tests.unit.agent import agentbase
 
 
 class PollingException(Exception):
     pass
+
+
+class TestPollsterBuilder(agentbase.TestPollster):
+    @classmethod
+    def build_pollsters(cls):
+        return [('builder1', cls()), ('builder2', cls())]
 
 
 @mock.patch('ceilometer.compute.pollsters.'
@@ -79,7 +88,7 @@ class TestManager(base.BaseTestCase):
                 mock.Mock(side_effect=plugin_base.ExtensionLoadError))
     @mock.patch('ceilometer.ipmi.pollsters.sensor.SensorPollster.__init__',
                 mock.Mock(return_value=None))
-    @mock.patch('ceilometer.agent.base.LOG')
+    @mock.patch('ceilometer.agent.manager.LOG')
     def test_load_failed_plugins(self, LOG):
         # Here we additionally check that namespaces will be converted to the
         # list if param was not set as a list.
@@ -121,19 +130,46 @@ class TestManager(base.BaseTestCase):
     def test_load_plugins_pollster_list_forbidden(self):
         manager.cfg.CONF.set_override('backend_url', 'http://',
                                       group='coordination')
-        self.assertRaises(agent_base.PollsterListForbidden,
+        self.assertRaises(manager.PollsterListForbidden,
                           manager.AgentManager,
                           pollster_list=['disk.*'])
         manager.cfg.CONF.reset()
 
+    def test_builder(self):
+        @staticmethod
+        def fake_get_ext_mgr(namespace):
+            if 'builder' in namespace:
+                return extension.ExtensionManager.make_test_instance(
+                    [
+                        extension.Extension('builder',
+                                            None,
+                                            TestPollsterBuilder,
+                                            None),
+                    ]
+                )
+            else:
+                return extension.ExtensionManager.make_test_instance(
+                    [
+                        extension.Extension('test',
+                                            None,
+                                            None,
+                                            agentbase.TestPollster()),
+                    ]
+                )
+
+        with mock.patch.object(manager.AgentManager, '_get_ext_mgr',
+                               new=fake_get_ext_mgr):
+            mgr = manager.AgentManager(namespaces=['central'])
+            self.assertEqual(3, len(mgr.extensions))
+            for ext in mgr.extensions:
+                self.assertIn(ext.name, ['builder1', 'builder2', 'test'])
+                self.assertIsInstance(ext.obj, agentbase.TestPollster)
+
 
 class TestPollsterKeystone(agentbase.TestPollster):
-    @plugin_base.check_keystone
     def get_samples(self, manager, cache, resources):
-        func = super(TestPollsterKeystone, self).get_samples
-        return func(manager=manager,
-                    cache=cache,
-                    resources=resources)
+        # Just try to use keystone, that will raise an exception
+        manager.keystone.tenants.list()
 
 
 class TestPollsterPollingException(agentbase.TestPollster):
@@ -208,7 +244,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
     def setUp(self):
         self.notified_samples = []
         self.notifier = mock.Mock()
-        self.notifier.info.side_effect = self.fake_notifier_sample
+        self.notifier.sample.side_effect = self.fake_notifier_sample
         self.useFixture(mockpatch.Patch('oslo_messaging.Notifier',
                                         return_value=self.notifier))
         self.source_resources = True
@@ -245,7 +281,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         """Test for bug 1316532."""
         self.useFixture(mockpatch.Patch(
             'keystoneclient.v2_0.client.Client',
-            side_effect=Exception))
+            side_effect=ks_exceptions.ClientException))
         self.pipeline_cfg = {
             'sources': [{
                 'name': "test_keystone",
@@ -264,7 +300,55 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         self.assertFalse(self.PollsterKeystone.samples)
         self.assertFalse(self.notified_samples)
 
-    @mock.patch('ceilometer.agent.base.LOG')
+    @mock.patch('ceilometer.agent.manager.LOG')
+    @mock.patch('ceilometer.nova_client.LOG')
+    def test_hardware_discover_fail_minimize_logs(self, novalog, baselog):
+        self.useFixture(mockpatch.PatchObject(
+            novaclient.HTTPClient,
+            'authenticate',
+            side_effect=requests.ConnectionError))
+
+        class PollsterHardware(agentbase.TestPollster):
+            discovery = 'tripleo_overcloud_nodes'
+
+        class PollsterHardwareAnother(agentbase.TestPollster):
+            discovery = 'tripleo_overcloud_nodes'
+
+        self.mgr.extensions.extend([
+            extension.Extension('testhardware',
+                                None,
+                                None,
+                                PollsterHardware(), ),
+            extension.Extension('testhardware2',
+                                None,
+                                None,
+                                PollsterHardwareAnother(), )
+        ])
+        ext = extension.Extension('tripleo_overcloud_nodes',
+                                  None,
+                                  None,
+                                  discovery.NodesDiscoveryTripleO())
+        self.mgr.discovery_manager = (extension.ExtensionManager
+                                      .make_test_instance([ext]))
+
+        self.pipeline_cfg = {
+            'sources': [{
+                'name': "test_hardware",
+                'interval': 10,
+                'meters': ['testhardware', 'testhardware2'],
+                'sinks': ['test_sink']}],
+            'sinks': [{
+                'name': 'test_sink',
+                'transformers': [],
+                'publishers': ["test"]}]
+        }
+        self.mgr.polling_manager = pipeline.PollingManager(self.pipeline_cfg)
+        polling_tasks = self.mgr.setup_polling_tasks()
+        self.mgr.interval_task(list(polling_tasks.values())[0])
+        self.assertEqual(1, novalog.exception.call_count)
+        self.assertFalse(baselog.exception.called)
+
+    @mock.patch('ceilometer.agent.manager.LOG')
     def test_polling_exception(self, LOG):
         source_name = 'test_pollingexception'
         self.pipeline_cfg = {
@@ -332,7 +416,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
 
         samples = self.notified_samples
         self.assertEqual(expected_samples, len(samples))
-        self.assertEqual(call_count, self.notifier.info.call_count)
+        self.assertEqual(call_count, self.notifier.sample.call_count)
 
     def test_start_with_reloadable_pipeline(self):
 

@@ -367,8 +367,8 @@ class MeterController(rest.RestController):
                                           tenant=def_project_id,
                                           is_admin=True)
             notifier = pecan.request.notifier
-            notifier.info(ctxt.to_dict(), 'telemetry.api',
-                          {'samples': published_samples})
+            notifier.sample(ctxt.to_dict(), 'telemetry.api',
+                            {'samples': published_samples})
 
         return samples
 
@@ -454,7 +454,7 @@ class Meter(base.Base):
         meter_id = '%s+%s' % (kwargs['resource_id'], kwargs['name'])
         # meter_id is of type Unicode but base64.encodestring() only accepts
         # strings. See bug #1333177
-        meter_id = base64.encodestring(meter_id.encode('utf-8'))
+        meter_id = base64.b64encode(meter_id.encode('utf-8'))
         kwargs['meter_id'] = meter_id
         super(Meter, self).__init__(**kwargs)
 
@@ -491,7 +491,8 @@ class MetersController(rest.RestController):
         # Timestamp field is not supported for Meter queries
         limit = v2_utils.enforce_limit(limit)
         kwargs = v2_utils.query_to_kwargs(
-            q, pecan.request.storage_conn.get_meters, allow_timestamps=False)
+            q, pecan.request.storage_conn.get_meters,
+            ['limit'], allow_timestamps=False)
         return [Meter.from_db_model(m)
                 for m in pecan.request.storage_conn.get_meters(limit=limit,
                                                                **kwargs)]

@@ -37,10 +37,12 @@ def _get_metadata_from_object(instance):
     metadata = {
         'display_name': instance.name,
         'name': getattr(instance, 'OS-EXT-SRV-ATTR:instance_name', u''),
+        'instance_id': instance.id,
         'instance_type': instance_type,
         'host': instance.hostId,
         'flavor': instance.flavor,
         'status': instance.status.lower(),
+        'state': getattr(instance, 'OS-EXT-STS:vm_state', u''),
     }
 
     # Image properties

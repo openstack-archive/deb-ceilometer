@@ -36,15 +36,14 @@ resources:
   - resource_type: instance
     metrics:
       - 'instance'
-      - 'disk.root.size'
-      - 'disk.ephemeral.size'
       - 'memory'
       - 'memory.usage'
       - 'memory.resident'
       - 'vcpus'
       - 'cpu'
       - 'cpu_util'
-      - 'vcpus'
+      - 'disk.root.size'
+      - 'disk.ephemeral.size'
       - 'disk.read.requests'
       - 'disk.read.requests.rate'
       - 'disk.write.requests'
@@ -53,24 +52,20 @@ resources:
       - 'disk.read.bytes.rate'
       - 'disk.write.bytes'
       - 'disk.write.bytes.rate'
-      - 'disk.device.read.requests'
-      - 'disk.device.read.requests.rate'
-      - 'disk.device.write.requests'
-      - 'disk.device.write.requests.rate'
-      - 'disk.device.read.bytes'
-      - 'disk.device.read.bytes.rate'
-      - 'disk.device.write.bytes'
-      - 'disk.device.write.bytes.rate'
       - 'disk.latency'
       - 'disk.iops'
-      - 'disk.device.latency'
-      - 'disk.device.iops'
       - 'disk.capacity'
       - 'disk.allocation'
       - 'disk.usage'
-      - 'disk.device.capacity'
-      - 'disk.device.allocation'
-      - 'disk.device.usage'
+    attributes:
+      host: resource_metadata.host
+      image_ref: resource_metadata.image_ref_url
+      display_name: resource_metadata.display_name
+      flavor_id: resource_metadata.(instance_flavor_id|(flavor.id))
+      server_group: resource_metadata.user_metadata.server_group
+
+  - resource_type: instance_network_interface
+    metrics:
       - 'network.outgoing.packets.rate'
       - 'network.incoming.packets.rate'
       - 'network.outgoing.packets'
@@ -80,11 +75,27 @@ resources:
       - 'network.outgoing.bytes'
       - 'network.incoming.bytes'
     attributes:
-      host: resource_metadata.host
-      image_ref: resource_metadata.image_ref_url
-      display_name: resource_metadata.display_name
-      flavor_id: resource_metadata.(instance_flavor_id|(flavor.id))
-      server_group: resource_metadata.user_metadata.server_group
+      name: resource_metadata.vnic_name
+      instance_id: resource_metadata.instance_id
+
+  - resource_type: instance_disk
+    metrics:
+      - 'disk.device.read.requests'
+      - 'disk.device.read.requests.rate'
+      - 'disk.device.write.requests'
+      - 'disk.device.write.requests.rate'
+      - 'disk.device.read.bytes'
+      - 'disk.device.read.bytes.rate'
+      - 'disk.device.write.bytes'
+      - 'disk.device.write.bytes.rate'
+      - 'disk.device.latency'
+      - 'disk.device.iops'
+      - 'disk.device.capacity'
+      - 'disk.device.allocation'
+      - 'disk.device.usage'
+    attributes:
+      name: resource_metadata.disk_name
+      instance_id: resource_metadata.instance_id
 
   - resource_type: image
     metrics:
