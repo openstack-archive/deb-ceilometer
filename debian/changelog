@@ -1,5 +1,6 @@
-ceilometer (1:5.0.0~rc1-2) UNRELEASED; urgency=medium
+ceilometer (1:5.0.0~rc2-1) experimental; urgency=medium
 
+  * New upstream release.
   * Now checking for libvirt or libvirtd group existance before guessing it
     with "dpkg-vendor --derives-from ubuntu".
 
