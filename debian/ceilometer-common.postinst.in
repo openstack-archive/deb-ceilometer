@@ -6,10 +6,16 @@ set -e
 
 # We need to do that for ceilometer-agent-compute
 libvirt_user_group () {
-	if dpkg-vendor --derives-from ubuntu ; then
-		LIBVIRT_GROUP=libvirtd
-	else
+	if getent group libvirt ; then
 		LIBVIRT_GROUP=libvirt
+	elif getent group libvirtd ; then
+		LIBVIRT_GROUP=libvirtd
+	elif
+		if dpkg-vendor --derives-from ubuntu ; then
+			LIBVIRT_GROUP=libvirtd
+		else
+			LIBVIRT_GROUP=libvirt
+		fi
 	fi
 
 	if ! getent group ${LIBVIRT_GROUP} >/dev/null; then
