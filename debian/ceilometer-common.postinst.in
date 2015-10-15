@@ -10,7 +10,7 @@ libvirt_user_group () {
 		LIBVIRT_GROUP=libvirt
 	elif getent group libvirtd ; then
 		LIBVIRT_GROUP=libvirtd
-	elif
+	else
 		if dpkg-vendor --derives-from ubuntu ; then
 			LIBVIRT_GROUP=libvirtd
 		else
