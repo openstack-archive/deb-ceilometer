@@ -1,3 +1,9 @@
+ceilometer (1:5.0.0-5) unstable; urgency=medium
+
+  * Added q-text-as-data as depends for ceilometer-api.
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 03 Nov 2015 11:28:44 +0000
+
 ceilometer (1:5.0.0-4) unstable; urgency=medium
 
   * Rebuilt with openstack-pkg-tools to use Keystone API v3.
