@@ -1,3 +1,10 @@
+ceilometer (1:5.0.0-6) UNRELEASED; urgency=medium
+
+  * d/ceilometer-agent-*.init.in: Fix DAEMON_ARGS for
+    central, compute and ipmi agents.
+
+ -- Ivan Udovichenko <iudovichenko@mirantis.com>  Tue, 10 Nov 2015 18:49:04 +0200
+
 ceilometer (1:5.0.0-5) unstable; urgency=medium
 
   * Added q-text-as-data as depends for ceilometer-api.

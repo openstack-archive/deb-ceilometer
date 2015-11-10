@@ -15,4 +15,4 @@
 DESC="OpenStack Ceilometer Agent Central"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-polling
-DAEMON_ARGS=" --central"
+DAEMON_ARGS=" --polling-namespaces central"

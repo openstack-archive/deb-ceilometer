@@ -15,4 +15,4 @@
 DESC="OpenStack Ceilometer Agent IPMI"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-polling
-DAEMON_ARGS=" --namespaces ipmi"
+DAEMON_ARGS=" --polling-namespaces ipmi"

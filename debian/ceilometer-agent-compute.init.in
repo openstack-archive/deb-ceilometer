@@ -15,4 +15,4 @@
 DESC="OpenStack Ceilometer Agent Compute"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-polling
-DAEMON_ARGS=" --namespaces compute"
+DAEMON_ARGS=" --polling-namespaces compute"
