@@ -7,14 +7,13 @@
 # OpenStack Infra <zanata@openstack.org>, 2015. #zanata
 msgid ""
 msgstr ""
-"Project-Id-Version: ceilometer 5.0.0.0b4.dev108\n"
+"Project-Id-Version: ceilometer 6.0.0.dev69\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2015-10-05 06:13+0000\n"
+"POT-Creation-Date: 2015-10-22 06:14+0000\n"
 "PO-Revision-Date: 2015-09-04 06:32+0000\n"
 "Last-Translator: openstackjenkins <jenkins@openstack.org>\n"
 "Language: ru\n"
-"Language-Team: Russian (http://www.transifex.com/openstack/ceilometer/"
-"language/ru/)\n"
+"Language-Team: Russian\n"
 "Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
 "%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n"
 "%100>=11 && n%100<=14)? 2 : 3)\n"
@@ -38,10 +37,6 @@ msgstr "%(rule1)s и %(rule2)s нельзя задавать одновреме�
 #, python-format
 msgid "%d datapoints are unknown"
 msgstr "Неизвестные точки данных %d"
-
-#, python-format
-msgid "%d samples removed from database"
-msgstr "%d примеров удалено из базы данных"
 
 #, python-format
 msgid "Action %(scheme)s for alarm %(alarm_id)s is unknown, cannot notify"
@@ -110,13 +105,6 @@ msgstr "Указать само предупреждение %s в правил�
 msgid "Combined state of alarms %s"
 msgstr "Объединенное состояние предупреждений %s"
 
-msgid "Configuration:"
-msgstr "Конфигурация:"
-
-#, python-format
-msgid "Connecting to %(db)s on %(nodelist)s"
-msgstr "Подключение к %(db)s на %(nodelist)s"
-
 #, python-format
 msgid "Continue after error from %(name)s: %(error)s"
 msgstr "Продолжить после ошибки с %(name)s: %(error)s"
@@ -156,10 +144,6 @@ msgid "Dropping Notification %(type)s (uuid:%(msgid)s)"
 msgstr "Удаление уведомления %(type)s (uuid:%(msgid)s)"
 
 #, python-format
-msgid "Dropping metering data with TTL %d"
-msgstr "Удаление данных измерений со временем жизни %d"
-
-#, python-format
 msgid "Duplicate VM name found: %s"
 msgstr "Найдено повторяющееся имя VM: %s"
 
@@ -186,19 +170,8 @@ msgstr "Ошибка установки предупреждения: %s"
 msgid "Event"
 msgstr "Событие"
 
-#, python-format
-msgid "Event Definitions: %s"
-msgstr "Определения событий: %s"
-
-msgid "Expired residual resource and meter definition data"
-msgstr "Просрочены оставшиеся данные определений измерений и ресурсов"
-
 msgid "Expression evaluated to a NaN value!"
 msgstr "Результат вычисления выражения - значение NaN!"
-
-#, python-format
-msgid "FLOATING IP USAGE: %s"
-msgstr "ИСПОЛЬЗОВАНИЕ НЕФИКСИРОВАННЫХ IP-АДРЕСОВ: %s"
 
 #, python-format
 msgid "Failed to evaluate alarm %s"
@@ -314,15 +287,6 @@ msgid "Not Authorized to access %(aspect)s %(id)s"
 msgstr "Нет прав доступа к %(aspect)s %(id)s"
 
 #, python-format
-msgid ""
-"Notifying alarm %(alarm_name)s %(alarm_id)s of %(severity)s priority from "
-"%(previous)s to %(current)s with action %(action)s because %(reason)s."
-msgstr ""
-"Уведомляющее предупреждение %(alarm_name)s %(alarm_id)s с приоритетом "
-"%(severity)s с %(previous)s на %(current)s с действием %(action)s, причина: "
-"%(reason)s."
-
-#, python-format
 msgid "OpenDaylitght API returned %(status)s %(reason)s"
 msgstr "Функция API OpenDaylight вернула %(status)s %(reason)s"
 
@@ -360,18 +324,6 @@ msgstr ""
 "%(smp)s"
 
 #, python-format
-msgid ""
-"Pipeline %(pipeline)s: Setup transformer instance %(name)s with parameter "
-"%(param)s"
-msgstr ""
-"Конвейер %(pipeline)s: Настройка экземпляра преобразователя %(name)s с "
-"параметром %(param)s"
-
-#, python-format
-msgid "Pipeline config: %s"
-msgstr "Конфигурация конвейера: %s"
-
-#, python-format
 msgid "Plugin specified, but no plugin name supplied for trait %s"
 msgstr "Указан модуль, но не передано имя модуля для особенности %s"
 
@@ -382,10 +334,6 @@ msgstr "%(cnt)s-кратный сбой датчика опроса %(mtr)s!"
 #, python-format
 msgid "Polling %(name)s faild for %(cnt)s times!"
 msgstr "Опрос %(name)s не удалось выполнить %(cnt)s раз!"
-
-#, python-format
-msgid "Polling pollster %(poll)s in the context of %(src)s"
-msgstr "Опрашивающий объект %(poll)s в контексте %(src)s"
 
 #, python-format
 msgid "Pollster for %s is disabled!"
@@ -407,10 +355,6 @@ msgstr ""
 #, python-format
 msgid "Publishing policy is unknown (%s) force to default"
 msgstr "Стратегия публикации неизвестна (%s). По умолчанию принудительная"
-
-#, python-format
-msgid "Publishing policy set to %s"
-msgstr "Задана стратегия публикации %s"
 
 #, python-format
 msgid "RGW AdminOps API returned %(status)s %(reason)s"
@@ -450,10 +394,6 @@ msgstr "Образец"
 #, python-format
 msgid "Skip loading extension for %s"
 msgstr "Пропустить загрузку расширения для %s"
-
-#, python-format
-msgid "Starting server in PID %s"
-msgstr "Запуск сервера в PID %s"
 
 #, python-format
 msgid "String %s is not a valid isotime"
@@ -628,10 +568,6 @@ msgstr "XenAPI не установлен"
 msgid "YAML error reading Event Definitions file %(file)s"
 msgstr "Ошибка YAML при чтении файла определений событий %(file)s"
 
-#, python-format
-msgid "alarm %(id)s transitioning to %(state)s because %(reason)s"
-msgstr "Предупреждение %(id)s переходит в %(state)s по причине %(reason)s"
-
 msgid "alarm evaluation cycle failed"
 msgstr "сбой цикла вычисления предупреждения"
 
@@ -652,16 +588,9 @@ msgstr "не удалось получить статистику предупр
 msgid "could not get CPU time for %(id)s: %(e)s"
 msgstr "не удалось получить процессорное время для %(id)s: %(e)s"
 
-msgid "detected decoupled pipeline config format"
-msgstr "обнаружен разделенный формат конфигурации конвейера"
-
 #, python-format
 msgid "dropping sample with no predecessor: %s"
 msgstr "удаление образца без предшественника: %s"
-
-#, python-format
-msgid "initiating evaluation cycle on %d alarms"
-msgstr "Инициализация цикла вычислений в %d предупреждений"
 
 msgid "ipmitool output length mismatch"
 msgstr "несоответствие длины вывода ipmitool"
@@ -673,11 +602,6 @@ msgstr "max_bytes и backup_count должны быть числами."
 msgid "message signature invalid, discarding message: %r"
 msgstr "недопустимая подпись сообщения, удаление сообщения: %r"
 
-#, python-format
-msgid "metering data %(counter_name)s for %(resource_id)s: %(counter_volume)s"
-msgstr ""
-"данные измерений %(counter_name)s для %(resource_id)s: %(counter_volume)s"
-
 msgid "parse IPMI sensor data failed,No data retrieved from given input"
 msgstr ""
 "сбой анализа данных датчика IPMI, не получены данные из переданного ввода"
@@ -687,16 +611,6 @@ msgstr "сбой анализа данных датчика IPMI, неизвес
 
 msgid "running ipmitool failure"
 msgstr "сбой выполнения ipmitool"
-
-#, python-format
-msgid "serving on 0.0.0.0:%(sport)s, view at http://127.0.0.1:%(vport)s"
-msgstr ""
-"обслуживание на адресе 0.0.0.0:%(sport)s, см. по адресу http://127.0.0.1:"
-"%(vport)s"
-
-#, python-format
-msgid "serving on http://%(host)s:%(port)s"
-msgstr "обслуживание на адресе http://%(host)s:%(port)s"
 
 msgid "state invalid"
 msgstr "недопустимое состояние"

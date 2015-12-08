@@ -21,16 +21,16 @@
 from keystoneclient import exceptions
 from oslo_config import cfg
 from oslo_log import log
+from oslo_utils import strutils
 import pecan
 
-from ceilometer.api.controllers.v2 import alarms
 from ceilometer.api.controllers.v2 import capabilities
 from ceilometer.api.controllers.v2 import events
 from ceilometer.api.controllers.v2 import meters
 from ceilometer.api.controllers.v2 import query
 from ceilometer.api.controllers.v2 import resources
 from ceilometer.api.controllers.v2 import samples
-from ceilometer.i18n import _LW
+from ceilometer.i18n import _, _LW
 from ceilometer import keystone_client
 
 
@@ -51,7 +51,7 @@ API_OPTS = [
 ]
 
 cfg.CONF.register_opts(API_OPTS, group='api')
-cfg.CONF.import_opt('dispatcher', 'ceilometer.dispatcher')
+cfg.CONF.import_opt('meter_dispatchers', 'ceilometer.dispatcher')
 
 LOG = log.getLogger(__name__)
 
@@ -109,8 +109,8 @@ class V2Controller(object):
             if cfg.CONF.api.gnocchi_is_enabled is not None:
                 self._gnocchi_is_enabled = cfg.CONF.api.gnocchi_is_enabled
 
-            elif ("gnocchi" not in cfg.CONF.dispatcher
-                  or "database" in cfg.CONF.dispatcher):
+            elif ("gnocchi" not in cfg.CONF.meter_dispatchers
+                  or "database" in cfg.CONF.meter_dispatchers):
                 self._gnocchi_is_enabled = False
             else:
                 try:
@@ -119,13 +119,13 @@ class V2Controller(object):
                 except exceptions.EndpointNotFound:
                     self._gnocchi_is_enabled = False
                 except exceptions.ClientException:
-                    LOG.warn(_LW("Can't connect to keystone, assuming gnocchi "
-                                 "is disabled and retry later"))
+                    LOG.warning(_LW("Can't connect to keystone, assuming "
+                                    "gnocchi is disabled and retry later"))
                 else:
                     self._gnocchi_is_enabled = True
-                    LOG.warn(_LW("ceilometer-api started with gnocchi "
-                                 "enabled. The resources/meters/samples "
-                                 "URLs are disabled."))
+                    LOG.warning(_LW("ceilometer-api started with gnocchi "
+                                    "enabled. The resources/meters/samples "
+                                    "URLs are disabled."))
         return self._gnocchi_is_enabled
 
     @property
@@ -144,18 +144,24 @@ class V2Controller(object):
                 except exceptions.EndpointNotFound:
                     self._aodh_url = ""
                 except exceptions.ClientException:
-                    LOG.warn(_LW("Can't connect to keystone, "
-                                 "assuming aodh is disabled and retry later."))
+                    LOG.warning(_LW("Can't connect to keystone, assuming aodh "
+                                    "is disabled and retry later."))
                 else:
-                    LOG.warn(_LW("ceilometer-api started with aodh enabled. "
-                                 "Alarms URLs will be redirected to aodh "
-                                 "endpoint."))
+                    LOG.warning(_LW("ceilometer-api started with aodh "
+                                    "enabled. Alarms URLs will be redirected "
+                                    "to aodh endpoint."))
         return self._aodh_url
 
     @pecan.expose()
     def _lookup(self, kind, *remainder):
         if (kind in ['meters', 'resources', 'samples']
                 and self.gnocchi_is_enabled):
+            if kind == 'meters' and pecan.request.method == 'POST':
+                direct = pecan.request.params.get('direct', '')
+                if strutils.bool_from_string(direct):
+                    pecan.abort(400, _('direct option cannot be true when '
+                                       'Gnocchi is enabled.'))
+                return meters.MetersController(), remainder
             gnocchi_abort()
         elif kind == 'meters':
             return meters.MetersController(), remainder
@@ -170,8 +176,6 @@ class V2Controller(object):
             ), remainder
         elif kind == 'alarms' and self.aodh_url:
             aodh_redirect(self.aodh_url)
-        elif kind == 'alarms':
-            return alarms.AlarmsController(), remainder
         else:
             pecan.abort(404)
 

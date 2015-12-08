@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -20,21 +22,18 @@ from ceilometer import storage
 
 def main(argv):
     cfg.CONF([], project='ceilometer')
-    if os.getenv("CEILOMETER_TEST_HBASE_URL"):
+    if os.getenv("CEILOMETER_TEST_STORAGE_URL", "").startswith("hbase://"):
         url = ("%s?table_prefix=%s" %
-               (os.getenv("CEILOMETER_TEST_HBASE_URL"),
+               (os.getenv("CEILOMETER_TEST_STORAGE_URL"),
                 os.getenv("CEILOMETER_TEST_HBASE_TABLE_PREFIX", "test")))
         conn = storage.get_connection(url, 'ceilometer.metering.storage')
-        alarm_conn = storage.get_connection(url, 'ceilometer.alarm.storage')
         event_conn = storage.get_connection(url, 'ceilometer.event.storage')
         for arg in argv:
             if arg == "--upgrade":
                 conn.upgrade()
-                alarm_conn.upgrade()
                 event_conn.upgrade()
             if arg == "--clear":
                 conn.clear()
-                alarm_conn.clear()
                 event_conn.clear()
 
 

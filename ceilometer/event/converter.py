@@ -13,18 +13,16 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import fnmatch
-import os
-
-from jsonpath_rw_ext import parser
+from debtcollector import moves
 from oslo_config import cfg
 from oslo_log import log
 from oslo_utils import timeutils
 import six
-import yaml
 
+from ceilometer import declarative
 from ceilometer.event.storage import models
 from ceilometer.i18n import _
+from ceilometer import utils
 
 OPTS = [
     cfg.StrOpt('definitions_cfg_file',
@@ -46,97 +44,26 @@ cfg.CONF.register_opts(OPTS, group='event')
 
 LOG = log.getLogger(__name__)
 
-
-class EventDefinitionException(Exception):
-    def __init__(self, message, definition_cfg):
-        super(EventDefinitionException, self).__init__(message)
-        self.definition_cfg = definition_cfg
-
-    def __str__(self):
-        return '%s %s: %s' % (self.__class__.__name__,
-                              self.definition_cfg, self.message)
+EventDefinitionException = moves.moved_class(declarative.DefinitionException,
+                                             'EventDefinitionException',
+                                             __name__,
+                                             version=6.0,
+                                             removal_version="?")
 
 
-class TraitDefinition(object):
-
-    JSONPATH_RW_PARSER = parser.ExtentedJsonPathParser()
-
+class TraitDefinition(declarative.Definition):
     def __init__(self, name, trait_cfg, plugin_manager):
-        self.cfg = trait_cfg
-        self.name = name
-
-        type_name = trait_cfg.get('type', 'text')
-
-        if 'plugin' in trait_cfg:
-            plugin_cfg = trait_cfg['plugin']
-            if isinstance(plugin_cfg, six.string_types):
-                plugin_name = plugin_cfg
-                plugin_params = {}
-            else:
-                try:
-                    plugin_name = plugin_cfg['name']
-                except KeyError:
-                    raise EventDefinitionException(
-                        _('Plugin specified, but no plugin name supplied for '
-                          'trait %s') % name, self.cfg)
-                plugin_params = plugin_cfg.get('parameters')
-                if plugin_params is None:
-                    plugin_params = {}
-            try:
-                plugin_ext = plugin_manager[plugin_name]
-            except KeyError:
-                raise EventDefinitionException(
-                    _('No plugin named %(plugin)s available for '
-                      'trait %(trait)s') % dict(plugin=plugin_name,
-                                                trait=name), self.cfg)
-            plugin_class = plugin_ext.plugin
-            self.plugin = plugin_class(**plugin_params)
-        else:
-            self.plugin = None
-
-        if 'fields' not in trait_cfg:
-            raise EventDefinitionException(
-                _("Required field in trait definition not specified: "
-                  "'%s'") % 'fields',
-                self.cfg)
-
-        fields = trait_cfg['fields']
-        if not isinstance(fields, six.string_types):
-            # NOTE(mdragon): if not a string, we assume a list.
-            if len(fields) == 1:
-                fields = fields[0]
-            else:
-                fields = '|'.join('(%s)' % path for path in fields)
-        try:
-            self.fields = self.JSONPATH_RW_PARSER.parse(fields)
-        except Exception as e:
-            raise EventDefinitionException(
-                _("Parse error in JSONPath specification "
-                  "'%(jsonpath)s' for %(trait)s: %(err)s")
-                % dict(jsonpath=fields, trait=name, err=e), self.cfg)
+        super(TraitDefinition, self).__init__(name, trait_cfg, plugin_manager)
+        type_name = (trait_cfg.get('type', 'text')
+                     if isinstance(trait_cfg, dict) else 'text')
         self.trait_type = models.Trait.get_type_by_name(type_name)
         if self.trait_type is None:
-            raise EventDefinitionException(
+            raise declarative.DefinitionException(
                 _("Invalid trait type '%(type)s' for trait %(trait)s")
                 % dict(type=type_name, trait=name), self.cfg)
 
-    def _get_path(self, match):
-        if match.context is not None:
-            for path_element in self._get_path(match.context):
-                yield path_element
-            yield str(match.path)
-
     def to_trait(self, notification_body):
-        values = [match for match in self.fields.find(notification_body)
-                  if match.value is not None]
-
-        if self.plugin is not None:
-            value_map = [('.'.join(self._get_path(match)), match.value) for
-                         match in values]
-            value = self.plugin.trait_value(value_map)
-        else:
-            value = values[0].value if values else None
-
+        value = self.parse(notification_body)
         if value is None:
             return None
 
@@ -175,7 +102,7 @@ class EventDefinition(object):
             event_type = definition_cfg['event_type']
             traits = definition_cfg['traits']
         except KeyError as err:
-            raise EventDefinitionException(
+            raise declarative.DefinitionException(
                 _("Required field %s not specified") % err.args[0], self.cfg)
 
         if isinstance(event_type, six.string_types):
@@ -203,13 +130,13 @@ class EventDefinition(object):
 
     def included_type(self, event_type):
         for t in self._included_types:
-            if fnmatch.fnmatch(event_type, t):
+            if utils.match(event_type, t):
                 return True
         return False
 
     def excluded_type(self, event_type):
         for t in self._excluded_types:
-            if fnmatch.fnmatch(event_type, t):
+            if utils.match(event_type, t):
                 return True
         return False
 
@@ -366,47 +293,9 @@ class NotificationEventsConverter(object):
         return edef.to_event(notification_body)
 
 
-def get_config_file():
-    config_file = cfg.CONF.event.definitions_cfg_file
-    if not os.path.exists(config_file):
-        config_file = cfg.CONF.find_file(config_file)
-    return config_file
-
-
 def setup_events(trait_plugin_mgr):
     """Setup the event definitions from yaml config file."""
-    config_file = get_config_file()
-    if config_file is not None:
-        LOG.debug("Event Definitions configuration file: %s", config_file)
-
-        with open(config_file) as cf:
-            config = cf.read()
-
-        try:
-            events_config = yaml.safe_load(config)
-        except yaml.YAMLError as err:
-            if hasattr(err, 'problem_mark'):
-                mark = err.problem_mark
-                errmsg = (_("Invalid YAML syntax in Event Definitions file "
-                            "%(file)s at line: %(line)s, column: %(column)s.")
-                          % dict(file=config_file,
-                                 line=mark.line + 1,
-                                 column=mark.column + 1))
-            else:
-                errmsg = (_("YAML error reading Event Definitions file "
-                            "%(file)s")
-                          % dict(file=config_file))
-            LOG.error(errmsg)
-            raise
-
-    else:
-        LOG.debug("No Event Definitions configuration file found!"
-                  " Using default config.")
-        events_config = []
-
-    LOG.info(_("Event Definitions: %s"), events_config)
-
-    allow_drop = cfg.CONF.event.drop_unmatched_notifications
-    return NotificationEventsConverter(events_config,
-                                       trait_plugin_mgr,
-                                       add_catchall=not allow_drop)
+    return NotificationEventsConverter(
+        declarative.load_definitions([], cfg.CONF.event.definitions_cfg_file),
+        trait_plugin_mgr,
+        add_catchall=not cfg.CONF.event.drop_unmatched_notifications)

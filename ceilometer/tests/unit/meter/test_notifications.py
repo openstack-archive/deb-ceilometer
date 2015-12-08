@@ -14,13 +14,16 @@
 """
 import copy
 import mock
+import os
 import six
 import yaml
 
 from oslo_config import fixture as fixture_config
+from oslo_utils import encodeutils
 from oslo_utils import fileutils
-from oslotest import mockpatch
 
+import ceilometer
+from ceilometer import declarative
 from ceilometer.meter import notifications
 from ceilometer import service as ceilometer_service
 from ceilometer.tests import base as test
@@ -223,31 +226,34 @@ class TestMeterDefinition(test.BaseTestCase):
                    volume="$.payload.volume",
                    resource_id="$.payload.resource_id",
                    project_id="$.payload.project_id")
-        handler = notifications.MeterDefinition(cfg)
+        handler = notifications.MeterDefinition(cfg, mock.Mock())
         self.assertTrue(handler.match_type("test.create"))
-        self.assertEqual(1.0, handler.parse_fields("volume", NOTIFICATION))
+        sample = list(handler.to_samples(NOTIFICATION))[0]
+        self.assertEqual(1.0, sample["volume"])
         self.assertEqual("bea70e51c7340cb9d555b15cbfcaec23",
-                         handler.parse_fields("resource_id", NOTIFICATION))
+                         sample["resource_id"])
         self.assertEqual("30be1fc9a03c4e94ab05c403a8a377f2",
-                         handler.parse_fields("project_id", NOTIFICATION))
+                         sample["project_id"])
 
     def test_config_required_missing_fields(self):
         cfg = dict()
         try:
-            notifications.MeterDefinition(cfg)
-        except notifications.MeterDefinitionException as e:
+            notifications.MeterDefinition(cfg, mock.Mock())
+        except declarative.DefinitionException as e:
             self.assertEqual("Required fields ['name', 'type', 'event_type',"
                              " 'unit', 'volume', 'resource_id']"
-                             " not specified", e.message)
+                             " not specified",
+                             encodeutils.exception_to_unicode(e))
 
     def test_bad_type_cfg_definition(self):
         cfg = dict(name="test", type="foo", event_type="bar.create",
                    unit="foo", volume="bar",
                    resource_id="bea70e51c7340cb9d555b15cbfcaec23")
         try:
-            notifications.MeterDefinition(cfg)
-        except notifications.MeterDefinitionException as e:
-            self.assertEqual("Invalid type foo specified", e.message)
+            notifications.MeterDefinition(cfg, mock.Mock())
+        except declarative.DefinitionException as e:
+            self.assertEqual("Invalid type foo specified",
+                             encodeutils.exception_to_unicode(e))
 
 
 class TestMeterProcessing(test.BaseTestCase):
@@ -259,22 +265,54 @@ class TestMeterProcessing(test.BaseTestCase):
         self.handler = notifications.ProcessMeterNotifications(mock.Mock())
 
     def test_fallback_meter_path(self):
-        self.useFixture(mockpatch.PatchObject(self.CONF,
-                        'find_file', return_value=None))
-        fall_bak_path = notifications.get_config_file()
-        self.assertIn("meter/data/meters.yaml", fall_bak_path)
+        self.CONF.set_override('meter_definitions_cfg_file',
+                               '/not/existing/path', group='meter')
+        with mock.patch('ceilometer.declarative.open',
+                        mock.mock_open(read_data='---\nmetric: []'),
+                        create=True) as mock_open:
+            self.handler._load_definitions()
+            if six.PY3:
+                path = os.path.dirname(ceilometer.__file__)
+            else:
+                path = "ceilometer"
+            mock_open.assert_called_with(path + "/meter/data/meters.yaml")
 
-    def __setup_meter_def_file(self, cfg):
+    def _load_meter_def_file(self, cfg):
         if six.PY3:
             cfg = cfg.encode('utf-8')
         meter_cfg_file = fileutils.write_to_tempfile(content=cfg,
                                                      prefix="meters",
                                                      suffix="yaml")
-        self.CONF.set_override(
-            'meter_definitions_cfg_file',
-            meter_cfg_file, group='meter')
-        cfg = notifications.setup_meters_config()
-        return cfg
+        self.CONF.set_override('meter_definitions_cfg_file',
+                               meter_cfg_file, group='meter')
+        self.handler.definitions = self.handler._load_definitions()
+
+    @mock.patch('ceilometer.meter.notifications.LOG')
+    def test_bad_meter_definition_skip(self, LOG):
+        cfg = yaml.dump(
+            {'metric': [dict(name="good_test_1",
+                             event_type="test.create",
+                             type="delta",
+                             unit="B",
+                             volume="$.payload.volume",
+                             resource_id="$.payload.resource_id",
+                             project_id="$.payload.project_id"),
+                        dict(name="bad_test_2", type="bad_type",
+                             event_type="bar.create",
+                             unit="foo", volume="bar",
+                             resource_id="bea70e51c7340cb9d555b15cbfcaec23"),
+                        dict(name="good_test_3",
+                             event_type="test.create",
+                             type="delta",
+                             unit="B",
+                             volume="$.payload.volume",
+                             resource_id="$.payload.resource_id",
+                             project_id="$.payload.project_id")]})
+        self._load_meter_def_file(cfg)
+        self.assertEqual(2, len(self.handler.definitions))
+        LOG.error.assert_called_with(
+            "Error loading meter definition : "
+            "Invalid type bad_type specified")
 
     def test_jsonpath_values_parsed(self):
         cfg = yaml.dump(
@@ -285,8 +323,7 @@ class TestMeterProcessing(test.BaseTestCase):
                              volume="$.payload.volume",
                              resource_id="$.payload.resource_id",
                              project_id="$.payload.project_id")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -311,8 +348,7 @@ class TestMeterProcessing(test.BaseTestCase):
                              volume="$.payload.volume",
                              resource_id="$.payload.resource_id",
                              project_id="$.payload.project_id")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(2, len(c))
         s1 = c[0].as_dict()
@@ -329,8 +365,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         volume="$.payload.volume",
                         resource_id="$.payload.resource_id",
                         project_id="$.payload.project_id")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(0, len(c))
 
@@ -343,8 +378,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         volume="$.payload.volume",
                         resource_id="$.payload.resource_id",
                         project_id="$.payload.project_id")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(1, len(c))
 
@@ -360,8 +394,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="$.payload.target_id",
                         project_id="$.payload.initiator.project_id",
                         multi="name")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(event))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -380,8 +413,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         project_id="$.payload.initiator.project_id",
                         multi="name",
                         timestamp='$.payload.eventTime')]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(event))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -399,8 +431,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="'prefix-' + $.payload.nodename",
                         timestamp="$.payload.metrics"
                                   "[?(@.name='cpu.frequency')].timestamp")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(METRICS_UPDATE))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -416,8 +447,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         volume="$.payload.volume",
                         resource_id="$.payload.resource_id",
                         project_id="$.payload.project_id")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -437,8 +467,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         project_id="$.payload.project_id",
                         metadata={'proj': '$.payload.project_id',
                                   'dict': '$.payload.resource_metadata'})]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -462,8 +491,7 @@ class TestMeterProcessing(test.BaseTestCase):
                              volume="$.payload.volume",
                              resource_id="$.payload.resource_id",
                              project_id="$.payload.project_id")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(NOTIFICATION))
         self.assertEqual(2, len(c))
 
@@ -477,8 +505,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="$.payload.target_id",
                         project_id="$.payload.initiator.project_id",
                         lookup=["name", "volume", "unit"])]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(MIDDLEWARE_EVENT))
         self.assertEqual(2, len(c))
         s1 = c[0].as_dict()
@@ -502,8 +529,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="$.payload.target_id",
                         project_id="$.payload.initiator.project_id",
                         lookup=["name", "unit"])]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(event))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -523,8 +549,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="$.payload.target_id",
                         project_id="$.payload.initiator.project_id",
                         lookup="name")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(event))
         self.assertEqual(0, len(c))
 
@@ -540,8 +565,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         user_id="$.payload.[*].user_id",
                         lookup=['name', 'type', 'unit', 'volume',
                                 'resource_id', 'project_id', 'user_id'])]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(FULL_MULTI_MSG))
         self.assertEqual(2, len(c))
         msg = FULL_MULTI_MSG['payload']
@@ -569,11 +593,11 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="$.payload.target_id",
                         project_id="$.payload.initiator.project_id",
                         lookup=["name", "unit", "volume"])]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(event))
         self.assertEqual(0, len(c))
-        LOG.warning.assert_called_with('Could not find %s values', 'volume')
+        LOG.warning.assert_called_with('Only 0 fetched meters contain '
+                                       '"volume" field instead of 2.')
 
     @mock.patch('ceilometer.meter.notifications.LOG')
     def test_multi_meter_payload_invalid_short(self, LOG):
@@ -588,12 +612,11 @@ class TestMeterProcessing(test.BaseTestCase):
                         resource_id="$.payload.target_id",
                         project_id="$.payload.initiator.project_id",
                         lookup=["name", "unit", "volume"])]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(event))
         self.assertEqual(0, len(c))
-        LOG.warning.assert_called_with('Not all fetched meters contain "%s" '
-                                       'field', 'volume')
+        LOG.warning.assert_called_with('Only 1 fetched meters contain '
+                                       '"volume" field instead of 2.')
 
     def test_arithmetic_expr_meter(self):
         cfg = yaml.dump(
@@ -606,8 +629,7 @@ class TestMeterProcessing(test.BaseTestCase):
                                " * 100",
                         resource_id="$.payload.host + '_'"
                                     " + $.payload.nodename")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(METRICS_UPDATE))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -626,8 +648,7 @@ class TestMeterProcessing(test.BaseTestCase):
                                ".value",
                         resource_id="$.payload.host + '_'"
                                     " + $.payload.nodename")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(METRICS_UPDATE))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()
@@ -645,8 +666,7 @@ class TestMeterProcessing(test.BaseTestCase):
                         volume="$.payload.metrics[?(@.name='cpu.frequency')]"
                                ".value",
                         resource_id="'prefix-' + $.payload.nodename")]})
-        self.handler.definitions = notifications.load_definitions(
-            self.__setup_meter_def_file(cfg))
+        self._load_meter_def_file(cfg)
         c = list(self.handler.process_notification(METRICS_UPDATE))
         self.assertEqual(1, len(c))
         s1 = c[0].as_dict()

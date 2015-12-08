@@ -26,10 +26,9 @@ from oslotest import mockpatch
 import requests
 import six
 import six.moves.urllib.parse as urlparse
-import tempfile
 import testscenarios
-import yaml
 
+from ceilometer import declarative
 from ceilometer.dispatcher import gnocchi
 from ceilometer import service as ceilometer_service
 from ceilometer.tests import base
@@ -71,7 +70,7 @@ class DispatcherTest(base.BaseTestCase):
             'resource_id': self.resource_id,
             'resource_metadata': {
                 'host': 'foo',
-                'image_ref_url': 'imageref!',
+                'image_ref': 'imageref!',
                 'instance_flavor_id': 1234,
                 'display_name': 'myinstance',
             }},
@@ -86,7 +85,7 @@ class DispatcherTest(base.BaseTestCase):
                 'resource_id': self.resource_id,
                 'resource_metadata': {
                     'host': 'foo',
-                    'image_ref_url': 'imageref!',
+                    'image_ref': 'imageref!',
                     'instance_flavor_id': 1234,
                     'display_name': 'myinstance',
                 }
@@ -135,7 +134,7 @@ class DispatcherTest(base.BaseTestCase):
             self.conf.config(filter_service_activity=False,
                              resources_definition_file=temp,
                              group='dispatcher_gnocchi')
-            self.assertRaises(gnocchi.ResourcesDefinitionException,
+            self.assertRaises(declarative.DefinitionException,
                               gnocchi.GnocchiDispatcher, self.conf.conf)
 
     @mock.patch('ceilometer.dispatcher.gnocchi.GnocchiDispatcher'
@@ -156,21 +155,6 @@ class DispatcherTest(base.BaseTestCase):
 
         fake_process_resource.assert_called_with(self.resource_id,
                                                  mock.ANY)
-
-    def test_archive_policy_map_config(self):
-        archive_policy_map = yaml.dump({
-            'foo.*': 'low'
-        })
-        archive_policy_cfg_file = tempfile.NamedTemporaryFile(
-            mode='w+b', prefix="foo", suffix=".yaml")
-        archive_policy_cfg_file.write(archive_policy_map.encode())
-        archive_policy_cfg_file.seek(0)
-        self.conf.conf.dispatcher_gnocchi.archive_policy_file = (
-            archive_policy_cfg_file.name)
-        d = gnocchi.GnocchiDispatcher(self.conf.conf)
-        legacy = d._load_archive_policy(self.conf.conf)
-        self.assertEqual(legacy.get('foo.disk.rate'), "low")
-        archive_policy_cfg_file.close()
 
     def test_activity_filter_match_project_id(self):
         self.samples[0]['project_id'] = (
@@ -213,7 +197,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
                 'timestamp': '2012-05-08 20:23:48.028195',
                 'resource_metadata': {
                     'host': 'foo',
-                    'image_ref_url': 'imageref!',
+                    'image_ref': 'imageref!',
                     'instance_flavor_id': 1234,
                     'display_name': 'myinstance',
                 }
@@ -235,7 +219,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
             metric_names=[
                 'instance', 'disk.root.size', 'disk.ephemeral.size',
                 'memory', 'vcpus', 'memory.usage', 'memory.resident',
-                'cpu', 'cpu_util', 'vcpus', 'disk.read.requests',
+                'cpu', 'cpu.delta', 'cpu_util', 'vcpus', 'disk.read.requests',
                 'disk.read.requests.rate', 'disk.write.requests',
                 'disk.write.requests.rate', 'disk.read.bytes',
                 'disk.read.bytes.rate', 'disk.write.bytes',
@@ -354,6 +338,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
 
         expected_calls = [
             mock.call.session(),
+            mock.call.adapters.HTTPAdapter(pool_block=True),
             mock.call.session().mount('http://', mock.ANY),
             mock.call.session().mount('https://', mock.ANY),
             mock.call.session().post(
@@ -385,8 +370,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
             attributes = self.postable_attributes.copy()
             attributes.update(self.patchable_attributes)
             attributes['id'] = self.sample['resource_id']
-            attributes['metrics'] = dict((metric_name,
-                                          {'archive_policy_name': 'low'})
+            attributes['metrics'] = dict((metric_name, {})
                                          for metric_name in self.metric_names)
             expected_calls.append(mock.call.session().post(
                 "%(url)s/%(resource_type)s" % url_params,
@@ -400,8 +384,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
                 "%(url)s/%(resource_type)s/%(resource_id)s/metric"
                 % url_params,
                 headers=headers,
-                data=json_matcher({self.sample['counter_name']:
-                                   {'archive_policy_name': 'low'}})
+                data=json_matcher({self.sample['counter_name']: {}})
             ))
             post_responses.append(MockResponse(self.metric))
 

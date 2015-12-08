@@ -18,7 +18,6 @@
 # under the License.
 
 import abc
-import fnmatch
 import hashlib
 import os
 
@@ -32,10 +31,11 @@ import yaml
 
 
 from ceilometer.event.storage import models
-from ceilometer.i18n import _, _LW
+from ceilometer.i18n import _, _LI, _LW
 from ceilometer import publisher
 from ceilometer.publisher import utils as publisher_utils
 from ceilometer import sample as sample_util
+from ceilometer import utils
 
 
 OPTS = [
@@ -272,11 +272,11 @@ class Source(object):
     def is_supported(dataset, data_name):
         # Support wildcard like storage.* and !disk.*
         # Start with negation, we consider that the order is deny, allow
-        if any(fnmatch.fnmatch(data_name, datapoint[1:])
+        if any(utils.match(data_name, datapoint[1:])
                for datapoint in dataset if datapoint[0] == '!'):
             return False
 
-        if any(fnmatch.fnmatch(data_name, datapoint)
+        if any(utils.match(data_name, datapoint)
                for datapoint in dataset if datapoint[0] != '!'):
             return True
 
@@ -293,11 +293,7 @@ class EventSource(Source):
 
     def __init__(self, cfg):
         super(EventSource, self).__init__(cfg)
-        try:
-            self.events = cfg['events']
-        except KeyError as err:
-            raise PipelineException(
-                "Required field %s not specified" % err.args[0], cfg)
+        self.events = cfg.get('events')
         self.check_source_filtering(self.events, 'events')
 
     def support_event(self, event_name):
@@ -315,13 +311,8 @@ class SampleSource(Source):
 
     def __init__(self, cfg):
         super(SampleSource, self).__init__(cfg)
-        try:
-            # Support 'counters' for backward compatibility
-            self.meters = cfg.get('meters', cfg.get('counters'))
-        except KeyError as err:
-            raise PipelineException(
-                "Required field %s not specified" % err.args[0], cfg)
-
+        # Support 'counters' for backward compatibility
+        self.meters = cfg.get('meters', cfg.get('counters'))
         try:
             self.interval = int(cfg.get('interval', 600))
         except ValueError:
@@ -412,7 +403,7 @@ class Sink(object):
                     "No transformer named %s loaded" % transformer['name'],
                     cfg)
             transformers.append(ext.plugin(**parameter))
-            LOG.info(_(
+            LOG.info(_LI(
                 "Pipeline %(pipeline)s: Setup transformer instance %(name)s "
                 "with parameter %(param)s") % ({'pipeline': self,
                                                 'name': transformer['name'],
@@ -689,8 +680,7 @@ class PipelineManager(object):
         "meter_name" will be excluded; 'meter_name' means 'meter_name'
         will be included.
 
-        The 'meter_name" is Sample name field. For meter names with
-        variable like "instance:m1.tiny", it's "instance:*".
+        The 'meter_name" is Sample name field.
 
         Valid meters definition is all "included meter names", all
         "excluded meter names", wildcard and "excluded meter names", or
@@ -709,7 +699,7 @@ class PipelineManager(object):
         if not ('sources' in cfg and 'sinks' in cfg):
             raise PipelineException("Both sources & sinks are required",
                                     cfg)
-        LOG.info(_('detected decoupled pipeline config format'))
+        LOG.info(_LI('detected decoupled pipeline config format'))
 
         unique_names = set()
         sources = []
@@ -771,7 +761,7 @@ class PollingManager(object):
         if not ('sources' in cfg and 'sinks' in cfg):
             raise PipelineException("Both sources & sinks are required",
                                     cfg)
-        LOG.info(_('detected decoupled pipeline config format'))
+        LOG.info(_LI('detected decoupled pipeline config format'))
 
         unique_names = set()
         for s in cfg.get('sources', []):
@@ -795,7 +785,7 @@ def _setup_pipeline_manager(cfg_file, transformer_manager, p_type=SAMPLE_TYPE):
         data = fap.read()
 
     pipeline_cfg = yaml.safe_load(data)
-    LOG.info(_("Pipeline config: %s"), pipeline_cfg)
+    LOG.info(_LI("Pipeline config: %s"), pipeline_cfg)
 
     return PipelineManager(pipeline_cfg,
                            transformer_manager or
@@ -814,7 +804,7 @@ def _setup_polling_manager(cfg_file):
         data = fap.read()
 
     pipeline_cfg = yaml.safe_load(data)
-    LOG.info(_("Pipeline config: %s"), pipeline_cfg)
+    LOG.info(_LI("Pipeline config: %s"), pipeline_cfg)
 
     return PollingManager(pipeline_cfg)
 

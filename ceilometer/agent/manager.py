@@ -19,7 +19,6 @@
 # under the License.
 
 import collections
-import fnmatch
 import itertools
 import random
 
@@ -175,13 +174,13 @@ class PollingTask(object):
                 # If no resources, skip for this pollster
                 if not polling_resources:
                     p_context = 'new ' if history else ''
-                    LOG.info(_("Skip pollster %(name)s, no %(p_context)s"
-                               "resources found this cycle"),
+                    LOG.info(_LI("Skip pollster %(name)s, no %(p_context)s"
+                                 "resources found this cycle"),
                              {'name': pollster.name, 'p_context': p_context})
                     continue
 
-                LOG.info(_("Polling pollster %(poll)s in the context of "
-                           "%(src)s"),
+                LOG.info(_LI("Polling pollster %(poll)s in the context of "
+                             "%(src)s"),
                          dict(poll=pollster.name, src=source_name))
                 try:
                     samples = pollster.obj.get_samples(
@@ -241,7 +240,7 @@ class AgentManager(service_base.BaseService):
 
         def _match(pollster):
             """Find out if pollster name matches to one of the list."""
-            return any(fnmatch.fnmatch(pollster.name, pattern) for
+            return any(utils.match(pollster.name, pattern) for
                        pattern in pollster_list)
 
         if type(namespaces) is not list:
@@ -276,7 +275,7 @@ class AgentManager(service_base.BaseService):
         self.notifier = oslo_messaging.Notifier(
             messaging.get_transport(),
             driver=cfg.CONF.publisher_notifier.telemetry_driver,
-            publisher_id="ceilometer.api")
+            publisher_id="ceilometer.polling")
 
         self._keystone = None
         self._keystone_last_exception = None

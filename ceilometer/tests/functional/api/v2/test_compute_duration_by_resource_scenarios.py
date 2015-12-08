@@ -21,12 +21,10 @@ import mock
 from oslo_utils import timeutils
 
 from ceilometer.storage import models
-from ceilometer.tests import db as tests_db
 from ceilometer.tests.functional.api import v2
 
 
-class TestComputeDurationByResource(v2.FunctionalTest,
-                                    tests_db.MixinTestsWithBackendScenarios):
+class TestComputeDurationByResource(v2.FunctionalTest):
 
     def setUp(self):
         super(TestComputeDurationByResource, self).setUp()
@@ -77,7 +75,7 @@ class TestComputeDurationByResource(v2.FunctionalTest,
                                  side_effect=get_interval)
 
     def _invoke_api(self):
-        return self.get_json('/meters/instance:m1.tiny/statistics',
+        return self.get_json('/meters/instance/statistics',
                              q=[{'field': 'timestamp',
                                  'op': 'ge',
                                  'value': self.start.isoformat()},
@@ -151,7 +149,7 @@ class TestComputeDurationByResource(v2.FunctionalTest,
         ]
         with mock.patch.object(type(self.conn), 'get_meter_statistics',
                                return_value=statistics):
-            data = self.get_json('/meters/instance:m1.tiny/statistics',
+            data = self.get_json('/meters/instance/statistics',
                                  q=[{'field': 'timestamp',
                                      'op': 'ge',
                                      'value': self.late1.isoformat()},
@@ -183,7 +181,7 @@ class TestComputeDurationByResource(v2.FunctionalTest,
 
         with mock.patch.object(type(self.conn), 'get_meter_statistics',
                                return_value=statistics):
-            data = self.get_json('/meters/instance:m1.tiny/statistics',
+            data = self.get_json('/meters/instance/statistics',
                                  q=[{'field': 'timestamp',
                                      'op': 'le',
                                      'value': self.early2.isoformat()},

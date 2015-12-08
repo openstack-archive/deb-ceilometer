@@ -34,7 +34,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql.expression import cast
 
 import ceilometer
-from ceilometer.i18n import _
+from ceilometer.i18n import _, _LI
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models as api_models
@@ -223,6 +223,9 @@ class Connection(base.Connection):
         # in storage.__init__.get_connection_from_config function
         options = dict(cfg.CONF.database.items())
         options['max_retries'] = 0
+        # oslo.db doesn't support options defined by Ceilometer
+        for opt in storage.OPTS:
+            options.pop(opt.name, None)
         self._engine_facade = db_session.EngineFacade(url, **options)
 
     def upgrade(self):
@@ -353,7 +356,7 @@ class Connection(base.Connection):
         Clearing occurs according to the time-to-live.
         :param ttl: Number of seconds to keep records for.
         """
-        # Prevent database deadlocks from occuring by
+        # Prevent database deadlocks from occurring by
         # using separate transaction for each delete
         session = self._engine_facade.get_session()
         with session.begin():
@@ -361,7 +364,7 @@ class Connection(base.Connection):
             sample_q = (session.query(models.Sample)
                         .filter(models.Sample.timestamp < end))
             rows = sample_q.delete()
-            LOG.info(_("%d samples removed from database"), rows)
+            LOG.info(_LI("%d samples removed from database"), rows)
 
         if not cfg.CONF.sql_expire_samples_only:
             with session.begin():
@@ -397,8 +400,8 @@ class Connection(base.Connection):
                               .filter(models.Resource.metadata_hash
                                       .like('delete_%')))
                 resource_q.delete(synchronize_session=False)
-            LOG.info(_("Expired residual resource and"
-                       " meter definition data"))
+            LOG.info(_LI("Expired residual resource and"
+                         " meter definition data"))
 
     def get_resources(self, user=None, project=None, source=None,
                       start_timestamp=None, start_timestamp_op=None,
@@ -431,9 +434,16 @@ class Connection(base.Connection):
 
         session = self._engine_facade.get_session()
         # get list of resource_ids
-        res_q = session.query(distinct(models.Resource.resource_id)).join(
-            models.Sample,
-            models.Sample.resource_id == models.Resource.internal_id)
+        has_timestamp = start_timestamp or end_timestamp
+        # NOTE: When sql_expire_samples_only is enabled, there will be some
+        #       resources without any sample, in such case we should use inner
+        #       join on sample table to avoid wrong result.
+        if cfg.CONF.sql_expire_samples_only or has_timestamp:
+            res_q = session.query(distinct(models.Resource.resource_id)).join(
+                models.Sample,
+                models.Sample.resource_id == models.Resource.internal_id)
+        else:
+            res_q = session.query(distinct(models.Resource.resource_id))
         res_q = make_query_from_filter(session, res_q, s_filter,
                                        require_meter=False)
         res_q = res_q.limit(limit) if limit else res_q
@@ -601,7 +611,22 @@ class Connection(base.Connection):
 
         session = self._engine_facade.get_session()
         engine = self._engine_facade.get_engine()
-        query = session.query(models.FullSample)
+        query = session.query(models.Sample.timestamp,
+                              models.Sample.recorded_at,
+                              models.Sample.message_id,
+                              models.Sample.message_signature,
+                              models.Sample.volume.label('counter_volume'),
+                              models.Meter.name.label('counter_name'),
+                              models.Meter.type.label('counter_type'),
+                              models.Meter.unit.label('counter_unit'),
+                              models.Resource.source_id,
+                              models.Resource.user_id,
+                              models.Resource.project_id,
+                              models.Resource.resource_metadata,
+                              models.Resource.resource_id).join(
+            models.Meter, models.Meter.id == models.Sample.meter_id).join(
+            models.Resource,
+            models.Resource.internal_id == models.Sample.resource_id)
         transformer = sql_utils.QueryTransformer(models.FullSample, query,
                                                  dialect=engine.dialect.name)
         if filter_expr is not None:

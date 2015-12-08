@@ -40,8 +40,10 @@ def logged(func):
         try:
             return func(*args, **kwargs)
         except exceptions.NeutronClientException as e:
-            # handles 404's when services are disabled in neutron
-            LOG.warn(e)
+            if e.status_code == 404:
+                LOG.warn("The resource could not be found.")
+            else:
+                LOG.warn(e)
             return []
         except Exception as e:
             LOG.exception(e)
@@ -73,12 +75,6 @@ class Client(object):
             params['tenant_name'] = conf.os_tenant_name
 
         self.client = clientv20.Client(**params)
-
-    @logged
-    def network_get_all(self):
-        """Returns all networks."""
-        resp = self.client.list_networks()
-        return resp.get('networks')
 
     @logged
     def port_get_all(self):

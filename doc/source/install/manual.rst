@@ -47,12 +47,6 @@ MongoDB
     [database]
     connection = mongodb://username:password@host:27017/ceilometer
 
-   If MongoDB is configured in replica set mode, add param in ceilometer.conf
-   to use MongoReplicaSetClient::
-
-    [database]
-    mongodb_replica_set = replica_name
-
 SQLalchemy-supported DBs
 ------------------------
 
@@ -85,7 +79,10 @@ HBase
 
     import happybase
 
-    conn = happybase.Connection(host=$hbase-thrift-server, port=9090, table_prefix=None)
+    conn = happybase.Connection(host=$hbase-thrift-server,
+                                port=9090,
+                                table_prefix=None,
+                                table_prefix_separator='_')
     print conn.tables() # this returns a list of HBase tables in your HBase server
 
    .. note::
@@ -94,8 +91,7 @@ HBase
    ..
 
    In case of HBase, the needed database tables (`project`, `user`, `resource`,
-   `meter`, `alarm`, `alarm_h`) should be created manually with `f` column
-   family for each one.
+   `meter`) should be created manually with `f` column family for each one.
 
    To use HBase as the storage backend, change the 'database' section in
    ceilometer.conf as follows::
@@ -103,6 +99,16 @@ HBase
     [database]
     connection = hbase://hbase-thrift-host:9090
 
+   It is possible to customize happybase's `table_prefix` and `table_prefix_separator`
+   via query string. By default `table_prefix` is not set and `table_prefix_separator`
+   is '_'. When `table_prefix` is not specified `table_prefix_separator` is not taken
+   into account. E.g. the resource table in the default case will be 'resource' while
+   with `table_prefix` set to 'ceilo' and `table_prefix_separator` to '.' the resulting
+   table will be 'ceilo.resource'. For this second case this is the database connection
+   configuration::
+
+    [database]
+    connection = hbase://hbase-thrift-host:9090?table_prefix=ceilo&table_prefix_separator=.
 
 .. _HappyBase: http://happybase.readthedocs.org/en/latest/index.html#
 .. _MongoDB: http://www.mongodb.org/
@@ -535,7 +541,7 @@ Notifications queues
 ========================
 
 .. index::
-   double: installing; notifications queues
+   double: installing; notifications queues; multiple topics
 
 By default, Ceilometer consumes notifications on the messaging bus sent to
 **notification_topics** by using a queue/pool name that is identical to the
@@ -543,6 +549,41 @@ topic name. You shouldn't have different applications consuming messages from
 this queue. If you want to also consume the topic notifications with a system
 other than Ceilometer, you should configure a separate queue that listens for
 the same messages.
+
+Ceilometer allows multiple topics to be configured so that polling agent can
+send the same messages of notifications to other queues. Notification agents
+also use **notification_topics** to configure which queue to listen for. If
+you use multiple topics, you should configure notification agent and polling
+agent seperately, otherwise Ceilometer collects duplicate samples.
+
+By default, the ceilometer.conf file is as follows::
+
+   [DEFAULT]
+   notification_topics = notifications
+
+To use multiple topics, you should give ceilometer-agent-notification and
+ceilometer-polling services different ceilometer.conf files. The Ceilometer
+configuration file ceilometer.conf is normally locate in the /etc/ceilometer
+directory. Make changes according to your requirments which may look like
+the following::
+
+For notification agent using ceilometer-notification.conf, settings like::
+
+   [DEFAULT]
+   notification_topics = notifications,xxx
+
+For polling agent using ceilometer-polling.conf, settings like::
+
+   [DEFAULT]
+   notification_topics = notifications,foo
+
+.. note::
+
+   notification_topics in ceilometer-notification.conf should only have one same
+   topic in ceilometer-polling.conf
+
+Doing this, it's easy to listen/receive data from multiple internal and external services.
+
 
 Using multiple dispatchers
 ================================

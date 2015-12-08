@@ -26,7 +26,6 @@ from oslotest import mockpatch
 import six
 from six.moves.urllib import parse as urlparse
 import sqlalchemy
-import testscenarios.testcase
 from testtools import testcase
 
 from ceilometer import storage
@@ -51,8 +50,6 @@ class MongoDbManager(fixtures.Fixture):
             try:
                 self.connection = storage.get_connection(
                     self.url, 'ceilometer.metering.storage')
-                self.alarm_connection = storage.get_connection(
-                    self.url, 'ceilometer.alarm.storage')
                 self.event_connection = storage.get_connection(
                     self.url, 'ceilometer.event.storage')
             except storage.StorageBadVersion as e:
@@ -71,8 +68,6 @@ class SQLManager(fixtures.Fixture):
         super(SQLManager, self).setUp()
         self.connection = storage.get_connection(
             self.url, 'ceilometer.metering.storage')
-        self.alarm_connection = storage.get_connection(
-            self.url, 'ceilometer.alarm.storage')
         self.event_connection = storage.get_connection(
             self.url, 'ceilometer.event.storage')
 
@@ -117,8 +112,6 @@ class ElasticSearchManager(fixtures.Fixture):
         super(ElasticSearchManager, self).setUp()
         self.connection = storage.get_connection(
             'sqlite://', 'ceilometer.metering.storage')
-        self.alarm_connection = storage.get_connection(
-            'sqlite://', 'ceilometer.alarm.storage')
         self.event_connection = storage.get_connection(
             self.url, 'ceilometer.event.storage')
         # prefix each test with unique index name
@@ -135,8 +128,6 @@ class HBaseManager(fixtures.Fixture):
         super(HBaseManager, self).setUp()
         self.connection = storage.get_connection(
             self.url, 'ceilometer.metering.storage')
-        self.alarm_connection = storage.get_connection(
-            self.url, 'ceilometer.alarm.storage')
         self.event_connection = storage.get_connection(
             self.url, 'ceilometer.event.storage')
         # Unique prefix for each test to keep data is distinguished because
@@ -161,9 +152,10 @@ class HBaseManager(fixtures.Fixture):
 
     @property
     def url(self):
-        return '%s?table_prefix=%s' % (
+        return '%s?table_prefix=%s&table_prefix_separator=%s' % (
             self._url,
-            os.getenv("CEILOMETER_TEST_HBASE_TABLE_PREFIX", "test")
+            os.getenv("CEILOMETER_TEST_HBASE_TABLE_PREFIX", "test"),
+            os.getenv("CEILOMETER_TEST_HBASE_TABLE_PREFIX_SEPARATOR", "_")
         )
 
 
@@ -176,13 +168,12 @@ class SQLiteManager(fixtures.Fixture):
         super(SQLiteManager, self).setUp()
         self.connection = storage.get_connection(
             self.url, 'ceilometer.metering.storage')
-        self.alarm_connection = storage.get_connection(
-            self.url, 'ceilometer.alarm.storage')
         self.event_connection = storage.get_connection(
             self.url, 'ceilometer.event.storage')
 
 
-class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
+@six.add_metaclass(test_base.SkipNotImplementedMeta)
+class TestBase(test_base.BaseTestCase):
 
     DRIVER_MANAGERS = {
         'mongodb': MongoDbManager,
@@ -195,11 +186,15 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
     if mocks is not None:
         DRIVER_MANAGERS['hbase'] = HBaseManager
 
-    db_url = 'sqlite://'  # NOTE(Alexei_987) Set default db url
-
     def setUp(self):
         super(TestBase, self).setUp()
-        engine = urlparse.urlparse(self.db_url).scheme
+        db_url = os.environ.get('CEILOMETER_TEST_STORAGE_URL',
+                                "sqlite://")
+
+        engine = urlparse.urlparse(db_url).scheme
+        # in case some drivers have additional specification, for example:
+        # PyMySQL will have scheme mysql+pymysql
+        engine = engine.split('+')[0]
 
         # NOTE(Alexei_987) Shortcut to skip expensive db setUp
         test_method = self._get_test_method()
@@ -211,17 +206,16 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
         self.CONF = self.useFixture(fixture_config.Config()).conf
         self.CONF([], project='ceilometer', validate_default_values=True)
 
-        try:
-            self.db_manager = self._get_driver_manager(engine)(self.db_url)
-        except ValueError as exc:
-            self.skipTest("missing driver manager: %s" % exc)
+        manager = self.DRIVER_MANAGERS.get(engine)
+        if not manager:
+            self.skipTest("missing driver manager: %s" % engine)
+
+        self.db_manager = manager(db_url)
+
         self.useFixture(self.db_manager)
 
         self.conn = self.db_manager.connection
         self.conn.upgrade()
-
-        self.alarm_conn = self.db_manager.alarm_connection
-        self.alarm_conn.upgrade()
 
         self.event_conn = self.db_manager.event_connection
         self.event_conn.upgrade()
@@ -241,24 +235,14 @@ class TestBase(testscenarios.testcase.WithScenarios, test_base.BaseTestCase):
     def tearDown(self):
         self.event_conn.clear()
         self.event_conn = None
-        self.alarm_conn.clear()
-        self.alarm_conn = None
         self.conn.clear()
         self.conn = None
         super(TestBase, self).tearDown()
 
     def _get_connection(self, url, namespace):
-        if namespace == "ceilometer.alarm.storage":
-            return self.alarm_conn
-        elif namespace == "ceilometer.event.storage":
+        if namespace == "ceilometer.event.storage":
             return self.event_conn
         return self.conn
-
-    def _get_driver_manager(self, engine):
-        manager = self.DRIVER_MANAGERS.get(engine)
-        if not manager:
-            raise ValueError('No manager available for %s' % engine)
-        return manager
 
 
 def run_with(*drivers):
@@ -280,31 +264,3 @@ def run_with(*drivers):
             test._run_with = drivers
         return test
     return decorator
-
-
-@six.add_metaclass(test_base.SkipNotImplementedMeta)
-class MixinTestsWithBackendScenarios(object):
-
-    scenarios = [
-        ('sqlite', {'db_url': 'sqlite://'}),
-    ]
-
-    for db in ('MONGODB', 'MYSQL', 'PGSQL', 'HBASE', 'DB2', 'ES'):
-        if os.environ.get('CEILOMETER_TEST_%s_URL' % db):
-            scenarios.append(
-                (db.lower(), {'db_url': os.environ.get(
-                    'CEILOMETER_TEST_%s_URL' % db)}))
-
-    scenarios_db = [db for db, _ in scenarios]
-
-    # Insert default value for hbase test
-    if 'hbase' not in scenarios_db:
-        scenarios.append(
-            ('hbase', {'db_url': 'hbase://__test__'}))
-
-    # Insert default value for db2 test
-    if 'mongodb' in scenarios_db and 'db2' not in scenarios_db:
-        scenarios.append(
-            ('db2', {'db_url': os.environ.get('CEILOMETER_TEST_MONGODB_URL',
-                                              '').replace('mongodb://',
-                                                          'db2://')}))

@@ -20,6 +20,7 @@ liusheng
 llu
 _nadya_
 pradk
+rohit_
 sileht
 zqfan
 
@@ -35,13 +36,6 @@ Each  has an entry with the following keys:
       Obsolete:    Replaced by newer code, or a dead end, or out-dated
  F: Wildcard patterns, relative to ceilometer/
 
-
-== alarms ==
-
-M: Eoghan Glynn (eglynn)
-M: Mehdi Abaakouk (sileht)
-S: Maintained
-F: alarm/
 
 == api ==
 

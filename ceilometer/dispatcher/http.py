@@ -19,7 +19,7 @@ from oslo_log import log
 import requests
 
 from ceilometer import dispatcher
-from ceilometer.i18n import _, _LE
+from ceilometer.i18n import _, _LE, _LW
 from ceilometer.publisher import utils as publisher_utils
 
 LOG = log.getLogger(__name__)
@@ -50,14 +50,16 @@ http_dispatcher_opts = [
 cfg.CONF.register_opts(http_dispatcher_opts, group="dispatcher_http")
 
 
-class HttpDispatcher(dispatcher.Base):
-    """Dispatcher class for posting metering data into a http target.
+class HttpDispatcher(dispatcher.MeterDispatcherBase,
+                     dispatcher.EventDispatcherBase):
+    """Dispatcher class for posting metering/event data into a http target.
 
     To enable this dispatcher, the following option needs to be present in
     ceilometer.conf file::
 
         [DEFAULT]
-        dispatcher = http
+        meter_dispatchers = http
+        event_dispatchers = http
 
     Dispatcher specific options can be added as follows::
 
@@ -67,6 +69,7 @@ class HttpDispatcher(dispatcher.Base):
         cadf_only = true
         timeout = 2
     """
+
     def __init__(self, conf):
         super(HttpDispatcher, self).__init__(conf)
         self.headers = {'Content-type': 'application/json'}
@@ -129,13 +132,19 @@ class HttpDispatcher(dispatcher.Base):
             events = [events]
 
         for event in events:
-            res = None
-            try:
-                res = requests.post(self.event_target, data=event,
-                                    headers=self.headers, timeout=self.timeout)
-                res.raise_for_status()
-            except Exception:
-                error_code = res.status_code if res else 'unknown'
-                LOG.exception(_LE('Status Code: %{code}s. Failed to dispatch '
-                                  'event: %{event}s'),
-                              {'code': error_code, 'event': event})
+            if publisher_utils.verify_signature(
+                    event, self.conf.publisher.telemetry_secret):
+                res = None
+                try:
+                    res = requests.post(self.event_target, data=event,
+                                        headers=self.headers,
+                                        timeout=self.timeout)
+                    res.raise_for_status()
+                except Exception:
+                    error_code = res.status_code if res else 'unknown'
+                    LOG.exception(_LE('Status Code: %{code}s. Failed to'
+                                      'dispatch event: %{event}s'),
+                                  {'code': error_code, 'event': event})
+            else:
+                LOG.warning(_LW(
+                    'event signature invalid, discarding event: %s'), event)

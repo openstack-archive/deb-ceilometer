@@ -1,8 +1,5 @@
 #
-# Copyright 2014 eNovance
-#
-# Authors: Julien Danjou <julien@danjou.info>
-#          Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
+# Copyright 2014-2015 eNovance
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -15,24 +12,25 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-import fnmatch
-import functools
 import itertools
 import operator
 import os
 import threading
+import uuid
 
-from jsonpath_rw_ext import parser
 from oslo_config import cfg
 from oslo_log import log
 import six
-import yaml
+from stevedore import extension
 
+from ceilometer import declarative
 from ceilometer import dispatcher
 from ceilometer.dispatcher import gnocchi_client
-from ceilometer.i18n import _, _LE
+from ceilometer.i18n import _, _LE, _LW
 from ceilometer import keystone_client
+from ceilometer import utils
 
+CACHE_NAMESPACE = uuid.uuid4()
 LOG = log.getLogger(__name__)
 
 dispatcher_opts = [
@@ -48,14 +46,9 @@ dispatcher_opts = [
                default="http://localhost:8041",
                help='URL to Gnocchi.'),
     cfg.StrOpt('archive_policy',
-               default="low",
+               default=None,
                help='The archive policy to use when the dispatcher '
                'create a new metric.'),
-    cfg.StrOpt('archive_policy_file',
-               default='gnocchi_archive_policy_map.yaml',
-               deprecated_for_removal=True,
-               help=_('The Yaml file that defines per metric archive '
-                      'policies.')),
     cfg.StrOpt('resources_definition_file',
                default='gnocchi_resources.yaml',
                help=_('The Yaml file that defines mapping between samples '
@@ -65,6 +58,13 @@ dispatcher_opts = [
 cfg.CONF.register_opts(dispatcher_opts, group="dispatcher_gnocchi")
 
 
+def cache_key_mangler(key):
+    """Construct an opaque cache key."""
+    if six.PY2:
+        key = key.encode('utf-8')
+    return uuid.uuid5(CACHE_NAMESPACE, key).hex
+
+
 def log_and_ignore_unexpected_workflow_error(func):
     def log_and_ignore(self, *args, **kwargs):
         try:
@@ -72,20 +72,6 @@ def log_and_ignore_unexpected_workflow_error(func):
         except gnocchi_client.UnexpectedError as e:
             LOG.error(six.text_type(e))
     return log_and_ignore
-
-
-class LegacyArchivePolicyDefinition(object):
-    def __init__(self, definition_cfg):
-        self.cfg = definition_cfg
-        if self.cfg is None:
-            LOG.debug("No archive policy file found! Using default config.")
-
-    def get(self, metric_name):
-        if self.cfg is not None:
-            for metric, policy in self.cfg.items():
-                # Support wild cards such as disk.*
-                if fnmatch.fnmatch(metric_name, metric):
-                    return policy
 
 
 class ResourcesDefinitionException(Exception):
@@ -103,86 +89,94 @@ class ResourcesDefinition(object):
     MANDATORY_FIELDS = {'resource_type': six.string_types,
                         'metrics': list}
 
-    JSONPATH_RW_PARSER = parser.ExtentedJsonPathParser()
-
-    def __init__(self, definition_cfg, default_archive_policy,
-                 legacy_archive_policy_definition):
+    def __init__(self, definition_cfg, default_archive_policy, plugin_manager):
         self._default_archive_policy = default_archive_policy
-        self._legacy_archive_policy_definition =\
-            legacy_archive_policy_definition
         self.cfg = definition_cfg
 
         for field, field_type in self.MANDATORY_FIELDS.items():
             if field not in self.cfg:
-                raise ResourcesDefinitionException(
+                raise declarative.DefinitionException(
                     _LE("Required field %s not specified") % field, self.cfg)
             if not isinstance(self.cfg[field], field_type):
-                raise ResourcesDefinitionException(
+                raise declarative.DefinitionException(
                     _LE("Required field %(field)s should be a %(type)s") %
                     {'field': field, 'type': field_type}, self.cfg)
 
-        self._field_getter = {}
-        for name, fval in self.cfg.get('attributes', {}).items():
-            if isinstance(fval, six.integer_types):
-                self._field_getter[name] = fval
-            else:
-                try:
-                    parts = self.JSONPATH_RW_PARSER.parse(fval)
-                except Exception as e:
-                    raise ResourcesDefinitionException(
-                        _LE("Parse error in JSONPath specification "
-                            "'%(jsonpath)s': %(err)s")
-                        % dict(jsonpath=fval, err=e), self.cfg)
-                self._field_getter[name] = functools.partial(
-                    self._parse_jsonpath_field, parts)
+        self._attributes = {}
+        for name, attr_cfg in self.cfg.get('attributes', {}).items():
+            self._attributes[name] = declarative.Definition(name, attr_cfg,
+                                                            plugin_manager)
 
-    @staticmethod
-    def _parse_jsonpath_field(parts, sample):
-        values = [match.value for match in parts.find(sample)
-                  if match.value is not None]
-        if values:
-            return values[0]
+        self.metrics = {}
+        for t in self.cfg['metrics']:
+            archive_policy = self.cfg.get('archive_policy',
+                                          self._default_archive_policy)
+            if archive_policy is None:
+                self.metrics[t] = {}
+            else:
+                self.metrics[t] = dict(archive_policy_name=archive_policy)
 
     def match(self, metric_name):
         for t in self.cfg['metrics']:
-            if fnmatch.fnmatch(metric_name, t):
+            if utils.match(metric_name, t):
                 return True
         return False
 
     def attributes(self, sample):
         attrs = {}
-        for attr, getter in self._field_getter.items():
-            if callable(getter):
-                value = getter(sample)
-            else:
-                value = getter
+        for name, definition in self._attributes.items():
+            value = definition.parse(sample)
             if value is not None:
-                attrs[attr] = value
+                attrs[name] = value
         return attrs
 
-    def metrics(self):
-        metrics = {}
-        for t in self.cfg['metrics']:
-            archive_policy = self.cfg.get(
-                'archive_policy',
-                self._legacy_archive_policy_definition.get(t))
-            metrics[t] = dict(archive_policy_name=archive_policy or
-                              self._default_archive_policy)
-        return metrics
 
+class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
+    """Dispatcher class for recording metering data into database.
 
-class GnocchiDispatcher(dispatcher.Base):
+    The dispatcher class records each meter into the gnocchi service
+    configured in ceilometer configuration file. An example configuration may
+    look like the following:
+
+    [dispatcher_gnocchi]
+    url = http://localhost:8041
+    archive_policy = low
+
+    To enable this dispatcher, the following section needs to be present in
+    ceilometer.conf file
+
+    [DEFAULT]
+    meter_dispatchers = gnocchi
+    """
     def __init__(self, conf):
         super(GnocchiDispatcher, self).__init__(conf)
         self.conf = conf
         self.filter_service_activity = (
             conf.dispatcher_gnocchi.filter_service_activity)
         self._ks_client = keystone_client.get_client()
-        self.gnocchi_archive_policy_data = self._load_archive_policy(conf)
         self.resources_definition = self._load_resources_definitions(conf)
+
+        self.cache = None
+        try:
+            import oslo_cache
+            oslo_cache.configure(self.conf)
+            # NOTE(cdent): The default cache backend is a real but
+            # noop backend. We don't want to use that here because
+            # we want to avoid the cache pathways entirely if the
+            # cache has not been configured explicitly.
+            if 'null' not in self.conf.cache.backend:
+                cache_region = oslo_cache.create_region()
+                self.cache = oslo_cache.configure_cache_region(
+                    self.conf, cache_region)
+                self.cache.key_mangler = cache_key_mangler
+        except ImportError:
+            pass
+        except oslo_cache.exception.ConfigurationError as exc:
+            LOG.warn(_LW('unable to configure oslo_cache: %s') % exc)
 
         self._gnocchi_project_id = None
         self._gnocchi_project_id_lock = threading.Lock()
+        self._gnocchi_resource_lock = threading.Lock()
 
         self._gnocchi = gnocchi_client.Client(conf.dispatcher_gnocchi.url)
 
@@ -197,33 +191,13 @@ class GnocchiDispatcher(dispatcher.Base):
 
     @classmethod
     def _load_resources_definitions(cls, conf):
-        res_def_file = cls._get_config_file(
-            conf, conf.dispatcher_gnocchi.resources_definition_file)
-        data = {}
-        if res_def_file is not None:
-            with open(res_def_file) as data_file:
-                try:
-                    data = yaml.safe_load(data_file)
-                except ValueError:
-                    data = {}
-
-        legacy_archive_policies = cls._load_archive_policy(conf)
+        plugin_manager = extension.ExtensionManager(
+            namespace='ceilometer.event.trait_plugin')
+        data = declarative.load_definitions(
+            {}, conf.dispatcher_gnocchi.resources_definition_file)
         return [ResourcesDefinition(r, conf.dispatcher_gnocchi.archive_policy,
-                                    legacy_archive_policies)
+                                    plugin_manager)
                 for r in data.get('resources', [])]
-
-    @classmethod
-    def _load_archive_policy(cls, conf):
-        policy_config_file = cls._get_config_file(
-            conf, conf.dispatcher_gnocchi.archive_policy_file)
-        data = {}
-        if policy_config_file is not None:
-            with open(policy_config_file) as data_file:
-                try:
-                    data = yaml.safe_load(data_file)
-                except ValueError:
-                    data = {}
-        return LegacyArchivePolicyDefinition(data)
 
     @property
     def gnocchi_project_id(self):
@@ -300,7 +274,6 @@ class GnocchiDispatcher(dispatcher.Base):
                 "id": resource_id,
                 "user_id": samples[0]['user_id'],
                 "project_id": samples[0]['project_id'],
-                "metrics": rd.metrics(),
             }
             measures = []
 
@@ -319,7 +292,7 @@ class GnocchiDispatcher(dispatcher.Base):
                 # for 'resource doesn't exist' and for 'metric doesn't exist'
                 # https://bugs.launchpad.net/gnocchi/+bug/1476186
                 self._ensure_resource_and_metric(resource_type, resource,
-                                                 metric_name)
+                                                 rd.metrics, metric_name)
 
                 try:
                     self._gnocchi.post_measure(resource_type, resource_id,
@@ -331,13 +304,50 @@ class GnocchiDispatcher(dispatcher.Base):
                                    metric_name=metric_name))
 
         if resource_extra:
-            self._gnocchi.update_resource(resource_type, resource_id,
-                                          resource_extra)
+            if self.cache:
+                cache_key = resource['id']
+                attribute_hash = self._check_resource_cache(
+                    cache_key, resource)
+                if attribute_hash:
+                    with self._gnocchi_resource_lock:
+                        self._gnocchi.update_resource(resource_type,
+                                                      resource_id,
+                                                      resource_extra)
+                        self.cache.set(cache_key, attribute_hash)
+                else:
+                    LOG.debug('resource cache hit for update %s',
+                              cache_key)
+            else:
+                self._gnocchi.update_resource(resource_type, resource_id,
+                                              resource_extra)
 
-    def _ensure_resource_and_metric(self, resource_type, resource,
+    def _check_resource_cache(self, key, resource_data):
+        cached_hash = self.cache.get(key)
+        if cached_hash:
+            attribute_hash = hash(frozenset(resource_data.items()))
+            if cached_hash != attribute_hash:
+                return attribute_hash
+        return None
+
+    def _ensure_resource_and_metric(self, resource_type, resource, metrics,
                                     metric_name):
         try:
-            self._gnocchi.create_resource(resource_type, resource)
+            if self.cache:
+                cache_key = resource['id']
+                attribute_hash = self._check_resource_cache(
+                    cache_key, resource)
+                if attribute_hash:
+                    with self._gnocchi_resource_lock:
+                        resource['metrics'] = metrics
+                        self._gnocchi.create_resource(resource_type,
+                                                      resource)
+                        self.cache.set(cache_key, attribute_hash)
+                else:
+                    LOG.debug('resource cache hit for create %s',
+                              cache_key)
+            else:
+                resource['metrics'] = metrics
+                self._gnocchi.create_resource(resource_type, resource)
         except gnocchi_client.ResourceAlreadyExists:
             try:
                 archive_policy = resource['metrics'][metric_name]
@@ -347,7 +357,3 @@ class GnocchiDispatcher(dispatcher.Base):
                 # NOTE(sileht): Just ignore the metric have been
                 # created in the meantime.
                 pass
-
-    @staticmethod
-    def record_events(events):
-        pass

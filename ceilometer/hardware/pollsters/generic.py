@@ -63,7 +63,7 @@ class MeterDefinition(object):
                  fname.endswith('_inspector'))):
                 setattr(self, fname, fval)
             else:
-                LOG.warn(_LW("Ignore unrecognized field %s"), fname)
+                LOG.warning(_LW("Ignore unrecognized field %s"), fname)
         for fname in self.required_fields:
             if not getattr(self, fname, None):
                 raise MeterDefinitionException(
@@ -258,6 +258,11 @@ def setup_meters_config():
 def load_definition(config_def):
     mappings = {}
     for meter_def in config_def.get('metric', []):
-        meter = MeterDefinition(meter_def)
-        mappings[meter.name] = meter
+        try:
+            meter = MeterDefinition(meter_def)
+            mappings[meter.name] = meter
+        except MeterDefinitionException as me:
+            errmsg = (_LE("Error loading meter definition : %(err)s")
+                      % dict(err=me.message))
+            LOG.error(errmsg)
     return mappings

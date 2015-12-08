@@ -14,13 +14,9 @@
 import itertools
 
 import ceilometer.agent.manager
-import ceilometer.alarm.notifier.rest
-import ceilometer.alarm.rpc
-import ceilometer.alarm.service
 import ceilometer.api
 import ceilometer.api.app
-import ceilometer.api.controllers.v2.alarms
-import ceilometer.cmd.eventlet.polling
+import ceilometer.cmd.polling
 import ceilometer.collector
 import ceilometer.compute.discovery
 import ceilometer.compute.notifications
@@ -61,7 +57,7 @@ def list_opts():
         ('DEFAULT',
          itertools.chain(ceilometer.agent.manager.OPTS,
                          ceilometer.api.app.OPTS,
-                         ceilometer.cmd.eventlet.polling.CLI_OPTS,
+                         ceilometer.cmd.polling.CLI_OPTS,
                          ceilometer.compute.notifications.OPTS,
                          ceilometer.compute.util.OPTS,
                          ceilometer.compute.virt.inspector.OPTS,
@@ -77,13 +73,8 @@ def list_opts():
                          ceilometer.sample.OPTS,
                          ceilometer.service.OPTS,
                          ceilometer.storage.OLD_OPTS,
+                         ceilometer.storage.CLI_OPTS,
                          ceilometer.utils.OPTS,)),
-        ('alarm',
-         itertools.chain(ceilometer.alarm.notifier.rest.OPTS,
-                         ceilometer.alarm.service.OPTS,
-                         ceilometer.alarm.rpc.OPTS,
-                         ceilometer.alarm.evaluator.gnocchi.OPTS,
-                         ceilometer.api.controllers.v2.alarms.ALARM_API_OPTS)),
         ('api',
          itertools.chain(ceilometer.api.OPTS,
                          ceilometer.api.app.API_OPTS,

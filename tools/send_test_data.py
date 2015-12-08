@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -27,11 +29,13 @@ import random
 import uuid
 
 import make_test_data
+from oslo_config import cfg
 from oslo_context import context
 import oslo_messaging
 from six import moves
 
 from ceilometer import messaging
+from ceilometer.publisher import utils
 from ceilometer import service
 
 
@@ -79,6 +83,14 @@ def generate_data(send_batch, make_data_args, samples_count,
         resource = resources_list[random.randint(0, len(resources_list) - 1)]
         resource_samples[resource] += 1
         sample['resource_id'] = resource
+        # need to change the timestamp from datetime.datetime type to iso
+        # format (unicode type), because collector will change iso format
+        # timestamp to datetime.datetime type before recording to db.
+        sample['timestamp'] = sample['timestamp'].isoformat()
+        # need to recalculate signature because of the resource_id change
+        sig = utils.compute_signature(sample,
+                                      cfg.CONF.publisher.telemetry_secret)
+        sample['message_signature'] = sig
         batch.append(sample)
         if len(batch) == batch_size:
             send_batch(topic, batch)

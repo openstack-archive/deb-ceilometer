@@ -24,18 +24,17 @@ import uuid
 from gabbi import fixture
 from oslo_config import fixture as fixture_config
 from oslo_policy import opts
+from six.moves.urllib import parse as urlparse
 
 from ceilometer.event.storage import models
 from ceilometer.publisher import utils
 from ceilometer import sample
-from ceilometer import service
 from ceilometer import storage
-
 
 # TODO(chdent): For now only MongoDB is supported, because of easy
 # database name handling and intentional focus on the API, not the
 # data store.
-ENGINES = ['MONGODB']
+ENGINES = ['mongodb']
 
 
 class ConfigFixture(fixture.GabbiFixture):
@@ -47,18 +46,17 @@ class ConfigFixture(fixture.GabbiFixture):
         self.conf = None
 
         # Determine the database connection.
-        db_url = None
-        for engine in ENGINES:
-            try:
-                db_url = os.environ['CEILOMETER_TEST_%s_URL' % engine]
-            except KeyError:
-                pass
-        if db_url is None:
+        db_url = os.environ.get('CEILOMETER_TEST_STORAGE_URL')
+        if not db_url:
             raise case.SkipTest('No database connection configured')
 
-        service.prepare_service(argv=[], config_files=[])
+        engine = urlparse.urlparse(db_url).scheme
+        if engine not in ENGINES:
+            raise case.SkipTest('Database engine not supported')
+
         conf = fixture_config.Config().conf
         self.conf = conf
+        self.conf([], project='ceilometer', validate_default_values=True)
         opts.set_defaults(self.conf)
         conf.import_group('api', 'ceilometer.api.controllers.v2.root')
         conf.import_opt('store_events', 'ceilometer.notification',
@@ -69,13 +67,12 @@ class ConfigFixture(fixture.GabbiFixture):
 
         # A special pipeline is required to use the direct publisher.
         conf.set_override('pipeline_cfg_file',
-                          'etc/ceilometer/gabbi_pipeline.yaml')
+                          'ceilometer/tests/functional/gabbi_pipeline.yaml')
 
         database_name = '%s-%s' % (db_url, str(uuid.uuid4()))
         conf.set_override('connection', database_name, group='database')
         conf.set_override('metering_connection', '', group='database')
         conf.set_override('event_connection', '', group='database')
-        conf.set_override('alarm_connection', '', group='database')
 
         conf.set_override('pecan_debug', True, group='api')
         conf.set_override('gnocchi_is_enabled', False, group='api')

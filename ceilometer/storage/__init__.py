@@ -54,17 +54,6 @@ OPTS = [
                default=None,
                help='The connection string used to connect to the metering '
                'database. (if unset, connection is used)'),
-    cfg.StrOpt('alarm_connection',
-               secret=True,
-               default=None,
-               deprecated_for_removal=True,
-               help='The connection string used to connect to the alarm '
-               'database. (if unset, connection is used)'),
-    cfg.IntOpt('alarm_history_time_to_live',
-               default=-1,
-               deprecated_for_removal=True,
-               help=("Number of seconds that alarm histories are kept "
-                     "in the database for (<= 0 means forever).")),
     cfg.StrOpt('event_connection',
                secret=True,
                default=None,
@@ -75,14 +64,6 @@ OPTS = [
                help="The max length of resources id in DB2 nosql, "
                     "the value should be larger than len(hostname) * 2 "
                     "as compute node's resource id is <hostname>_<nodename>."),
-
-    # Deprecated in liberty
-    cfg.StrOpt('mongodb_replica_set',
-               deprecated_for_removal=True,
-               default='',
-               help=('The name of the replica set which is used to connect to '
-                     'MongoDB database. Add "?replicaSet=myreplicatset" in '
-                     'your connection URI instead.')),
 ]
 
 cfg.CONF.register_opts(OPTS, group='database')

@@ -4,18 +4,17 @@
 #
 # Translators:
 # Tomoyuki KATO <tomo@dream.daynight.jp>, 2013
-# OpenStack Infra <zanata@openstack.org>, 2015. #zanata
+# Akihiro Motoki <amotoki@gmail.com>, 2015. #zanata
 # Tom Cocozzello <tjcocozz@us.ibm.com>, 2015. #zanata
 msgid ""
 msgstr ""
-"Project-Id-Version: ceilometer 5.0.0.0b4.dev108\n"
+"Project-Id-Version: ceilometer 6.0.0.dev69\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2015-10-05 06:13+0000\n"
-"PO-Revision-Date: 2015-09-04 06:32+0000\n"
-"Last-Translator: openstackjenkins <jenkins@openstack.org>\n"
+"POT-Creation-Date: 2015-10-22 06:14+0000\n"
+"PO-Revision-Date: 2015-10-12 06:50+0000\n"
+"Last-Translator: Akihiro Motoki <amotoki@gmail.com>\n"
 "Language: ja\n"
-"Language-Team: Japanese (http://www.transifex.com/openstack/ceilometer/"
-"language/ja/)\n"
+"Language-Team: Japanese\n"
 "Plural-Forms: nplurals=1; plural=0\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
@@ -39,18 +38,13 @@ msgid "%d datapoints are unknown"
 msgstr "%d データポイントが不明です"
 
 #, python-format
-msgid "%d samples removed from database"
-msgstr "%d 個のサンプルがデータベースから削除されました"
-
-#, python-format
 msgid "Action %(scheme)s for alarm %(alarm_id)s is unknown, cannot notify"
 msgstr ""
-"アラーム %(alarm_id)s のアクション %(scheme)s が不明であるため、通知できませ"
-"ん"
+"アラーム %(alarm_id)s のアクション %(scheme)s が不明なため、通知できません"
 
 #, python-format
 msgid "Alarm %(alarm_id)s not found in project %(project)s"
-msgstr "アラーム %(alarm_id)s はプロジェクト %(project)s に見つかりません"
+msgstr "アラーム %(alarm_id)s がプロジェクト %(project)s には見つかりません"
 
 #, python-format
 msgid "Alarm %s not found"
@@ -66,7 +60,7 @@ msgstr "アラームが正しくありません"
 
 #, python-format
 msgid "Alarm quota exceeded for user %(u)s on project %(p)s"
-msgstr "プロジェクト %(p)s でユーザー %(u)s のアラーム割り当て量を超過しました"
+msgstr "プロジェクト %(p)s のユーザー %(u)s のアラームクォータを超過しました"
 
 #, python-format
 msgid ""
@@ -108,13 +102,6 @@ msgstr "アラーム %s 自体を組み合わせルールに指定すること�
 msgid "Combined state of alarms %s"
 msgstr "アラーム %s の結合状態"
 
-msgid "Configuration:"
-msgstr "構成:"
-
-#, python-format
-msgid "Connecting to %(db)s on %(nodelist)s"
-msgstr "%(nodelist)s 上の %(db)s に接続しています"
-
 #, python-format
 msgid "Continue after error from %(name)s: %(error)s"
 msgstr "%(name)s からのエラーの後で続行します: %(error)s"
@@ -133,7 +120,7 @@ msgstr "%(id)s のメモリー使用量を取得できませんでした: %(e)s"
 
 #, python-format
 msgid "Could not get VM %s CPU Utilization"
-msgstr "VM %s CPU 使用率を取得できませんでした"
+msgstr "VM %s のCPU 使用率を取得できませんでした"
 
 #, python-format
 msgid "Couldn't obtain IP address of instance %s"
@@ -143,16 +130,12 @@ msgid ""
 "Dispatcher target was not set, no meter will be posted. Set the target in "
 "the ceilometer.conf file"
 msgstr ""
-"ディスパッチャー・ターゲットが設定されておらず、メーターは通知されません。"
+"ディスパッチャーターゲットが設定されておらず、メーターは通知されません。"
 "ceilometer.conf ファイルでターゲットを設定してください。"
 
-#, python-format
+#, fuzzy, python-format
 msgid "Dropping Notification %(type)s (uuid:%(msgid)s)"
 msgstr "通知 %(type)s を除去しています (uuid:%(msgid)s)"
-
-#, python-format
-msgid "Dropping metering data with TTL %d"
-msgstr "TTL %d の計測データを除去中"
 
 #, python-format
 msgid "Duplicate VM name found: %s"
@@ -163,12 +146,12 @@ msgid ""
 "Error from libvirt while looking up instance <name=%(name)s, id=%(id)s>: "
 "[Error Code %(error_code)s] %(ex)s"
 msgstr ""
-"インスタンス <name=%(name)s、id=%(id)s> の検索中に libvirt でエラーが発生しま"
-"した: [エラー・コード %(error_code)s] %(ex)s"
+"インスタンス <name=%(name)s, id=%(id)s> の検索中に libvirt でエラーが発生しま"
+"した: [エラーコード %(error_code)s] %(ex)s"
 
 #, python-format
 msgid "Error parsing HTTP response: %s"
-msgstr "HTTP 応答を解析しているときにエラーが発生しました: %s"
+msgstr "HTTP 応答を解析している際にエラーが発生しました: %s"
 
 #, python-format
 msgid "Error while posting alarm: %s"
@@ -181,19 +164,8 @@ msgstr "アラームを配置するときにエラーが発生しました: %s"
 msgid "Event"
 msgstr "イベント"
 
-#, python-format
-msgid "Event Definitions: %s"
-msgstr "イベント定義: %s"
-
-msgid "Expired residual resource and meter definition data"
-msgstr "残余リソースおよびメーター定義データの有効期限が切れました"
-
 msgid "Expression evaluated to a NaN value!"
 msgstr "式が NaN 値に評価されました。"
-
-#, python-format
-msgid "FLOATING IP USAGE: %s"
-msgstr "浮動 IP 使用: %s"
 
 #, python-format
 msgid "Failed to evaluate alarm %s"
@@ -237,7 +209,7 @@ msgstr "%s の通知ハンドラーをロードできませんでした"
 
 #, python-format
 msgid "Failed to parse the timestamp value %s"
-msgstr "タイム・スタンプ値 %s を解析できませんでした"
+msgstr "タイムスタンプ値 %s を解析できませんでした"
 
 #, python-format
 msgid "Failed to publish %d datapoints, dropping them"
@@ -272,8 +244,8 @@ msgid ""
 "Invalid YAML syntax in Event Definitions file %(file)s at line: %(line)s, "
 "column: %(column)s."
 msgstr ""
-"イベント定義ファイル %(file)s の行 %(line)s および桁 %(column)s にある YAML "
-"構文が無効です。"
+"イベント定義ファイル %(file)s に無効な YAML 構文があります: %(line)s 行目の "
+"%(column)s 桁目。"
 
 #, python-format
 msgid "Invalid period %(period)s: %(err)s"
@@ -284,11 +256,11 @@ msgid "Invalid trait type '%(type)s' for trait %(trait)s"
 msgstr "特性 %(trait)s の特性タイプ '%(type)s' が無効です"
 
 msgid "Limit must be positive"
-msgstr "「制限」は正の値でなければなりません"
+msgstr "上限は正の値でなければなりません"
 
 #, python-format
 msgid "More than one event with id %s returned from storage driver"
-msgstr "ストレージ・ドライバーから id %s のイベントが複数返されました"
+msgstr "ストレージドライバーから id %s のイベントが複数返されました"
 
 #, python-format
 msgid "Multiple VM %s found in XenServer"
@@ -303,20 +275,11 @@ msgid "No plugin named %(plugin)s available for trait %(trait)s"
 msgstr "特性 %(trait)s に対して使用できるプラグイン %(plugin)s はありません"
 
 msgid "Node Manager init failed"
-msgstr "ノード・マネージャーの初期化に失敗しました"
+msgstr "ノードマネージャーの初期化に失敗しました"
 
 #, python-format
 msgid "Not Authorized to access %(aspect)s %(id)s"
-msgstr "%(aspect)s %(id)s にアクセスする許可がありません"
-
-#, python-format
-msgid ""
-"Notifying alarm %(alarm_name)s %(alarm_id)s of %(severity)s priority from "
-"%(previous)s to %(current)s with action %(action)s because %(reason)s."
-msgstr ""
-"優先順位 %(severity)s のアラーム %(alarm_name)s %(alarm_id)s をアクション "
-"%(action)s によって %(previous)s から %(current)s へ通知中。理由: "
-"%(reason)s。"
+msgstr "%(aspect)s %(id)s にアクセスする権限がありません"
 
 #, python-format
 msgid "OpenDaylitght API returned %(status)s %(reason)s"
@@ -337,7 +300,7 @@ msgstr ""
 "%(trait)s の JSONPath 指定 '%(jsonpath)s' で解析エラーが発生しました: %(err)s"
 
 msgid "Period must be positive."
-msgstr "期間は正数でなければなりません。"
+msgstr "期間は正の数でなければなりません。"
 
 #, python-format
 msgid "Pipeline %(pipeline)s: Continue after error from publisher %(pub)s"
@@ -360,18 +323,6 @@ msgstr ""
 "ラーが発生した後に終了します"
 
 #, python-format
-msgid ""
-"Pipeline %(pipeline)s: Setup transformer instance %(name)s with parameter "
-"%(param)s"
-msgstr ""
-"パイプライン %(pipeline)s: パラメーター %(param)s を使用して変換プログラム・"
-"インスタンス %(name)s をセットアップします"
-
-#, python-format
-msgid "Pipeline config: %s"
-msgstr "パイプライン構成: %s"
-
-#, python-format
 msgid "Plugin specified, but no plugin name supplied for trait %s"
 msgstr ""
 "特性 %s に対してプラグインが指定されましたが、プラグイン名が指定されませんで"
@@ -379,19 +330,15 @@ msgstr ""
 
 #, python-format
 msgid "Polling %(mtr)s sensor failed for %(cnt)s times!"
-msgstr "%(mtr)s センサーのポーリングが %(cnt)s 回失敗しました"
+msgstr "センサー %(mtr)s のポーリングが %(cnt)s 回失敗しました"
 
 #, python-format
 msgid "Polling %(name)s faild for %(cnt)s times!"
-msgstr "%(name)s のポーリングが %(cnt)s 回失敗しました"
-
-#, python-format
-msgid "Polling pollster %(poll)s in the context of %(src)s"
-msgstr "%(src)s のコンテキスト内で pollster %(poll)s をポーリング中"
+msgstr "%(name)s のポーリングが %(cnt)s 回失敗しましたstar"
 
 #, python-format
 msgid "Pollster for %s is disabled!"
-msgstr "%s の pollster が使用不可です"
+msgstr "%s の pollster が無効になっています"
 
 #, python-format
 msgid "Prevent pollster %(name)s for polling source %(source)s anymore!"
@@ -408,12 +355,7 @@ msgstr ""
 
 #, python-format
 msgid "Publishing policy is unknown (%s) force to default"
-msgstr ""
-"パブリッシュ・ポリシーが不明です (%s)。強制的にデフォルトに設定されます"
-
-#, python-format
-msgid "Publishing policy set to %s"
-msgstr "パブリッシュ・ポリシーが %s に設定されました"
+msgstr "パブリッシュポリシーが不明です (%s)。強制的にデフォルトに設定されます"
 
 #, python-format
 msgid "RGW AdminOps API returned %(status)s %(reason)s"
@@ -430,8 +372,8 @@ msgstr ""
 #, python-format
 msgid "Remaining as %(state)s due to alarms %(alarm_ids)s in state %(state)s"
 msgstr ""
-"%(state)s のままです。これは、アラーム %(alarm_ids)s の状態が %(state)s であ"
-"るためです"
+"%(state)s のままです。アラーム %(alarm_ids)s の状態が %(state)s であるためで"
+"す"
 
 msgid "Request failed to connect to OpenDaylight with NorthBound REST API"
 msgstr "NorthBound REST API を使用した OpenDaylight への接続要求が失敗しました"
@@ -455,12 +397,8 @@ msgid "Skip loading extension for %s"
 msgstr "%s の拡張機能のロードをスキップします"
 
 #, python-format
-msgid "Starting server in PID %s"
-msgstr "PID %s でサーバーを始動しています"
-
-#, python-format
 msgid "String %s is not a valid isotime"
-msgstr "ストリング %s は無効な isotime です"
+msgstr "文字列 %s は無効な isotime です"
 
 #, python-format
 msgid ""
@@ -471,14 +409,14 @@ msgstr ""
 "ト: %(supported)s"
 
 msgid "The path for the file publisher is required"
-msgstr "ファイル・パブリッシャーのパスが必要です"
+msgstr "ファイルパブリッシャーのパスが必要です"
 
 msgid "Time constraint names must be unique for a given alarm."
-msgstr "時間制約名は、指定のアラームで固有でなければなりません。"
+msgstr "時間制約の名前は、指定されたアラームで一意でなければなりません。"
 
 #, python-format
 msgid "Timezone %s is not valid"
-msgstr "時間帯 %s は無効です"
+msgstr "タイムゾーン %s が無効です"
 
 #, python-format
 msgid ""
@@ -488,29 +426,26 @@ msgstr ""
 "%(count)d 個のサンプルの %(disposition)s しきい値が原因で%(state)s に遷移しま"
 "す。最新: %(most_recent)s"
 
-#, python-format
+#, fuzzy, python-format
 msgid "Transition to %(state)s due to alarms %(alarm_ids)s in state %(state)s"
 msgstr ""
-"%(state)s に移行します。これは、アラーム %(alarm_ids)s の状態が %(state)s で"
-"あるためです"
+"%(state)s に移行します。アラーム %(alarm_ids)s の状態が %(state)s であるため"
+"です"
 
 #, python-format
 msgid "UDP: Cannot decode data sent by %s"
 msgstr "UDP: %s から送信されたデータをデコードできません"
 
-msgid "UDP: Unable to store meter"
-msgstr "UDP: 計測値を保管できません"
-
 #, python-format
 msgid "Unable to connect to the database server: %(errmsg)s."
-msgstr "データベース・サーバーに接続できません: %(errmsg)s。"
+msgstr "データベースサーバーに接続できません: %(errmsg)s。"
 
 #, python-format
 msgid ""
 "Unable to convert the value %(value)s to the expected data type %(type)s."
-msgstr "値 %(value)s を、予期されたデータ型 %(type)s に変換できません。"
+msgstr "値 %(value)s を、想定されるデータ型 %(type)s に変換できません。"
 
-#, python-format
+#, fuzzy, python-format
 msgid "Unable to discover resources: %s"
 msgstr "リソースをディスカバーできません: %s"
 
@@ -524,10 +459,10 @@ msgstr "パブリッシャー %s をロードできません"
 
 #, python-format
 msgid "Unable to load the hypervisor inspector: %s"
-msgstr "ハイパーバイザー・インスペクターをロードできません: %s"
+msgstr "ハイパーバイザーインスペクターをロードできません: %s"
 
 msgid "Unable to log in to XenAPI (is the Dom0 disk full?)"
-msgstr "XenAPI にログインできません (Dom0 ディスク・フル?)"
+msgstr "XenAPI にログインできません (Dom0 ディスクフル?)"
 
 #, python-format
 msgid "Unable to notify alarm %s"
@@ -551,7 +486,7 @@ msgid ""
 msgstr ""
 "%(retries)d 回の再試行後、1 次 mongodb に再接続できません。中止します。"
 
-#, python-format
+#, fuzzy, python-format
 msgid ""
 "Unable to reconnect to the primary mongodb: %(errmsg)s. Trying again in "
 "%(retry_interval)d seconds."
@@ -566,42 +501,43 @@ msgstr "UDP 経由でサンプルを送信できません"
 msgid ""
 "Unexpected exception converting %(value)s to the expected data type %(type)s."
 msgstr ""
-"予期されない例外が発生したため、%(value)s が、予期されるデータ型 %(type)s に"
-"変換されています。"
+"%(value)s を想定されるデータ型 %(type)s に変換する際に、想定しない例外が発生"
+"しました。"
 
 #, python-format
 msgid "Unknown discovery extension: %s"
-msgstr "不明なディスカバリー・エクステンション: %s"
+msgstr "不明なディスカバリーエクステンション: %s"
 
 #, python-format
 msgid "Unknown metadata type. Key (%s) will not be queryable."
-msgstr "メタデータ・タイプが不明です。キー (%s) は照会不可になります。"
+msgstr "不明なメタデータ種別です。キー (%s) は照会不可になります。"
 
 #, python-format
 msgid "Unknown status %(stat)s received on fw %(id)s,skipping sample"
 msgstr ""
-"fw %(id)s で不明状況 %(stat)s を受け取りました。サンプルをスキップします"
+"ファイアウォール %(id)s で不明な状態 %(stat)s を受信しました。サンプルをス"
+"キップします"
 
 #, python-format
 msgid "Unknown status %(stat)s received on member %(id)s,skipping sample"
 msgstr ""
-"メンバー %(id)s で不明状況 %(stat)s を受け取りました。サンプルをスキップしま"
+"メンバー %(id)s で不明な状態 %(stat)s を受信しました。サンプルをスキップしま"
 "す"
 
 #, python-format
 msgid "Unknown status %(stat)s received on pool %(id)s, skipping sample"
 msgstr ""
-"プール %(id)s で不明状況 %(stat)s を受け取りました。サンプルをスキップします"
+"プール %(id)s で不明な状態 %(stat)s を受信しました。サンプルをスキップします"
 
 #, python-format
 msgid "Unknown status %(stat)s received on vip %(id)s, skipping sample"
 msgstr ""
-"vip %(id)s で不明状況 %(stat)s を受け取りました。サンプルをスキップします"
+"仮想 IP %(id)s で不明な状態 %(stat)s を受信しました。サンプルをスキップします"
 
 #, python-format
 msgid "Unknown status %(stat)s received on vpn %(id)s,skipping sample"
 msgstr ""
-"vpn %(id)s で不明状況 %(stat)s を受け取りました。サンプルをスキップします"
+"VPN %(id)s で不明な状態 %(stat)s を受信しました。サンプルをスキップします"
 
 #, python-format
 msgid "Unsupported action %s"
@@ -616,7 +552,7 @@ msgid "VM %s not found on Hyper-V"
 msgstr "Hyper-V で VM %s が見つかりません"
 
 msgid "Wrong sensor type"
-msgstr "センサー・タイプが正しくありません"
+msgstr "センサー種別が正しくありません"
 
 msgid "XenAPI not installed"
 msgstr "XenAPI がインストールされていません"
@@ -626,10 +562,7 @@ msgid "YAML error reading Event Definitions file %(file)s"
 msgstr ""
 "イベント定義ファイル %(file)s を読み取るときに YAML エラーが発生しました"
 
-#, python-format
-msgid "alarm %(id)s transitioning to %(state)s because %(reason)s"
-msgstr "アラーム %(id)s は %(state)s に遷移します。理由: %(reason)s"
-
+#, fuzzy
 msgid "alarm evaluation cycle failed"
 msgstr "アラーム評価サイクルで障害が発生しました"
 
@@ -640,7 +573,7 @@ msgid "alarm state update failed"
 msgstr "アラームの状態を更新できませんでした"
 
 msgid "alarm stats retrieval failed"
-msgstr "アラーム統計を取得できませんでした"
+msgstr "アラーム統計の取得に失敗しました"
 
 #, python-format
 msgid "alarm stats retrieval failed: %s"
@@ -650,16 +583,9 @@ msgstr "アラーム統計の取得に失敗しました: %s"
 msgid "could not get CPU time for %(id)s: %(e)s"
 msgstr "%(id)s の CPU 時間を取得できませんでした: %(e)s"
 
-msgid "detected decoupled pipeline config format"
-msgstr "分離されたパイプライン構成フォーマットが検出されました"
-
 #, python-format
 msgid "dropping sample with no predecessor: %s"
 msgstr "サンプル (先行なし) を廃棄しています: %s"
-
-#, python-format
-msgid "initiating evaluation cycle on %d alarms"
-msgstr "%d アラームで評価サイクルを開始しています"
 
 msgid "ipmitool output length mismatch"
 msgstr "ipmitool 出力の長さが一致しません"
@@ -669,38 +595,24 @@ msgstr "max_bytes と backup_count は数値でなければなりません。"
 
 #, python-format
 msgid "message signature invalid, discarding message: %r"
-msgstr "メッセージ・シグニチャーが無効です。メッセージを破棄します: %r"
-
-#, python-format
-msgid "metering data %(counter_name)s for %(resource_id)s: %(counter_volume)s"
-msgstr "%(resource_id)s の計測データ %(counter_name)s: %(counter_volume)s"
+msgstr "メッセージシグニチャーが無効です。メッセージを破棄します: %r"
 
 msgid "parse IPMI sensor data failed,No data retrieved from given input"
 msgstr ""
-"IPMI センサー・データの解析に失敗しました。指定された入力からデータが取得され"
-"ませんでした"
+"IPMI センサーデータの解析に失敗しました。指定された入力からデータが取得されま"
+"せんでした"
 
 msgid "parse IPMI sensor data failed,unknown sensor type"
-msgstr "IPMI センサー・データの解析に失敗しました。センサー・タイプが不明です"
+msgstr "IPMI センサーデータの解析に失敗しました。不明なセンサー種別です。"
 
 msgid "running ipmitool failure"
 msgstr "ipmitool の実行に失敗しました"
-
-#, python-format
-msgid "serving on 0.0.0.0:%(sport)s, view at http://127.0.0.1:%(vport)s"
-msgstr ""
-"0.0.0.0:%(sport)s でサービスを提供しています。http://127.0.0.1:%(vport)s で確"
-"認してください"
-
-#, python-format
-msgid "serving on http://%(host)s:%(port)s"
-msgstr "http://%(host)s:%(port)s でサービスを提供しています"
 
 msgid "state invalid"
 msgstr "状態が無効です"
 
 msgid "state_timestamp should be datetime object"
-msgstr "state_timestamp は日時オブジェクトでなければなりません"
+msgstr "state_timestamp は datetime オブジェクトでなければなりません"
 
 msgid "timestamp should be datetime object"
-msgstr "タイム・スタンプは日時オブジェクトでなければなりません"
+msgstr "タイムスタンプは datetime オブジェクトでなければなりません"

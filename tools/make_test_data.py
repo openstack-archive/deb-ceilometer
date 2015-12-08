@@ -44,8 +44,9 @@ def make_test_data(name, meter_type, unit, volume, random_min,
                    end, interval, resource_metadata=None, source='artificial'):
     resource_metadata = resource_metadata or {'display_name': 'toto',
                                               'host': 'tata',
-                                              'image_ref_url': 'test',
+                                              'image_ref': 'test',
                                               'instance_flavor_id': 'toto',
+                                              'server_group': 'toto',
                                               }
     # Compute start and end timestamps for the new data.
     if isinstance(start, datetime.datetime):
@@ -58,8 +59,8 @@ def make_test_data(name, meter_type, unit, volume, random_min,
 
     increment = datetime.timedelta(minutes=interval)
 
-    print('Adding new events for meter %s.' % (name))
-    # Generate events
+    print('Adding new samples for meter %s.' % (name))
+    # Generate samples
     n = 0
     total_volume = volume
     while timestamp <= end:
@@ -78,13 +79,15 @@ def make_test_data(name, meter_type, unit, volume, random_min,
                           user_id=user_id,
                           project_id=project_id,
                           resource_id=resource_id,
-                          timestamp=timestamp,
+                          timestamp=timestamp.isoformat(),
                           resource_metadata=resource_metadata,
                           source=source,
                           )
         data = utils.meter_message_from_counter(
             c, cfg.CONF.publisher.telemetry_secret)
-
+        # timestamp should be string when calculating signature, but should be
+        # datetime object when calling record_metering_data.
+        data['timestamp'] = timestamp
         yield data
         n += 1
         timestamp = timestamp + increment
@@ -95,7 +98,7 @@ def make_test_data(name, meter_type, unit, volume, random_min,
             # volume.
             total_volume = volume
 
-    print('Added %d new events for meter %s.' % (n, name))
+    print('Added %d new samples for meter %s.' % (n, name))
 
 
 def record_test_data(conn, *args, **kwargs):
@@ -111,7 +114,7 @@ def get_parser():
         '--interval',
         default=10,
         type=int,
-        help='The period between events, in minutes.',
+        help='The period between samples, in minutes.',
     )
     parser.add_argument(
         '--start',
@@ -121,7 +124,6 @@ def get_parser():
     )
     parser.add_argument(
         '--end',
-        type=int,
         default=2,
         help='Number of days to be stepped forward from now or date in the '
              'future ("YYYY-MM-DDTHH:MM:SS" format) to define timestamps end '

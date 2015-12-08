@@ -15,7 +15,13 @@
 
 import abc
 
+from debtcollector import moves
+from oslo_log import log
 import six
+
+from ceilometer.i18n import _LW
+
+LOG = log.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -23,6 +29,12 @@ class TraitPluginBase(object):
     """Base class for plugins.
 
     It converts notification fields to Trait values.
+    """
+
+    support_return_all_values = False
+    """If True, an exception will be raised if the user expect
+    the plugin to return one trait per match_list, but
+    the plugin doesn't allow/support that.
     """
 
     def __init__(self, **kw):
@@ -38,9 +50,12 @@ class TraitPluginBase(object):
         """
         super(TraitPluginBase, self).__init__()
 
-    @abc.abstractmethod
+    @moves.moved_method('trait_values', version=6.0, removal_version="?")
     def trait_value(self, match_list):
-        """Convert a set of fields to a Trait value.
+        pass
+
+    def trait_values(self, match_list):
+        """Convert a set of fields to one or multiple Trait values.
 
         This method is called each time a trait is attempted to be extracted
         from a notification. It will be called *even if* no matching fields
@@ -88,12 +103,17 @@ class TraitPluginBase(object):
               def trait_value(self, match_list):
                   if not match_list:
                       return None
-                  return match_list[0][1]
+                  return [ match[1] for match in match_list]
         """
+
+        # For backwards compatibility for the renamed method.
+        return [self.trait_value(match_list)]
 
 
 class SplitterTraitPlugin(TraitPluginBase):
     """Plugin that splits a piece off of a string value."""
+
+    support_return_all_values = True
 
     def __init__(self, separator=".", segment=0, max_split=None, **kw):
         """Setup how do split the field.
@@ -102,15 +122,25 @@ class SplitterTraitPlugin(TraitPluginBase):
         :param  segment:    Which segment to return. (int) default 0
         :param  max_split: Limit number of splits. Default: None (no limit)
         """
+        LOG.warning(_LW('split plugin is deprecated, '
+                        'add ".`split(%(sep)s, %(segment)d, '
+                        '%(max_split)d)`" to your jsonpath instead') %
+                    dict(sep=separator,
+                         segment=segment,
+                         max_split=(-1 if max_split is None
+                                    else max_split)))
+
         self.separator = separator
         self.segment = segment
         self.max_split = max_split
         super(SplitterTraitPlugin, self).__init__(**kw)
 
-    def trait_value(self, match_list):
-        if not match_list:
-            return None
-        value = six.text_type(match_list[0][1])
+    def trait_values(self, match_list):
+        return [self._trait_value(match)
+                for match in match_list]
+
+    def _trait_value(self, match):
+        value = six.text_type(match[1])
         if self.max_split is not None:
             values = value.split(self.separator, self.max_split)
         else:
@@ -145,7 +175,7 @@ class BitfieldTraitPlugin(TraitPluginBase):
         self.flags = flags
         super(BitfieldTraitPlugin, self).__init__(**kw)
 
-    def trait_value(self, match_list):
+    def trait_values(self, match_list):
         matches = dict(match_list)
         bitfield = self.initial_bitfield
         for flagdef in self.flags:
@@ -157,4 +187,4 @@ class BitfieldTraitPlugin(TraitPluginBase):
                         bitfield |= bit
                 else:
                     bitfield |= bit
-        return bitfield
+        return [bitfield]

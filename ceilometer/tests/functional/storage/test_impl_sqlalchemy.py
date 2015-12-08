@@ -19,12 +19,13 @@
 """
 
 import datetime
+import warnings
 
 import mock
+from oslo_db import exception
 from oslo_utils import timeutils
 from six.moves import reprlib
 
-from ceilometer.alarm.storage import impl_sqlalchemy as impl_sqla_alarm
 from ceilometer.event.storage import impl_sqlalchemy as impl_sqla_event
 from ceilometer.event.storage import models
 from ceilometer.storage import impl_sqlalchemy
@@ -42,6 +43,17 @@ class CeilometerBaseTest(tests_db.TestBase):
         base = sql_models.CeilometerBase()
         base['key'] = 'value'
         self.assertEqual('value', base['key'])
+
+
+@tests_db.run_with('sqlite')
+class EngineFacadeTest(tests_db.TestBase):
+
+    @mock.patch.object(warnings, 'warn')
+    def test_no_not_supported_warning(self, mocked):
+        impl_sqlalchemy.Connection('sqlite://')
+        impl_sqla_event.Connection('sqlite://')
+        self.assertNotIn(mock.call(mock.ANY, exception.NotSupportedWarning),
+                         mocked.call_args_list)
 
 
 @tests_db.run_with('sqlite', 'mysql', 'pgsql')
@@ -169,17 +181,6 @@ class CapabilitiesTest(test_base.BaseTestCase):
             'events': {'query': {'simple': True}},
         }
         actual_capabilities = impl_sqla_event.Connection.get_capabilities()
-        self.assertEqual(expected_capabilities, actual_capabilities)
-
-    def test_alarm_capabilities(self):
-        expected_capabilities = {
-            'alarms': {'query': {'simple': True,
-                                 'complex': True},
-                       'history': {'query': {'simple': True,
-                                             'complex': True}}},
-        }
-
-        actual_capabilities = impl_sqla_alarm.Connection.get_capabilities()
         self.assertEqual(expected_capabilities, actual_capabilities)
 
     def test_storage_capabilities(self):

@@ -20,7 +20,7 @@ from oslo_utils import timeutils
 import six
 from sqlalchemy import (Column, Integer, String, ForeignKey, Index,
                         UniqueConstraint, BigInteger)
-from sqlalchemy import event, select
+from sqlalchemy import event
 from sqlalchemy import Float, Boolean, Text, DateTime
 from sqlalchemy.dialects.mysql import DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
@@ -222,76 +222,23 @@ class Sample(Base):
     message_id = Column(String(128))
 
 
-class FullSample(Base):
-    """Mapper model.
-
-    It's needed as many of the filters work against raw data which is split
-    between Meter, Sample, and Resource tables
-    """
-    meter = Meter.__table__
-    sample = Sample.__table__
-    resource = Resource.__table__
-    __table__ = (select([sample.c.id, meter.c.name.label('counter_name'),
-                         meter.c.type.label('counter_type'),
-                         meter.c.unit.label('counter_unit'),
-                         sample.c.volume.label('counter_volume'),
-                         resource.c.resource_id, resource.c.source_id,
-                         resource.c.user_id, resource.c.project_id,
-                         resource.c.resource_metadata, resource.c.internal_id,
-                         sample.c.timestamp, sample.c.message_id,
-                         sample.c.message_signature, sample.c.recorded_at])
-                 .select_from(
-                     sample.join(meter, sample.c.meter_id == meter.c.id).join(
-                         resource,
-                         sample.c.resource_id == resource.c.internal_id))
-                 .alias())
-
-
-class Alarm(Base):
-    """Define Alarm data."""
-    __tablename__ = 'alarm'
-    __table_args__ = (
-        Index('ix_alarm_user_id', 'user_id'),
-        Index('ix_alarm_project_id', 'project_id'),
-    )
-    alarm_id = Column(String(128), primary_key=True)
-    enabled = Column(Boolean)
-    name = Column(Text)
-    type = Column(String(50))
-    severity = Column(String(50))
-    description = Column(Text)
-    timestamp = Column(PreciseTimestamp, default=lambda: timeutils.utcnow())
-
-    user_id = Column(String(255))
-    project_id = Column(String(255))
-
-    state = Column(String(255))
-    state_timestamp = Column(PreciseTimestamp,
-                             default=lambda: timeutils.utcnow())
-
-    ok_actions = Column(JSONEncodedDict)
-    alarm_actions = Column(JSONEncodedDict)
-    insufficient_data_actions = Column(JSONEncodedDict)
-    repeat_actions = Column(Boolean)
-
-    rule = Column(JSONEncodedDict)
-    time_constraints = Column(JSONEncodedDict)
-
-
-class AlarmChange(Base):
-    """Define AlarmChange data."""
-    __tablename__ = 'alarm_history'
-    __table_args__ = (
-        Index('ix_alarm_history_alarm_id', 'alarm_id'),
-    )
-    event_id = Column(String(128), primary_key=True)
-    alarm_id = Column(String(128))
-    on_behalf_of = Column(String(255))
-    project_id = Column(String(255))
-    user_id = Column(String(255))
-    type = Column(String(20))
-    detail = Column(Text)
-    timestamp = Column(PreciseTimestamp, default=lambda: timeutils.utcnow())
+class FullSample(object):
+    """A fake model for query samples."""
+    id = Sample.id
+    timestamp = Sample.timestamp
+    message_id = Sample.message_id
+    message_signature = Sample.message_signature
+    recorded_at = Sample.recorded_at
+    counter_name = Meter.name
+    counter_type = Meter.type
+    counter_unit = Meter.unit
+    counter_volume = Sample.volume
+    resource_id = Resource.resource_id
+    source_id = Resource.source_id
+    user_id = Resource.user_id
+    project_id = Resource.project_id
+    resource_metadata = Resource.resource_metadata
+    internal_id = Resource.internal_id
 
 
 class EventType(Base):
