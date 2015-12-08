@@ -1,9 +1,9 @@
-ceilometer (1:5.0.0-6) UNRELEASED; urgency=medium
+ceilometer (1:6.0.0~b1-1) experimental; urgency=medium
 
-  * d/ceilometer-agent-*.init.in: Fix DAEMON_ARGS for
-    central, compute and ipmi agents.
+  * New upstream release.
+  * Fixed (build-)depends for this release.
 
- -- Ivan Udovichenko <iudovichenko@mirantis.com>  Tue, 10 Nov 2015 18:49:04 +0200
+ -- Thomas Goirand <zigo@debian.org>  Tue, 08 Dec 2015 11:53:07 +0100
 
 ceilometer (1:5.0.0-5) unstable; urgency=medium
 
