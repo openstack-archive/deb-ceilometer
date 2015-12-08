@@ -2,6 +2,7 @@ ceilometer (1:6.0.0~b1-1) experimental; urgency=medium
 
   * New upstream release.
   * Fixed (build-)depends for this release.
+  * The alarm packages are now transition packages to Aodh.
 
  -- Thomas Goirand <zigo@debian.org>  Tue, 08 Dec 2015 11:53:07 +0100
 

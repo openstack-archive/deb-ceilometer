@@ -196,25 +196,6 @@ Description: OpenStack efficient metering counters system - collector service
  .
  This package contains the collector service.
 
-Package: ceilometer-polling
-Architecture: all
-Depends: ceilometer-common (= ${binary:Version}),
-         ${misc:Depends},
-         ${ostack-lsb-base},
-         ${python:Depends},
-Suggests: mongodb,
-Description: OpenStack efficient metering counters system - polling service
- Ceilometer aims to deliver a Single Point Of Contact for billing systems,
- providing all the counters they need to establish customer billing, across
- all current and future OpenStack components. The delivery of counters must be
- traceable and auditable, the counters must be easily extensible to support new
- projects, and agents doing data collections should be independent of the
- overall system.
- .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
- This package contains the polling service.
-
 Package: ceilometer-api
 Architecture: all
 Depends: adduser,
@@ -313,11 +294,9 @@ Description: OpenStack efficient metering counters system - notification agent
 
 Package: ceilometer-alarm-evaluator
 Architecture: all
-Depends: ceilometer-common (= ${binary:Version}),
+Depends: aodh-evaluator,
          ${misc:Depends},
-         ${ostack-lsb-base},
-         ${python:Depends},
-Description: OpenStack efficient metering counters system - alarm evaluator
+Description: OpenStack efficient metering counters system - aodh-evaluator trans
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
  all current and future OpenStack components. The delivery of counters must be
@@ -325,17 +304,14 @@ Description: OpenStack efficient metering counters system - alarm evaluator
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
- This package contains the alarm evaluator daemon.
+ This package is a transition package to aodh-evaluator and can be safely
+ removed.
 
 Package: ceilometer-alarm-notifier
 Architecture: all
-Depends: ceilometer-common (= ${binary:Version}),
+Depends: aodh-notifier,
          ${misc:Depends},
-         ${ostack-lsb-base},
-         ${python:Depends},
-Description: OpenStack efficient metering counters system - alarm notifier
+Description: OpenStack efficient metering counters system - aodh-notifier trans
  Ceilometer aims to deliver a Single Point Of Contact for billing systems,
  providing all the counters they need to establish customer billing, across
  all current and future OpenStack components. The delivery of counters must be
@@ -343,9 +319,8 @@ Description: OpenStack efficient metering counters system - alarm notifier
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- (A ceilometer is an instrument that measures cloud coverage.)
- .
- This package contains the alarm notifier daemon.
+ This package is a transition package to aodh-notifier and can be safely
+ removed.
 
 Package: ceilometer-doc
 Section: doc
