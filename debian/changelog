@@ -1,4 +1,4 @@
-ceilometer (1:5.0.0-6) unstable; urgency=medium
+ceilometer (1:5.0.0-6) unstable; urgency=high
 
   * d/ceilometer-agent-*.init.in: Fix DAEMON_ARGS for
     central, compute and ipmi agents.
