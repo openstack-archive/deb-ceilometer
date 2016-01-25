@@ -1157,7 +1157,7 @@ class BasePipelineTestCase(base.BaseTestCase):
 
         cpu_util_sample = publisher.samples[0]
         self.assertEqual(12.5, cpu_util_sample.volume)
-        the_log.warn.assert_called_with(
+        the_log.warning.assert_called_with(
             'dropping out of time order sample: %s',
             (counters[1],)
         )
@@ -1370,15 +1370,6 @@ class BasePipelineTestCase(base.BaseTestCase):
         actual = sorted(s.volume for s in publisher.samples)
         self.assertEqual([2.0, 3.0, 6.0], actual)
 
-    def test_aggregator_input_validation(self):
-        aggregator = conversions.AggregatorTransformer("1", "15", None,
-                                                       None, None)
-        self.assertEqual(1, aggregator.size)
-        self.assertEqual(15, aggregator.retention_time)
-
-        self.assertRaises(ValueError, conversions.AggregatorTransformer,
-                          "abc", "cde", None, None, None)
-
     def test_aggregator_metadata(self):
         for conf, expected_version in [('last', '2.0'), ('first', '1.0')]:
             samples = self._do_test_aggregator({
@@ -1523,7 +1514,7 @@ class BasePipelineTestCase(base.BaseTestCase):
             'target': {'name': 'aggregated-bytes'}
         }, expected_length=1)
         s = samples[0]
-        self.assertTrue(mylog.warn.called)
+        self.assertTrue(mylog.warning.called)
         self.assertEqual('aggregated-bytes', s.name)
         self.assertEqual(154, s.volume)
         self.assertEqual('test_user_bis', s.user_id)

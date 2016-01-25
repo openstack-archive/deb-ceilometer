@@ -22,6 +22,7 @@ import collections
 import itertools
 import random
 
+from keystoneauth1 import exceptions as ka_exceptions
 from keystoneclient import exceptions as ks_exceptions
 from oslo_config import cfg
 from oslo_context import context
@@ -286,7 +287,7 @@ class AgentManager(service_base.BaseService):
             # Extension raising ExtensionLoadError can be ignored,
             # and ignore anything we can't import as a safety measure.
             if isinstance(exc, plugin_base.ExtensionLoadError):
-                LOG.error(_("Skip loading extension for %s") % ep.name)
+                LOG.exception(_("Skip loading extension for %s") % ep.name)
                 return
             if isinstance(exc, ImportError):
                 LOG.error(_("Failed to import extension for %(name)s: "
@@ -411,7 +412,8 @@ class AgentManager(service_base.BaseService):
             try:
                 self._keystone = keystone_client.get_client()
                 self._keystone_last_exception = None
-            except ks_exceptions.ClientException as e:
+            except (ka_exceptions.ClientException,
+                    ks_exceptions.ClientException) as e:
                 self._keystone = None
                 self._keystone_last_exception = e
         if self._keystone is not None:
@@ -445,8 +447,9 @@ class AgentManager(service_base.BaseService):
                         service_type = getattr(
                             cfg.CONF.service_types,
                             discoverer.KEYSTONE_REQUIRED_FOR_SERVICE)
-                        if not self.keystone.service_catalog.get_endpoints(
-                                service_type=service_type):
+                        if not keystone_client.get_service_catalog(
+                                self.keystone).get_endpoints(
+                                    service_type=service_type):
                             LOG.warning(_LW(
                                 'Skipping %(name)s, %(service_type)s service '
                                 'is not registered in keystone'),
@@ -460,7 +463,8 @@ class AgentManager(service_base.BaseService):
                     resources.extend(partitioned)
                     if discovery_cache is not None:
                         discovery_cache[url] = partitioned
-                except ks_exceptions.ClientException as e:
+                except (ka_exceptions.ClientException,
+                        ks_exceptions.ClientException) as e:
                     LOG.error(_LE('Skipping %(name)s, keystone issue: '
                                   '%(exc)s'), {'name': name, 'exc': e})
                 except Exception as err:

@@ -35,15 +35,6 @@ from ceilometer.publisher import utils
 
 LOG = log.getLogger(__name__)
 
-RPC_OPTS = [
-    cfg.StrOpt('metering_topic',
-               default='metering',
-               deprecated_for_removal=True,
-               help='The topic that ceilometer uses for metering messages.',
-               deprecated_group="DEFAULT",
-               ),
-]
-
 NOTIFIER_OPTS = [
     cfg.StrOpt('metering_topic',
                default='metering',
@@ -63,8 +54,6 @@ NOTIFIER_OPTS = [
                )
 ]
 
-cfg.CONF.register_opts(RPC_OPTS,
-                       group="publisher_rpc")
 cfg.CONF.register_opts(NOTIFIER_OPTS,
                        group="publisher_notifier")
 cfg.CONF.import_opt('host', 'ceilometer.service')
@@ -103,8 +92,8 @@ class MessagingPublisher(publisher.PublisherBase):
         if self.policy in ['default', 'queue', 'drop']:
             LOG.info(_LI('Publishing policy set to %s') % self.policy)
         else:
-            LOG.warn(_('Publishing policy is unknown (%s) force to default')
-                     % self.policy)
+            LOG.warning(_('Publishing policy is unknown (%s) force to '
+                          'default') % self.policy)
             self.policy = 'default'
 
         self.retry = 1 if self.policy in ['queue', 'drop'] else None
@@ -122,7 +111,7 @@ class MessagingPublisher(publisher.PublisherBase):
                 sample, cfg.CONF.publisher.telemetry_secret)
             for sample in samples
         ]
-        topic = cfg.CONF.publisher_rpc.metering_topic
+        topic = cfg.CONF.publisher_notifier.metering_topic
         self.local_queue.append((context, topic, meters))
 
         if self.per_meter_topic:
@@ -155,8 +144,8 @@ class MessagingPublisher(publisher.PublisherBase):
         if queue_length > self.max_queue_length > 0:
             count = queue_length - self.max_queue_length
             self.local_queue = self.local_queue[count:]
-            LOG.warn(_("Publisher max local_queue length is exceeded, "
-                     "dropping %d oldest samples") % count)
+            LOG.warning(_("Publisher max local_queue length is exceeded, "
+                        "dropping %d oldest samples") % count)
 
     def _process_queue(self, queue, policy):
         current_retry = 0
@@ -167,12 +156,12 @@ class MessagingPublisher(publisher.PublisherBase):
             except DeliveryFailure:
                 data = sum([len(m) for __, __, m in queue])
                 if policy == 'queue':
-                    LOG.warn(_("Failed to publish %d datapoints, queue them"),
-                             data)
+                    LOG.warning(_("Failed to publish %d datapoints, queue "
+                                  "them"), data)
                     return queue
                 elif policy == 'drop':
-                    LOG.warn(_("Failed to publish %d datapoints, "
-                               "dropping them"), data)
+                    LOG.warning(_("Failed to publish %d datapoints, "
+                                "dropping them"), data)
                     return []
                 current_retry += 1
                 if current_retry >= self.max_retry:
@@ -199,26 +188,6 @@ class MessagingPublisher(publisher.PublisherBase):
     @abc.abstractmethod
     def _send(self, context, topic, meters):
         """Send the meters to the messaging topic."""
-
-
-class RPCPublisher(MessagingPublisher):
-    def __init__(self, parsed_url):
-        super(RPCPublisher, self).__init__(parsed_url)
-
-        options = urlparse.parse_qs(parsed_url.query)
-        self.target = options.get('target', ['record_metering_data'])[0]
-
-        self.rpc_client = messaging.get_rpc_client(
-            messaging.get_transport(),
-            retry=self.retry, version='1.0'
-        )
-
-    def _send(self, context, topic, meters):
-        try:
-            self.rpc_client.prepare(topic=topic).cast(context, self.target,
-                                                      data=meters)
-        except oslo_messaging.MessageDeliveryFailure as e:
-            raise_delivery_failure(e)
 
 
 class NotifierPublisher(MessagingPublisher):

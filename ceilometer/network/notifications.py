@@ -18,7 +18,6 @@
 """
 
 from oslo_config import cfg
-from oslo_log import log
 import oslo_messaging
 
 from ceilometer.agent import plugin_base
@@ -32,8 +31,6 @@ OPTS = [
 ]
 
 cfg.CONF.register_opts(OPTS)
-
-LOG = log.getLogger(__name__)
 
 
 class NetworkNotificationBase(plugin_base.NotificationBase):
@@ -59,8 +56,7 @@ class NetworkNotificationBase(plugin_base.NotificationBase):
             # '%s.delete.start' % (self.resource_name),
         ]
 
-    @staticmethod
-    def get_targets(conf):
+    def get_targets(self, conf):
         """Return a sequence of oslo_messaging.Target
 
         This sequence is defining the exchange and topics to be connected for
@@ -68,7 +64,7 @@ class NetworkNotificationBase(plugin_base.NotificationBase):
         """
         return [oslo_messaging.Target(topic=topic,
                                       exchange=conf.neutron_control_exchange)
-                for topic in conf.notification_topics]
+                for topic in self.get_notification_topics(conf)]
 
     def process_notification(self, message):
         counter_name = getattr(self, 'counter_name', self.resource_name)

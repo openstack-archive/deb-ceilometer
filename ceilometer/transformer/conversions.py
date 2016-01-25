@@ -195,7 +195,7 @@ class RateOfChangeTransformer(ScalingTransformer):
             time_delta = timeutils.delta_seconds(prev_timestamp, timestamp)
             # disallow violations of the arrow of time
             if time_delta < 0:
-                LOG.warn(_('dropping out of time order sample: %s'), (s,))
+                LOG.warning(_('dropping out of time order sample: %s'), (s,))
                 # Reset the cache to the newer sample.
                 self.cache[key] = prev
                 return None
@@ -213,8 +213,8 @@ class RateOfChangeTransformer(ScalingTransformer):
             s = self._convert(s, rate_of_change)
             LOG.debug('converted to: %s', s)
         else:
-            LOG.warn(_('dropping sample with no predecessor: %s'),
-                     (s,))
+            LOG.warning(_('dropping sample with no predecessor: %s'),
+                        (s,))
             s = None
         return s
 
@@ -246,6 +246,9 @@ class AggregatorTransformer(ScalingTransformer):
         self.counts = collections.defaultdict(int)
         self.size = int(size) if size else None
         self.retention_time = float(retention_time) if retention_time else None
+        if not (self.size or self.retention_time):
+            self.size = 1
+
         self.initial_timestamp = None
         self.aggregated_samples = 0
 
@@ -262,7 +265,7 @@ class AggregatorTransformer(ScalingTransformer):
         drop = ['drop'] if is_droppable else []
         if value or mandatory:
             if value not in ['last', 'first'] + drop:
-                LOG.warn('%s is unknown (%s), using last' % (name, value))
+                LOG.warning('%s is unknown (%s), using last' % (name, value))
                 value = 'last'
             self.merged_attribute_policy[name] = value
         else:
@@ -308,7 +311,7 @@ class AggregatorTransformer(ScalingTransformer):
         expired = (self.retention_time and
                    timeutils.is_older_than(self.initial_timestamp,
                                            self.retention_time))
-        full = self.aggregated_samples >= self.size
+        full = self.size and self.aggregated_samples >= self.size
         if full or expired:
             x = list(self.samples.values())
             # gauge aggregates need to be averages

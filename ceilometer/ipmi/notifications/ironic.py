@@ -79,12 +79,11 @@ class SensorNotification(plugin_base.NotificationBase):
     event_types = ['hardware.ipmi.*']
     metric = None
 
-    @staticmethod
-    def get_targets(conf):
+    def get_targets(self, conf):
         """oslo.messaging.TargetS for this plugin."""
         return [messaging.Target(topic=topic,
                                  exchange=conf.ironic_exchange)
-                for topic in conf.notification_topics]
+                for topic in self.get_notification_topics(conf)]
 
     def _get_sample(self, message):
         try:
@@ -152,7 +151,7 @@ class SensorNotification(plugin_base.NotificationBase):
                         project_id=info['project_id'])
 
             except InvalidSensorData as exc:
-                LOG.warn(
+                LOG.warning(
                     'invalid sensor data for %(resource)s: %(error)s' %
                     dict(resource=resource_id, error=exc)
                 )

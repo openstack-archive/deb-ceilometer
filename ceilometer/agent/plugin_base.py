@@ -24,6 +24,7 @@ import oslo_messaging
 import six
 from stevedore import extension
 
+from ceilometer.i18n import _LE
 from ceilometer import messaging
 
 LOG = log.getLogger(__name__)
@@ -48,6 +49,12 @@ class NotificationBase(PluginBase):
                 event_type='|'.join(self.event_types))
         self.manager = manager
 
+    @staticmethod
+    def get_notification_topics(conf):
+        if 'notification_topics' in conf:
+            return conf.notification_topics
+        return conf.oslo_messaging_notifications.topics
+
     @abc.abstractproperty
     def event_types(self):
         """Return a sequence of strings.
@@ -71,39 +78,35 @@ class NotificationBase(PluginBase):
         :param message: Message to process.
         """
 
-    def info(self, ctxt, publisher_id, event_type, payload, metadata):
+    def info(self, notifications):
         """RPC endpoint for notification messages at info level
 
         When another service sends a notification over the message
         bus, this method receives it.
 
-        :param ctxt: oslo.messaging context
-        :param publisher_id: publisher of the notification
-        :param event_type: type of notification
-        :param payload: notification payload
-        :param metadata: metadata about the notification
-
+        :param notifications: list of notifications
         """
-        notification = messaging.convert_to_old_notification_format(
-            'info', ctxt, publisher_id, event_type, payload, metadata)
-        self.to_samples_and_publish(context.get_admin_context(), notification)
+        self._process_notifications('info', notifications)
 
-    def sample(self, ctxt, publisher_id, event_type, payload, metadata):
+    def sample(self, notifications):
         """RPC endpoint for notification messages at sample level
 
         When another service sends a notification over the message
         bus at sample priority, this method receives it.
 
-        :param ctxt: oslo.messaging context
-        :param publisher_id: publisher of the notification
-        :param event_type: type of notification
-        :param payload: notification payload
-        :param metadata: metadata about the notification
-
+        :param notifications: list of notifications
         """
-        notification = messaging.convert_to_old_notification_format(
-            'sample', ctxt, publisher_id, event_type, payload, metadata)
-        self.to_samples_and_publish(context.get_admin_context(), notification)
+        self._process_notifications('sample', notifications)
+
+    def _process_notifications(self, priority, notifications):
+        for notification in notifications:
+            try:
+                notification = messaging.convert_to_old_notification_format(
+                    priority, notification)
+                self.to_samples_and_publish(context.get_admin_context(),
+                                            notification)
+            except Exception:
+                LOG.error(_LE('Fail to process notification'), exc_info=True)
 
     def to_samples_and_publish(self, context, notification):
         """Return samples produced by *process_notification*.

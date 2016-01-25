@@ -60,9 +60,9 @@ class LBPoolPollster(base.BaseServicesPollster):
             status = self.get_status_id(pool['status'])
             if status == -1:
                 # unknown status, skip this sample
-                LOG.warn(_("Unknown status %(stat)s received on pool %(id)s, "
-                           "skipping sample") % {'stat': pool['status'],
-                                                 'id': pool['id']})
+                LOG.warning(_("Unknown status %(stat)s received on pool "
+                              "%(id)s, skipping sample")
+                            % {'stat': pool['status'], 'id': pool['id']})
                 continue
 
             yield sample.Sample(
@@ -108,9 +108,9 @@ class LBVipPollster(base.BaseServicesPollster):
             status = self.get_status_id(vip['status'])
             if status == -1:
                 # unknown status, skip this sample
-                LOG.warn(_("Unknown status %(stat)s received on vip %(id)s, "
-                         "skipping sample") % {'stat': vip['status'],
-                                               'id': vip['id']})
+                LOG.warning(_("Unknown status %(stat)s received on vip "
+                              "%(id)s, skipping sample")
+                            % {'stat': vip['status'], 'id': vip['id']})
                 continue
 
             yield sample.Sample(
@@ -149,9 +149,9 @@ class LBMemberPollster(base.BaseServicesPollster):
             LOG.debug("Load Balancer Member : %s" % member)
             status = self.get_status_id(member['status'])
             if status == -1:
-                LOG.warn(_("Unknown status %(stat)s received on member %(id)s,"
-                         "skipping sample") % {'stat': member['status'],
-                                               'id': member['id']})
+                LOG.warning(_("Unknown status %(stat)s received on member "
+                              "%(id)s, skipping sample")
+                            % {'stat': member['status'], 'id': member['id']})
                 continue
             yield sample.Sample(
                 name='network.services.lb.member',
@@ -292,7 +292,7 @@ class LBBytesInPollster(_LBStatsPollster):
         return make_sample_from_pool(
             pool,
             name='network.services.lb.incoming.bytes',
-            type=sample.TYPE_CUMULATIVE,
+            type=sample.TYPE_GAUGE,
             unit='B',
             volume=data.bytes_in,
         )
@@ -306,7 +306,7 @@ class LBBytesOutPollster(_LBStatsPollster):
         return make_sample_from_pool(
             pool,
             name='network.services.lb.outgoing.bytes',
-            type=sample.TYPE_CUMULATIVE,
+            type=sample.TYPE_GAUGE,
             unit='B',
             volume=data.bytes_out,
         )

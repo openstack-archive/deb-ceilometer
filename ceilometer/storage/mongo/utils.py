@@ -36,11 +36,6 @@ ERROR_INDEX_WITH_DIFFERENT_SPEC_ALREADY_EXISTS = 86
 
 LOG = log.getLogger(__name__)
 
-# FIXME(dhellmann): Configuration options are not part of the Oslo
-# library APIs, and should not be used like this.
-cfg.CONF.import_opt('max_retries', 'oslo_db.options', group="database")
-cfg.CONF.import_opt('retry_interval', 'oslo_db.options', group="database")
-
 EVENT_TRAIT_TYPES = {'none': 0, 'string': 1, 'integer': 2, 'float': 3,
                      'datetime': 4}
 OP_SIGN = {'lt': '$lt', 'le': '$lte', 'ne': '$ne', 'gt': '$gt', 'ge': '$gte'}
@@ -271,8 +266,8 @@ class ConnectionPool(object):
         try:
             return MongoProxy(pymongo.MongoClient(url))
         except pymongo.errors.ConnectionFailure as e:
-            LOG.warn(_('Unable to connect to the database server: '
-                       '%(errmsg)s.') % {'errmsg': e})
+            LOG.warning(_('Unable to connect to the database server: '
+                        '%(errmsg)s.') % {'errmsg': e})
             raise
 
 
@@ -402,6 +397,9 @@ class QueryTransformer(object):
 
 def safe_mongo_call(call):
     def closure(*args, **kwargs):
+        # NOTE(idegtiarov) options max_retries and retry_interval have been
+        # registered in storage.__init__ in oslo_db.options.set_defaults
+        # default values for both options are 10.
         max_retries = cfg.CONF.database.max_retries
         retry_interval = cfg.CONF.database.retry_interval
         attempts = 0
@@ -414,10 +412,10 @@ def safe_mongo_call(call):
                                 'after %(retries)d retries. Giving up.') %
                               {'retries': max_retries})
                     raise
-                LOG.warn(_('Unable to reconnect to the primary mongodb: '
-                           '%(errmsg)s. Trying again in %(retry_interval)d '
-                           'seconds.') %
-                         {'errmsg': err, 'retry_interval': retry_interval})
+                LOG.warning(_('Unable to reconnect to the primary '
+                              'mongodb: %(errmsg)s. Trying again in '
+                              '%(retry_interval)d seconds.') %
+                            {'errmsg': err, 'retry_interval': retry_interval})
                 attempts += 1
                 time.sleep(retry_interval)
     return closure

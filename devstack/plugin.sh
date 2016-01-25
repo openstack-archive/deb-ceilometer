@@ -126,7 +126,7 @@ function _ceilometer_config_apache_wsgi {
 function _ceilometer_prepare_coordination {
     if echo $CEILOMETER_COORDINATION_URL | grep -q '^memcached:'; then
         install_package memcached
-    elif echo $CEILOMETER_COORDINATION_URL | grep -q '^redis:'; then
+    elif [[ "${CEILOMETER_COORDINATOR_URL%%:*}" == "redis" || "${CEILOMETER_CACHE_BACKEND##*.}" == "redis" ]]; then
         _ceilometer_install_redis
     fi
 }
@@ -218,6 +218,20 @@ function cleanup_ceilometer {
     fi
 }
 
+# Set configuraiton for cache backend.
+# NOTE(cdent): This currently only works for redis. Still working
+# out how to express the other backends.
+function _ceilometer_configure_cache_backend {
+    iniset $CEILOMETER_CONF cache backend $CEILOMETER_CACHE_BACKEND
+    iniset $CEILOMETER_CONF cache backend_argument url:$CEILOMETER_CACHE_URL
+    iniadd_literal $CEILOMETER_CONF cache backend_argument distributed_lock:True
+    if [[ "${CEILOMETER_CACHE_BACKEND##*.}" == "redis" ]]; then
+        iniadd_literal $CEILOMETER_CONF cache backend_argument db:0
+        iniadd_literal $CEILOMETER_CONF cache backend_argument redis_expiration_time:600
+    fi
+}
+
+
 # Set configuration for storage backend.
 function _ceilometer_configure_storage_backend {
     if [ "$CEILOMETER_BACKEND" = 'mysql' ] || [ "$CEILOMETER_BACKEND" = 'postgresql' ] ; then
@@ -231,6 +245,25 @@ function _ceilometer_configure_storage_backend {
     elif [ "$CEILOMETER_BACKEND" = 'mongodb' ] ; then
         iniset $CEILOMETER_CONF database event_connection mongodb://localhost:27017/ceilometer
         iniset $CEILOMETER_CONF database metering_connection mongodb://localhost:27017/ceilometer
+    elif [ "$CEILOMETER_BACKEND" = 'gnocchi' ] ; then
+        gnocchi_url=$(gnocchi_service_url)
+        iniset $CEILOMETER_CONF DEFAULT meter_dispatchers gnocchi
+        # FIXME(sileht): We shouldn't load event_dispatchers if store_event is False
+        iniset $CEILOMETER_CONF DEFAULT event_dispatchers ""
+        iniset $CEILOMETER_CONF notification store_events False
+        # NOTE(gordc): set higher retry in case gnocchi is started after ceilometer on a slow machine
+        iniset $CEILOMETER_CONF storage max_retries 20
+        # NOTE(gordc): set batching to better handle recording on a slow machine
+        iniset $CEILOMETER_CONF collector batch_size 10
+        iniset $CEILOMETER_CONF collector batch_timeout 5
+        iniset $CEILOMETER_CONF dispatcher_gnocchi url $gnocchi_url
+        iniset $CEILOMETER_CONF dispatcher_gnocchi archive_policy ${GNOCCHI_ARCHIVE_POLICY}
+        if is_service_enabled swift && [[ "$GNOCCHI_STORAGE_BACKEND" = 'swift' ]] ; then
+            iniset $CEILOMETER_CONF dispatcher_gnocchi filter_service_activity "True"
+            iniset $CEILOMETER_CONF dispatcher_gnocchi filter_project "gnocchi_swift"
+        else
+            iniset $CEILOMETER_CONF dispatcher_gnocchi filter_service_activity "False"
+        fi
     else
         die $LINENO "Unable to configure unknown CEILOMETER_BACKEND $CEILOMETER_BACKEND"
     fi
@@ -251,6 +284,10 @@ function configure_ceilometer {
     if [[ -n "$CEILOMETER_COORDINATION_URL" ]]; then
         iniset $CEILOMETER_CONF coordination backend_url $CEILOMETER_COORDINATION_URL
         iniset $CEILOMETER_CONF compute workload_partitioning True
+    fi
+
+    if [[ -n "$CEILOMETER_CACHE_BACKEND" ]]; then
+        _ceilometer_configure_cache_backend
     fi
 
     # Install the policy file and declarative configuration files to
@@ -379,7 +416,7 @@ function start_ceilometer {
         tail_log ceilometer-api /var/log/$APACHE_NAME/ceilometer_access.log
     fi
 
-    # run the the collector after restarting apache as it needs
+    # run the collector after restarting apache as it needs
     # operational keystone if using gnocchi
     run_process ceilometer-collector "$CEILOMETER_BIN_DIR/ceilometer-collector --config-file $CEILOMETER_CONF"
 

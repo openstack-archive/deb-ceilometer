@@ -13,23 +13,20 @@
 # under the License.
 
 from oslo_config import cfg
-from oslo_log import log
 
 from ceilometer.agent import plugin_base as plugin
 
-LOG = log.getLogger(__name__)
-
-cfg.CONF.import_group('service_credentials', 'ceilometer.service')
+cfg.CONF.import_group('service_credentials', 'ceilometer.keystone_client')
 
 
 class TenantDiscovery(plugin.DiscoveryBase):
     """Discovery that supplies keystone tenants.
 
     This discovery should be used when the pollster's work can't be divided
-    into smaller pieces than per-tenant. Example of this is the Swift
-    pollster, which polls account details and does so per-tenant.
+    into smaller pieces than per-tenants. Example of this is the Swift
+    pollster, which polls account details and does so per-project.
     """
 
     def discover(self, manager, param=None):
-        tenants = manager.keystone.tenants.list()
+        tenants = manager.keystone.projects.list()
         return tenants or []

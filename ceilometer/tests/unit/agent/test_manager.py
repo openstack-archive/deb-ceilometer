@@ -99,8 +99,7 @@ class TestManager(base.BaseTestCase):
             'power', 'temperature', 'outlet_temperature',
             'airflow', 'cups', 'cpu_util', 'mem_util', 'io_util']
         calls = [mock.call(err_msg % n) for n in pollster_names]
-        LOG.error.assert_has_calls(calls=calls,
-                                   any_order=True)
+        LOG.exception.assert_has_calls(calls=calls, any_order=True)
 
     # Skip loading pollster upon ImportError
     @mock.patch('ceilometer.ipmi.pollsters.node._Base.__init__',
@@ -166,7 +165,7 @@ class TestManager(base.BaseTestCase):
 class TestPollsterKeystone(agentbase.TestPollster):
     def get_samples(self, manager, cache, resources):
         # Just try to use keystone, that will raise an exception
-        manager.keystone.tenants.list()
+        manager.keystone.projects.list()
 
 
 class TestPollsterPollingException(agentbase.TestPollster):
