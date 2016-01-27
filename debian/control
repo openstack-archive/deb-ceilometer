@@ -307,7 +307,7 @@ Description: OpenStack efficient metering counters system - aodh-evaluator trans
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- This package is a transition package to aodh-evaluator and can be safely
+ This package is a dummy transition package to aodh-evaluator and can be safely
  removed.
 
 Package: ceilometer-alarm-notifier
@@ -322,7 +322,7 @@ Description: OpenStack efficient metering counters system - aodh-notifier trans
  projects, and agents doing data collections should be independent of the
  overall system.
  .
- This package is a transition package to aodh-notifier and can be safely
+ This package is a dummy transition package to aodh-notifier and can be safely
  removed.
 
 Package: ceilometer-doc
