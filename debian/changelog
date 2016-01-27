@@ -4,6 +4,7 @@ ceilometer (1:6.0.0~b2-1) experimental; urgency=medium
   * Fixed (build-)depends for this release.
   * The alarm packages are now transition packages to Aodh.
   * Fixed debian/copyright ordering.
+  * Updated namespaces when generating the config file.
 
  -- Thomas Goirand <zigo@debian.org>  Tue, 08 Dec 2015 11:53:07 +0100
 

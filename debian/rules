@@ -13,15 +13,23 @@ override_dh_clean:
 	rm -f debian/ceilometer-common.config debian/ceilometer-common.postinst debian/ceilometer-api.config debian/ceilometer-api.postinst
 
 override_dh_install:
+	rm -rf $(CURDIR)/debian/tmp
+	python2.7 setup.py install --install-layout=deb --root $(CURDIR)/debian/tmp
 	dh_install --fail-missing
 
 	# Manage ceilometer.conf
 	mkdir -p $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common
-	oslo-config-generator --output-file $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf \
+	PYTHONPATH=$(CURDIR)/debian/tmp/usr/lib/python2.7/dist-packages oslo-config-generator \
+		--output-file $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf \
+		--wrap-width 140 \
 		--namespace ceilometer \
+		--namespace oslo.concurrency \
 		--namespace oslo.db \
+		--namespace oslo.log \
 		--namespace oslo.messaging \
+		--namespace oslo.middleware.cors \
 		--namespace oslo.policy \
+		--namespace oslo.service.service \
 		--namespace keystonemiddleware.auth_token
 	sed -i 's|[# \t]*auth_protocol[\t ]*=.*|auth_protocol=http|' $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
 	chmod 0644 $(CURDIR)/debian/ceilometer-common/usr/share/ceilometer-common/ceilometer.conf
