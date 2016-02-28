@@ -86,8 +86,8 @@ Build-Depends-Indep: mongodb,
                      subunit,
                      testrepository,
 Standards-Version: 3.9.6
-Vcs-Browser: http://anonscm.debian.org/gitweb/?p=openstack/ceilometer.git;a=summary
-Vcs-Git: git://anonscm.debian.org/openstack/ceilometer.git
+Vcs-Browser: https://anonscm.debian.org/cgit/openstack/ceilometer.git/
+Vcs-Git: https://anonscm.debian.org/git/openstack/ceilometer.git
 Homepage: http://wiki.openstack.org/Ceilometer
 
 Package: python-ceilometer
