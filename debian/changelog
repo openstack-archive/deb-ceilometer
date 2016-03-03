@@ -6,6 +6,8 @@ ceilometer (1:6.0.0~b3-1) experimental; urgency=medium
   [ Thomas Goirand ]
   * New upstream release.
   * Fixed (build-)depends for this release.
+  * Disable test:
+    meter.test_notifications.TestMeterProcessing.test_fallback_meter_path
 
  -- Thomas Goirand <zigo@debian.org>  Fri, 04 Mar 2016 00:05:14 +0800
 
