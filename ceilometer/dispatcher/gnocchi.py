@@ -52,7 +52,6 @@ dispatcher_opts = [
                deprecated_for_removal=True,
                help='URL to Gnocchi. default: autodetection'),
     cfg.StrOpt('archive_policy',
-               default=None,
                help='The archive policy to use when the dispatcher '
                'create a new metric.'),
     cfg.StrOpt('resources_definition_file',
@@ -84,12 +83,8 @@ def log_and_ignore_unexpected_workflow_error(func):
 
 class ResourcesDefinitionException(Exception):
     def __init__(self, message, definition_cfg):
-        super(ResourcesDefinitionException, self).__init__(message)
-        self.definition_cfg = definition_cfg
-
-    def __str__(self):
-        return '%s %s: %s' % (self.__class__.__name__,
-                              self.definition_cfg, self.message)
+        msg = '%s %s: %s' % (self.__class__.__name__, definition_cfg, message)
+        super(ResourcesDefinitionException, self).__init__(msg)
 
 
 class ResourcesDefinition(object):
@@ -166,10 +161,14 @@ class LockedDefaultDict(defaultdict):
         with self.lock:
             return super(LockedDefaultDict, self).__getitem__(key)
 
-    def __delitem__(self, key):
+    def pop(self, key, *args):
         with self.lock:
-            with self.__getitem__(key)(blocking=False):
-                super(LockedDefaultDict, self).__delitem__(key)
+            key_lock = super(LockedDefaultDict, self).__getitem__(key)
+            if key_lock.acquire(False):
+                try:
+                    super(LockedDefaultDict, self).pop(key, *args)
+                finally:
+                    key_lock.release()
 
 
 class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
@@ -241,9 +240,16 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
             namespace='ceilometer.event.trait_plugin')
         data = declarative.load_definitions(
             {}, conf.dispatcher_gnocchi.resources_definition_file)
-        return [ResourcesDefinition(r, conf.dispatcher_gnocchi.archive_policy,
-                                    plugin_manager)
-                for r in data.get('resources', [])]
+        resource_defs = []
+        for resource in data.get('resources', []):
+            try:
+                resource_defs.append(ResourcesDefinition(
+                    resource,
+                    conf.dispatcher_gnocchi.archive_policy, plugin_manager))
+            except Exception as exc:
+                LOG.error(_LE("Failed to load resource due to error %s") %
+                          exc)
+        return resource_defs
 
     @property
     def gnocchi_project_id(self):
@@ -348,7 +354,7 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                 metric.update(rd.metrics[metric_name])
                 try:
                     self._gnocchi.metric.create(metric)
-                except gnocchi_exc.NamedMetricAreadyExists:
+                except gnocchi_exc.NamedMetricAlreadyExists:
                     # NOTE(sileht): metric created in the meantime
                     pass
             else:

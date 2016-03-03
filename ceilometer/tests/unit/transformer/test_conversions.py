@@ -48,12 +48,12 @@ class AggregatorTransformerTestCase(base.BaseTestCase):
     def test_init_no_size_or_rention_time(self):
         aggregator = conversions.AggregatorTransformer()
         self.assertEqual(1, aggregator.size)
-        self.assertEqual(None, aggregator.retention_time)
+        self.assertIsNone(aggregator.retention_time)
 
     def test_init_size_zero(self):
         aggregator = conversions.AggregatorTransformer(size="0")
         self.assertEqual(1, aggregator.size)
-        self.assertEqual(None, aggregator.retention_time)
+        self.assertIsNone(aggregator.retention_time)
 
     def test_init_input_validation_size_invalid(self):
         self.assertRaises(ValueError, conversions.AggregatorTransformer,
@@ -62,6 +62,32 @@ class AggregatorTransformerTestCase(base.BaseTestCase):
     def test_init_input_validation_retention_time_invalid(self):
         self.assertRaises(ValueError, conversions.AggregatorTransformer,
                           "2", "abc", None, None, None)
+
+    def test_init_no_timestamp(self):
+        aggregator = conversions.AggregatorTransformer("1", "1", None,
+                                                       None, None)
+        self.assertEqual("first", aggregator.timestamp)
+
+    def test_init_timestamp_none(self):
+        aggregator = conversions.AggregatorTransformer("1", "1", None,
+                                                       None, None, None)
+        self.assertEqual("first", aggregator.timestamp)
+
+    def test_init_timestamp_first(self):
+        aggregator = conversions.AggregatorTransformer("1", "1", None,
+                                                       None, None, "first")
+        self.assertEqual("first", aggregator.timestamp)
+
+    def test_init_timestamp_last(self):
+        aggregator = conversions.AggregatorTransformer("1", "1", None,
+                                                       None, None, "last")
+        self.assertEqual("last", aggregator.timestamp)
+
+    def test_init_timestamp_invalid(self):
+        aggregator = conversions.AggregatorTransformer("1", "1", None,
+                                                       None, None,
+                                                       "invalid_option")
+        self.assertEqual("first", aggregator.timestamp)
 
     def test_size_unbounded(self):
         aggregator = conversions.AggregatorTransformer(size="0",

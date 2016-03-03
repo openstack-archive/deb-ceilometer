@@ -23,7 +23,7 @@ from stevedore import extension
 
 from ceilometer.agent import plugin_base
 from ceilometer import declarative
-from ceilometer.i18n import _LE
+from ceilometer.i18n import _LE, _LW
 from ceilometer import sample
 from ceilometer import utils
 
@@ -182,9 +182,14 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
             {}, cfg.CONF.meter.meter_definitions_cfg_file,
             pkg_resources.resource_filename(__name__, "data/meters.yaml"))
 
-        definitions = []
+        definitions = {}
         for meter_cfg in reversed(meters_cfg['metric']):
-            if (meter_cfg['volume'] != 1
+            if meter_cfg.get('name') in definitions:
+                # skip duplicate meters
+                LOG.warning(_LW("Skipping duplicate meter definition %s")
+                            % meter_cfg)
+                continue
+            if (meter_cfg.get('volume') != 1
                     or not cfg.CONF.notification.disable_non_metric_meters):
                 try:
                     md = MeterDefinition(meter_cfg, plugin_manager)
@@ -193,8 +198,8 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
                               % dict(err=six.text_type(me)))
                     LOG.error(errmsg)
                 else:
-                    definitions.append(md)
-        return definitions
+                    definitions[meter_cfg['name']] = md
+        return definitions.values()
 
     def get_targets(self, conf):
         """Return a sequence of oslo_messaging.Target

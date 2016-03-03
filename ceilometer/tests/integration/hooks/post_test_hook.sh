@@ -39,10 +39,10 @@ if [ -d $BASE/new/devstack ]; then
 fi
 
 openstack catalog list
-export AODH_SERVICE_URL=$(openstack catalog show alarming -c endpoints -f value | awk '/publicURL/{print $2}')
-export GNOCCHI_SERVICE_URL=$(openstack catalog show metric -c endpoints -f value | awk '/publicURL/{print $2}')
-export HEAT_SERVICE_URL=$(openstack catalog show orchestration -c endpoints -f value | awk '/publicURL/{print $2}')
-export NOVA_SERVICE_URL=$(openstack catalog show compute -c endpoints -f value | awk '/publicURL/{print $2}')
+export AODH_SERVICE_URL=$(openstack catalog show alarming -c endpoints -f value | awk '/public/{print $2}')
+export GNOCCHI_SERVICE_URL=$(openstack catalog show metric -c endpoints -f value | awk '/public/{print $2}')
+export HEAT_SERVICE_URL=$(openstack catalog show orchestration -c endpoints -f value | awk '/public/{print $2}')
+export NOVA_SERVICE_URL=$(openstack catalog show compute -c endpoints -f value | awk '/public/{print $2}')
 export GLANCE_IMAGE_NAME=$(openstack image list | awk '/ cirros.*uec /{print $4}')
 export ADMIN_TOKEN=$(openstack token issue -c id -f value)
 
@@ -76,10 +76,13 @@ if [ $EXIT_CODE -ne 0 ] ; then
         gnocchi measures show -r $instance_id cpu_util
     done
 
+    gnocchi status
+
     # Be sure to source Gnocchi settings before
     source $BASE/new/gnocchi/devstack/settings
     echo "* Unprocessed measures:"
-    find $GNOCCHI_DATA_DIR/measures
+    find $GNOCCHI_DATA_DIR
+
     set -x
 fi
 

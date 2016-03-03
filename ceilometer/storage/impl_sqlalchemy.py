@@ -157,8 +157,12 @@ def make_query_from_filter(session, query, sample_filter, require_meter=True):
         else:
             query = query.filter(models.Sample.timestamp < ts_end)
     if sample_filter.user:
+        if sample_filter.user == 'None':
+            sample_filter.user = None
         query = query.filter(models.Resource.user_id == sample_filter.user)
     if sample_filter.project:
+        if sample_filter.project == 'None':
+            sample_filter.project = None
         query = query.filter(
             models.Resource.project_id == sample_filter.project)
     if sample_filter.resource:
@@ -494,7 +498,7 @@ class Connection(base.Connection):
             )
 
     def get_meters(self, user=None, project=None, resource=None, source=None,
-                   metaquery=None, limit=None):
+                   metaquery=None, limit=None, unique=False):
         """Return an iterable of api_models.Meter instances
 
         :param user: Optional ID for user that owns the resource.
@@ -503,6 +507,7 @@ class Connection(base.Connection):
         :param source: Optional source filter.
         :param metaquery: Optional dict with metadata to match on.
         :param limit: Maximum number of results to return.
+        :param unique: If set to true, return only unique meter information.
         """
         if limit == 0:
             return
@@ -515,10 +520,17 @@ class Connection(base.Connection):
         # NOTE(gordc): get latest sample of each meter/resource. we do not
         #              filter here as we want to filter only on latest record.
         session = self._engine_facade.get_session()
+
         subq = session.query(func.max(models.Sample.id).label('id')).join(
             models.Resource,
-            models.Resource.internal_id == models.Sample.resource_id).group_by(
-            models.Sample.meter_id, models.Resource.resource_id)
+            models.Resource.internal_id == models.Sample.resource_id)
+
+        if unique:
+            subq = subq.group_by(models.Sample.meter_id)
+        else:
+            subq = subq.group_by(models.Sample.meter_id,
+                                 models.Resource.resource_id)
+
         if resource:
             subq = subq.filter(models.Resource.resource_id == resource)
         subq = subq.subquery()
@@ -539,15 +551,27 @@ class Connection(base.Connection):
                                               require_meter=False)
 
         query_sample = query_sample.limit(limit) if limit else query_sample
-        for row in query_sample.all():
-            yield api_models.Meter(
-                name=row.name,
-                type=row.type,
-                unit=row.unit,
-                resource_id=row.resource_id,
-                project_id=row.project_id,
-                source=row.source_id,
-                user_id=row.user_id)
+
+        if unique:
+            for row in query_sample.all():
+                yield api_models.Meter(
+                    name=row.name,
+                    type=row.type,
+                    unit=row.unit,
+                    resource_id=None,
+                    project_id=None,
+                    source=None,
+                    user_id=None)
+        else:
+            for row in query_sample.all():
+                yield api_models.Meter(
+                    name=row.name,
+                    type=row.type,
+                    unit=row.unit,
+                    resource_id=row.resource_id,
+                    project_id=row.project_id,
+                    source=row.source_id,
+                    user_id=row.user_id)
 
     @staticmethod
     def _retrieve_samples(query):
