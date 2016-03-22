@@ -3,6 +3,8 @@ ceilometer (1:6.0.0~rc1-1) experimental; urgency=medium
   * New upstream release.
   * Added git to build-depends-indep.
   * Fixed (build-)depends for this release.
+  * Fixed unit test runner (upstream script ./setup-test-env-mongodb.sh isn't
+    available anymore: using one in the debian folder).
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 10 Mar 2016 13:17:08 +0100
 
