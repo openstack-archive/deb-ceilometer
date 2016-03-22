@@ -1,4 +1,4 @@
-ceilometer (1:6.0.0~rc-1) experimental; urgency=medium
+ceilometer (1:6.0.0~rc1-1) experimental; urgency=medium
 
   * New upstream release.
   * Added git to build-depends-indep.
