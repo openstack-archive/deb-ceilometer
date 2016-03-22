@@ -48,6 +48,11 @@ class CPUPollster(pollsters.BaseComputePollster):
             except virt_inspector.InstanceNotFoundException as err:
                 # Instance was deleted while getting samples. Ignore it.
                 LOG.debug('Exception while getting samples %s', err)
+            except virt_inspector.InstanceShutOffException as e:
+                LOG.debug('Instance %(instance_id)s was shut off while '
+                          'getting samples of %(pollster)s: %(exc)s',
+                          {'instance_id': instance.id,
+                           'pollster': self.__class__.__name__, 'exc': e})
             except ceilometer.NotImplementedError:
                 # Selected inspector does not implement this pollster.
                 LOG.debug('Obtaining CPU time is not implemented for %s',

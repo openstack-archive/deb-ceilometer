@@ -6,17 +6,18 @@
 # Stefano Maffulli <smaffulli@gmail.com>, 2013
 # Lucas Palm <lapalm@us.ibm.com>, 2015. #zanata
 # OpenStack Infra <zanata@openstack.org>, 2015. #zanata
+# Jennifer <cristxu@tw.ibm.com>, 2016. #zanata
 # Lucas Palm <lapalm@us.ibm.com>, 2016. #zanata
 msgid ""
 msgstr ""
-"Project-Id-Version: ceilometer 6.0.0.0b3.dev49\n"
+"Project-Id-Version: ceilometer 6.0.0.0b4.dev50\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2016-02-06 03:16+0000\n"
+"POT-Creation-Date: 2016-03-19 00:57+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: 2016-02-03 05:50+0000\n"
-"Last-Translator: Lucas Palm <lapalm@us.ibm.com>\n"
+"PO-Revision-Date: 2016-03-15 07:46+0000\n"
+"Last-Translator: Jennifer <cristxu@tw.ibm.com>\n"
 "Language: zh-TW\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 "Generated-By: Babel 2.0\n"
@@ -38,6 +39,10 @@ msgstr "無法建立表格 %(table_name)s，該表格已經存在。將忽略錯
 #, python-format
 msgid "Continue after error from %(name)s: %(error)s"
 msgstr "在 %(name)s 傳回錯誤 %(error)s 後繼續"
+
+#, python-format
+msgid "Could not connect slave host: %s "
+msgstr "無法連接附屬主機：%s"
 
 #, python-format
 msgid "Could not connect to XenAPI: %s"
@@ -67,10 +72,6 @@ msgstr "未設定分派器目標，將不公佈任何計量。請在ceilometer.c
 #, python-format
 msgid "Dropping Notification %(type)s (uuid:%(msgid)s)"
 msgstr "正在捨棄通知 %(type)s（UUID：%(msgid)s）"
-
-#, python-format
-msgid "Duplicate VM name found: %s"
-msgstr "發現重複的 VM 名稱：%s"
 
 #, python-format
 msgid ""
@@ -151,8 +152,18 @@ msgid "Ignoring instance %(name)s: %(error)s"
 msgstr "正在忽略實例 %(name)s：%(error)s"
 
 #, python-format
-msgid "Ignoring pool %(pool_id)s: %(error)s"
-msgstr "正在忽略儲存區 %(pool_id)s：%(error)s"
+msgid "Ignoring loadbalancer %(loadbalancer_id)s"
+msgstr "正在忽略負載平衡器 %(loadbalancer_id)s"
+
+#, python-format
+msgid "Ignoring pool %(pool_id)s"
+msgstr "正在忽略儲存區 %(pool_id)s"
+
+#, python-format
+msgid ""
+"Invalid YAML syntax in Definitions file %(file)s at line: %(line)s, column: "
+"%(column)s."
+msgstr "定義檔 %(file)s 第 %(line)s 行第 %(column)s 列中的 YAML 語法無效。"
 
 #, python-format
 msgid "Invalid period %(period)s: %(err)s"
@@ -176,6 +187,10 @@ msgstr "在 XenServer 中找到多個 VM %s"
 msgid "Must specify connection_url, and connection_password to use"
 msgstr "必須指定 connection_url 和 connection_password，才能使用"
 
+#, python-format
+msgid "No plugin named %(plugin)s available for %(name)s"
+msgstr "沒有名為 %(plugin)s 的外掛程式可供 %(name)s 使用"
+
 msgid "Node Manager init failed"
 msgstr "節點管理程式起始設定失敗"
 
@@ -192,8 +207,25 @@ msgid "Opencontrail API returned %(status)s %(reason)s"
 msgstr "Opencontrail API 傳回了 %(status)s %(reason)s"
 
 #, python-format
+msgid ""
+"Operator %(operator)s is not supported. Only equality operator is available "
+"for field %(field)s"
+msgstr "運算子 %(operator)s 不受支援。只有等式運算子才可供欄位 %(field)s 使用"
+
+#, python-format
+msgid ""
+"Operator %(operator)s is not supported. The supported operators are: "
+"%(supported)s"
+msgstr "運算子 %(operator)s 不受支援。受支援的運算子為：%(supported)s"
+
+#, python-format
 msgid "Order-by expression not valid: %s"
 msgstr "排序方式表示式無效：%s"
+
+#, python-format
+msgid ""
+"Parse error in JSONPath specification '%(jsonpath)s' for %(name)s: %(err)s"
+msgstr "%(name)s 的 JSONPath 規格 '%(jsonpath)s' 中發生剖析錯誤：%(err)s"
 
 msgid "Period must be positive."
 msgstr "期間必須是正數。"
@@ -217,8 +249,16 @@ msgid ""
 msgstr "管線 %(pipeline)s：%(smp)s 的轉換器 %(trans)s傳回錯誤後結束"
 
 #, python-format
+msgid "Plugin specified, but no plugin name supplied for %s"
+msgstr "已指定外掛程式，但卻未向 %s 提供外掛程式名稱"
+
+#, python-format
 msgid "Polling %(mtr)s sensor failed for %(cnt)s times!"
 msgstr "輪詢 %(mtr)s 感應器已失敗 %(cnt)s 次！"
+
+#, python-format
+msgid "Polling %(name)s failed for %(cnt)s times!"
+msgstr "輪詢 %(name)s 失敗了 %(cnt)s 次！"
 
 #, python-format
 msgid "Pollster for %s is disabled!"
@@ -275,6 +315,10 @@ msgid ""
 "The data type %(type)s is not supported. The supported data type list is: "
 "%(supported)s"
 msgstr "不支援資料類型 %(type)s。支援的資料類型清單為：%(supported)s"
+
+#, python-format
+msgid "The field 'fields' is required for %s"
+msgstr "%s 需要欄位「欄位」"
 
 msgid "The path for the file publisher is required"
 msgstr "需要檔案發佈者的路徑"
@@ -342,8 +386,21 @@ msgid "Unknown metadata type. Key (%s) will not be queryable."
 msgstr "不明的 meta 資料類型。索引鍵 (%s) 將不可查詢。"
 
 #, python-format
+msgid ""
+"Unknown status %(stat)s received on Load Balancer %(id)s, skipping sample"
+msgstr "在負載平衡器 %(id)s 上接收到不明狀態 %(stat)s，正在跳過範例"
+
+#, python-format
 msgid "Unknown status %(stat)s received on fw %(id)s,skipping sample"
 msgstr "在防火牆 %(id)s 上接收到不明狀態 %(stat)s，正在跳過範例"
+
+#, python-format
+msgid "Unknown status %(stat)s received on listener %(id)s, skipping sample"
+msgstr "在接聽器 %(id)s 上接收到不明狀態 %(stat)s，正在跳過範例"
+
+#, python-format
+msgid "Unknown status %(stat)s received on member %(id)s, skipping sample"
+msgstr "在成員 %(id)s 上接收到不明狀態 %(stat)s，正在跳過範例"
 
 #, python-format
 msgid "Unknown status %(stat)s received on pool %(id)s, skipping sample"
@@ -354,16 +411,16 @@ msgid "Unknown status %(stat)s received on vip %(id)s, skipping sample"
 msgstr "在 VIP %(id)s 上接收到不明狀態 %(stat)s，正在跳過範例"
 
 #, python-format
+msgid "Unknown status %(stat)s received on vpn %(id)s, skipping sample"
+msgstr "在 VPN %(id)s 上接收到不明狀態 %(stat)s，正在跳過範例"
+
+#, python-format
 msgid "VM %s not found in VMware vSphere"
 msgstr "在 VMware vSphere 中找不到 VM %s"
 
 #, python-format
 msgid "VM %s not found in XenServer"
 msgstr "在 XenServer 中找不到 VM %s"
-
-#, python-format
-msgid "VM %s not found on Hyper-V"
-msgstr "在 Hyper-V 上找不到 VM %s"
 
 msgid "Wrong sensor type"
 msgstr "感應器類型錯誤"
@@ -372,8 +429,15 @@ msgid "XenAPI not installed"
 msgstr "未安裝 XenAPI"
 
 #, python-format
+msgid "YAML error reading Definitions file %(file)s"
+msgstr "讀取定義檔 %(file)s 時發生 YAML 錯誤"
+
+#, python-format
 msgid "could not get CPU time for %(id)s: %(e)s"
 msgstr "無法取得 %(id)s 的 CPU 時間：%(e)s"
+
+msgid "direct option cannot be true when Gnocchi is enabled."
+msgstr "已啟用 Gnocchi 時，直接選項不能為 true。"
 
 #, python-format
 msgid "dropping out of time order sample: %s"

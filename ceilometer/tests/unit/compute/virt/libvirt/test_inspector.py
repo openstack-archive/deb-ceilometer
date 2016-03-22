@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-#
 # Copyright 2012 Red Hat, Inc
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -61,6 +59,17 @@ class TestLibvirtInspection(base.BaseTestCase):
             cpu_info = self.inspector.inspect_cpus(self.instance)
             self.assertEqual(2, cpu_info.number)
             self.assertEqual(999999, cpu_info.time)
+
+    def test_inspect_cpus_with_domain_shutoff(self):
+        connection = self.inspector.connection
+        with mock.patch.object(connection, 'lookupByUUIDString',
+                               return_value=self.domain):
+            with mock.patch.object(self.domain, 'info',
+                                   return_value=(5, 0, 0,
+                                                 2, 999999)):
+                self.assertRaises(virt_inspector.InstanceShutOffException,
+                                  self.inspector.inspect_cpus,
+                                  self.instance)
 
     def test_inspect_vnics(self):
         dom_xml = """
