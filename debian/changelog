@@ -2,6 +2,7 @@ ceilometer (1:6.0.0~rc-1) experimental; urgency=medium
 
   * New upstream release.
   * Added git to build-depends-indep.
+  * Fixed (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 10 Mar 2016 13:17:08 +0100
 
