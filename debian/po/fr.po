@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
-"POT-Creation-Date: 2015-06-26 13:18+0000\n"
+"POT-Creation-Date: 2016-03-29 12:22+0000\n"
 "PO-Revision-Date: 2015-06-15 17:32+0100\n"
 "Last-Translator: Julien Patriarca <leatherface@debian.org>\n"
 "Language-Team: FRENCH <debian-l10n-french@lists.debian.org>\n"
@@ -39,9 +39,14 @@ msgstr ""
 #. Type: boolean
 #. Description
 #: ../ceilometer-api.templates:2001
+#, fuzzy
+#| msgid ""
+#| "Note that you will need to have an up and running Keystone server on "
+#| "which to connect using the Keystone authentication token."
 msgid ""
 "Note that you will need to have an up and running Keystone server on which "
-"to connect using the Keystone authentication token."
+"to connect using a known admin project name, admin username and password. "
+"The admin auth token is not used anymore."
 msgstr ""
 "Veuillez noter que vous aurez besoin d'avoir un serveur Keystone fonctionnel "
 "sur lequel se connecter en utilisant le jeton d'authentification Keystone."
@@ -63,38 +68,55 @@ msgstr ""
 "Ceilometer puisse contacter Keystone pour établir le service Ceilometer et "
 "créer le point d'accès."
 
-#. Type: password
+#. Type: string
 #. Description
 #: ../ceilometer-api.templates:4001
-msgid "Keystone authentication token:"
+#, fuzzy
+#| msgid "Keystone authentication token:"
+msgid "Keystone admin name:"
 msgstr "Jeton d'authentification Keystone : "
 
+#. Type: string
+#. Description
+#. Type: string
+#. Description
 #. Type: password
 #. Description
-#: ../ceilometer-api.templates:4001
+#: ../ceilometer-api.templates:4001 ../ceilometer-api.templates:5001
+#: ../ceilometer-api.templates:6001
 msgid ""
-"To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
-"authentication token."
+"To register the service endpoint, this package needs to know the Admin "
+"login, name, project name, and password to the Keystone server."
 msgstr ""
-"Pour configurer son point d'accès dans Keystone, l’api de Ceilometer a "
-"besoin du jeton d'authentification Keystone."
 
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:5001
+msgid "Keystone admin project name:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../ceilometer-api.templates:6001
+msgid "Keystone admin password:"
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../ceilometer-api.templates:7001
 msgid "Ceilometer endpoint IP address:"
 msgstr "Adresse IP du point d'accès Ceilometer :"
 
 #. Type: string
 #. Description
-#: ../ceilometer-api.templates:5001
+#: ../ceilometer-api.templates:7001
 msgid "Please enter the IP address that will be used to contact Ceilometer."
 msgstr ""
 "Veuillez indiquer l'adresse IP qui sera utilisée pour contacter Ceilometer."
 
 #. Type: string
 #. Description
-#: ../ceilometer-api.templates:5001
+#: ../ceilometer-api.templates:7001
 msgid ""
 "This IP address should be accessible from the clients that will use this "
 "service, so if you are installing a public cloud, this should be a public IP "
@@ -106,13 +128,13 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../ceilometer-api.templates:6001
+#: ../ceilometer-api.templates:8001
 msgid "Name of the region to register:"
 msgstr "Nom de la région à enregistrer :"
 
 #. Type: string
 #. Description
-#: ../ceilometer-api.templates:6001
+#: ../ceilometer-api.templates:8001
 msgid ""
 "OpenStack supports using availability zones, with each region representing a "
 "location. Please enter the zone that you wish to use when registering the "
@@ -275,3 +297,10 @@ msgid "Please specify the password to use with the authentication server."
 msgstr ""
 "Veuillez indiquer le mot de passe à utiliser pour le serveur "
 "d'authentification."
+
+#~ msgid ""
+#~ "To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
+#~ "authentication token."
+#~ msgstr ""
+#~ "Pour configurer son point d'accès dans Keystone, l’api de Ceilometer a "
+#~ "besoin du jeton d'authentification Keystone."
