@@ -1,10 +1,11 @@
-ceilometer (1:6.0.0~rc1-3) unstable; urgency=medium
+ceilometer (1:6.0.0~rc3-1) unstable; urgency=medium
 
   [ Ivan Udovichenko ]
   * d/ceilometer-agent-*.init.in: Fix DAEMON_ARGS for
     central, compute and ipmi agents.
 
   [ Thomas Goirand ]
+  * New upstream release.
   * Uploading to unstable.
   * Updated ja.po debconf translation (Closes: #816342).
 
