@@ -3,25 +3,28 @@
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the ceilometer package.
 # victory <victory.deb@gmail.com>, 2013.
+# Takuma Yamada <tyamada@takumayamada.com>, 2016.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
 "POT-Creation-Date: 2016-03-29 12:22+0000\n"
-"PO-Revision-Date: 2013-07-11 02:06+0900\n"
-"Last-Translator: victory <victory.deb@gmail.com>\n"
+"PO-Revision-Date: 2016-02-23 15:56+0900\n"
+"Last-Translator: Takuma Yamada <tyamada@takumayamada.com>\n"
 "Language-Team: Japanese <debian-japanese@lists.debian.org>\n"
 "Language: ja\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Gtranslator 2.91.6\n"
 
 #. Type: boolean
 #. Description
 #: ../ceilometer-api.templates:2001
 msgid "Register Ceilometer in the Keystone endpoint catalog?"
-msgstr "Ceilometer を Keystone の端末リストに登録しますか?"
+msgstr "Ceilometer を Keystone のエンドポイントのカタログに登録しますか?"
 
 #. Type: boolean
 #. Description
@@ -31,9 +34,9 @@ msgid ""
 "accessible. This is done using \"keystone service-create\" and \"keystone "
 "endpoint-create\". This can be done automatically now."
 msgstr ""
-"OpenStack のサービスごと (API ごと) に、アクセスできるようにするため登録すべ"
-"きです。「keystone service-create」と「keystone endpoint-create」を使って登録"
-"することができます。ここで自動的に行うことができます。"
+"各 OpenStack のサービス (各 API ) がアクセスできるようにするために登録する必"
+"要があります。これは「keystone service-create」と「keystone endpoint-create」"
+"を使用して行われます。これは自動的に行うことができます。"
 
 #. Type: boolean
 #. Description
@@ -47,8 +50,8 @@ msgid ""
 "to connect using a known admin project name, admin username and password. "
 "The admin auth token is not used anymore."
 msgstr ""
-"Keystone 認証文字列を使って接続する先の Keystone サーバが必要なことに注意して"
-"ください。"
+"Keystone 認証トークンを使って接続するには、Keystone サーバの起動および実行が"
+"必要になりますので注意してください。"
 
 #. Type: string
 #. Description
@@ -63,8 +66,9 @@ msgid ""
 "Please enter the IP address of the Keystone server, so that ceilometer-api "
 "can contact Keystone to do the Ceilometer service and endpoint creation."
 msgstr ""
-"Keystone サーバの IP アドレスを入力してください。それにより ceilometer-api "
-"は Keystone と通信し、Ceilometer サービスや端末の作成ができるようになります。"
+"Keystone サーバの IP アドレスを入力してください。その結果 ceilometer-api は、"
+"Ceilometer サービスやエンドポイント作成を行うために Keystone へ通信することが"
+"できます。"
 
 #. Type: string
 #. Description
@@ -72,7 +76,7 @@ msgstr ""
 #, fuzzy
 #| msgid "Keystone authentication token:"
 msgid "Keystone admin name:"
-msgstr "Keystone 認証文字列:"
+msgstr "Keystone 認証トークン:"
 
 #. Type: string
 #. Description
@@ -103,13 +107,13 @@ msgstr ""
 #. Description
 #: ../ceilometer-api.templates:7001
 msgid "Ceilometer endpoint IP address:"
-msgstr "Ceilometer 端末の IP アドレス:"
+msgstr "Ceilometer エンドポイントの IP アドレス:"
 
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:7001
 msgid "Please enter the IP address that will be used to contact Ceilometer."
-msgstr "Ceilometer への通信に利用する IP アドレスを入力してください。"
+msgstr "Ceilometer への通信に使用される IP アドレスを入力してください。"
 
 #. Type: string
 #. Description
@@ -119,15 +123,15 @@ msgid ""
 "service, so if you are installing a public cloud, this should be a public IP "
 "address."
 msgstr ""
-"この IP アドレスはこのサービスを利用するクライアントからアクセスできないとい"
-"けないので、パブリッククラウドをインストールしている場合、これは公開 IP アド"
-"レスを使うようにしてください。"
+"この IP アドレスは、このサービスを利用するクライアントからアクセス可能でなけ"
+"ればならないので、パブリッククラウドをインストールしている場合、これはパブ"
+"リック IP アドレスでなければなりません。"
 
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:8001
 msgid "Name of the region to register:"
-msgstr "登録する領域の名前:"
+msgstr "登録するリージョンの名前:"
 
 #. Type: string
 #. Description
@@ -137,14 +141,15 @@ msgid ""
 "location. Please enter the zone that you wish to use when registering the "
 "endpoint."
 msgstr ""
-"OpenStack は位置を示す各領域による利用可能区分の利用をサポートしています。端"
-"末の登録時に利用したい区分を入力してください。"
+"OpenStack は、場所を表すリージョン毎に、アベイラビリティーゾーンの使用をサ"
+"ポートします。エンドポイントを登録する際に、使用するゾーンを入力してくださ"
+"い。"
 
 #. Type: boolean
 #. Description
 #: ../ceilometer-common.templates:2001
 msgid "Perform automatic dbsync for Ceilometer?"
-msgstr ""
+msgstr "Ceilometer の自動 dbsync を実行しますか?"
 
 #. Type: boolean
 #. Description
@@ -153,6 +158,8 @@ msgid ""
 "Ceilometer can automatically run ceilometer-dbsync after installation. For "
 "it to work, you need an up and running mongodb-server."
 msgstr ""
+"Ceilometerは、インストール後に自動的に ceilometer-dbsync を実行することができ"
+"ます。それが働くためには、mongodb-server の起動および実行が必要です。"
 
 #. Type: boolean
 #. Description
@@ -161,12 +168,14 @@ msgid ""
 "You can change this setting later on by running \"dpkg-reconfigure -plow "
 "ceilometer\"."
 msgstr ""
+"「dpkg-reconfigure -plow ceilometer」の実行により、後でこの設定を変更すること"
+"ができます。"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:3001
 msgid "IP address of your RabbitMQ host:"
-msgstr ""
+msgstr "RabiitMQ ホストの IP アドレス:"
 
 #. Type: string
 #. Description
@@ -180,44 +189,44 @@ msgid ""
 "In order to interoperate with other components of OpenStack, this package "
 "needs to connect to a central RabbitMQ server."
 msgstr ""
+"OpenStack のほかのコンポーネントと相互運用するためには、このパッケージは中央 "
+"RabbitMQ サーバに接続する必要があります。"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:3001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
 msgid "Please specify the IP address of that server."
-msgstr "Ceilometer への通信に利用する IP アドレスを入力してください。"
+msgstr "そのサーバーの IP アドレスを指定してください。"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:4001
 msgid "Username for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "RabbitMQ サーバ接続用のユーザ名"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:4001
 msgid "Please specify the username used to connect to the RabbitMQ server."
-msgstr ""
+msgstr "RabbitMQ サーバ接続に使用するユーザ名を指定してください。"
 
 #. Type: password
 #. Description
 #: ../ceilometer-common.templates:5001
 msgid "Password for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "RabbitMQ サーバ接続用のパスワード:"
 
 #. Type: password
 #. Description
 #: ../ceilometer-common.templates:5001
 msgid "Please specify the password used to connect to the RabbitMQ server."
-msgstr ""
+msgstr "RabbitMQ サーバ接続に使用するパスワードを指定してください。"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:6001
 msgid "Authentication server hostname:"
-msgstr ""
+msgstr "認証サーバのホスト名:"
 
 #. Type: string
 #. Description
@@ -227,6 +236,8 @@ msgid ""
 "Typically this is also the hostname of the OpenStack Identity Service "
 "(Keystone)."
 msgstr ""
+"Ceilometer 用認証サーバのホスト名を指定してください。通常これは OpenStack "
+"Identity Service (Keystone) のホスト名と同じです。"
 
 #. Type: string
 #. Description
@@ -239,7 +250,7 @@ msgstr ""
 #. locataire ("tenant")
 #: ../ceilometer-common.templates:7001
 msgid "Authentication server tenant name:"
-msgstr ""
+msgstr "認証サーバのテナント (tenant) 名:"
 
 #. Type: string
 #. Description
@@ -251,42 +262,36 @@ msgstr ""
 #. or keep it parenthezised. Example for French:
 #. locataire ("tenant")
 #: ../ceilometer-common.templates:7001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
 msgid "Please specify the authentication server tenant name."
-msgstr "Ceilometer への通信に利用する IP アドレスを入力してください。"
+msgstr "認証サーバのテナント (tenant) 名を指定してください。"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:8001
 msgid "Authentication server username:"
-msgstr ""
+msgstr "認証サーバのユーザ名:"
 
 #. Type: string
 #. Description
 #: ../ceilometer-common.templates:8001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
 msgid "Please specify the username to use with the authentication server."
-msgstr "Ceilometer への通信に利用する IP アドレスを入力してください。"
+msgstr "認証サーバで使用するユーザ名を指定してください。"
 
 #. Type: password
 #. Description
 #: ../ceilometer-common.templates:9001
 msgid "Authentication server password:"
-msgstr ""
+msgstr "認証サーバのパスワード:"
 
 #. Type: password
 #. Description
 #: ../ceilometer-common.templates:9001
-#, fuzzy
-#| msgid "Please enter the IP address that will be used to contact Ceilometer."
 msgid "Please specify the password to use with the authentication server."
-msgstr "Ceilometer への通信に利用する IP アドレスを入力してください。"
+msgstr "認証サーバで使用するパスワードを指定してください。"
 
 #~ msgid ""
 #~ "To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
 #~ "authentication token."
 #~ msgstr ""
-#~ "Keystone で端末を設定するには、ceilometer-api は Keystone 認証文字列を必要"
-#~ "とします。"
+#~ "Keystone でエンドポイントを設定するには、ceilometer-api は Keystone 認証"
+#~ "トークンを必要とします。"
