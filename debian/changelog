@@ -8,6 +8,10 @@ ceilometer (1:6.0.0-2) UNRELEASED; urgency=medium
   * Updated Japanese debconf templates (Closes: #820760).
   * Updated Dutch debconf templates (Closes: #822966).
   * Added Brazilian Portuguese debconf templates (Closes: #824295).
+  * Check if /usr/bin/ceilometer-collector is there before attempting to call
+    /usr/bin/ceilometer-expirer in the daily cron, so that there's no risk to
+    have an output if the ceilometer-collector package is removed
+    (Closes: #822897).
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 19 May 2016 10:48:09 +0200
 

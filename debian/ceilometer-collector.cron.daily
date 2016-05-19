@@ -1,4 +1,7 @@
 #!/bin/sh
 
-test -x /usr/bin/ceilometer-expirer || exit 0
-su -s /bin/sh -c "exec /usr/bin/ceilometer-expirer" ceilometer
+if [ -x /usr/bin/ceilometer-expirer ] && [ -x /usr/bin/ceilometer-collector ] ; then
+	su -s /bin/sh -c "exec /usr/bin/ceilometer-expirer" ceilometer
+fi
+
+exit 0
