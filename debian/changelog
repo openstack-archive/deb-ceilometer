@@ -1,3 +1,9 @@
+ceilometer (1:6.0.0-3) UNRELEASED; urgency=medium
+
+  * Updated Danish translation of the debconf templates (Closes: #830640).
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 11 Jul 2016 14:27:01 +0200
+
 ceilometer (1:6.0.0-2) unstable; urgency=medium
 
   [ Ondřej Nový ]
