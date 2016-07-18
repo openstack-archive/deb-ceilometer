@@ -1,7 +1,8 @@
-ceilometer (1:7.0.0_b2-1) experimental; urgency=medium
+ceilometer (1:7.0.0~b2-1) experimental; urgency=medium
 
   * Updated Danish translation of the debconf templates (Closes: #830640).
   * New upstream release.
+  * Fixed (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 18 Jul 2016 19:57:15 +0200
 
