@@ -22,7 +22,6 @@ import base64
 import datetime
 
 from oslo_config import cfg
-from oslo_context import context
 from oslo_log import log
 from oslo_utils import strutils
 from oslo_utils import timeutils
@@ -40,6 +39,7 @@ from ceilometer.i18n import _
 from ceilometer.publisher import utils as publisher_utils
 from ceilometer import sample
 from ceilometer import storage
+from ceilometer.storage import base as storage_base
 from ceilometer import utils
 
 LOG = log.getLogger(__name__)
@@ -117,8 +117,8 @@ class OldSample(base.Base):
                    resource_id='bd9431c1-8d69-4ad3-803a-8d4a6b89fd36',
                    project_id='35b17138-b364-4e6a-a131-8f3099c5be68',
                    user_id='efd87807-12d2-4b38-9c70-5f5c2ac427ff',
-                   recorded_at=datetime.datetime.utcnow(),
-                   timestamp=datetime.datetime.utcnow(),
+                   recorded_at=datetime.datetime(2015, 1, 1, 12, 0, 0, 0),
+                   timestamp=datetime.datetime(2015, 1, 1, 12, 0, 0, 0),
                    resource_metadata={'name1': 'value1',
                                       'name2': 'value2'},
                    message_id='5460acce-4fd6-480d-ab18-9735ec7b1996',
@@ -235,6 +235,11 @@ class Aggregate(base.Base):
 
     @staticmethod
     def validate(aggregate):
+        valid_agg = (storage_base.Connection.CAPABILITIES.get('statistics', {})
+                     .get('aggregation', {}).get('selectable', {}).keys())
+        if aggregate.func not in valid_agg:
+            msg = _('Invalid aggregation function: %s') % aggregate.func
+            raise base.ClientSideError(msg)
         return aggregate
 
     @classmethod
@@ -363,12 +368,12 @@ class MeterController(rest.RestController):
             else:
                 published_samples.append(sample_dict)
         if not direct:
-            ctxt = context.RequestContext(user=def_user_id,
-                                          tenant=def_project_id,
-                                          is_admin=True)
-            notifier = pecan.request.notifier
-            notifier.sample(ctxt.to_dict(), 'telemetry.api',
-                            {'samples': published_samples})
+            pecan.request.notifier.sample(
+                {'user': def_user_id,
+                 'tenant': def_project_id,
+                 'is_admin': True},
+                'telemetry.api',
+                {'samples': published_samples})
 
         return samples
 

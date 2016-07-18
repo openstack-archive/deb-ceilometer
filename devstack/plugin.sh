@@ -6,9 +6,9 @@
 # [[local|localrc]]
 # enable_plugin ceilometer git://git.openstack.org/openstack/ceilometer
 #
-# By default all ceilometer services are started (see
-# devstack/settings). To disable a specific service use the
-# disable_service function.
+# By default all ceilometer services are started (see devstack/settings)
+# except for the ceilometer-aipmi service. To disable a specific service
+# use the disable_service function.
 #
 # NOTE: Currently, there are two ways to get the IPMI based meters in
 # OpenStack. One way is to configure Ironic conductor to report those meters
@@ -17,13 +17,15 @@
 # functionality. So in order to do so, users need to set the option of
 # conductor.send_sensor_data to true in the ironic.conf configuration file
 # for the Ironic conductor service, and also enable the
-# ceilometer-anotification service. If you do this disable the IPMI
-# polling agent:
-#
-# disable_service ceilometer-aipmi
+# ceilometer-anotification service.
 #
 # The other way is to use Ceilometer ipmi agent only to get the IPMI based
-# meters. To avoid duplicated meters, users need to make sure to set the
+# meters. To make use of the Ceilometer ipmi agent, it must be explicitly
+# enabled with the following setting:
+#
+# enable_service ceilometer-aipmi
+#
+# To avoid duplicated meters, users need to make sure to set the
 # option of conductor.send_sensor_data to false in the ironic.conf
 # configuration file if the node on which Ceilometer ipmi agent is running
 # is also managed by Ironic.
@@ -40,8 +42,6 @@
 # Save trace setting
 XTRACE=$(set +o | grep xtrace)
 set -o xtrace
-# TODO(liusheng) Temporarily add this to avoid integration test failue, see bug1548634
-export SERVICE_TENANT_NAME=$SERVICE_PROJECT_NAME
 
 # Support potential entry-points console scripts in VENV or not
 if [[ ${USE_VENV} = True ]]; then
@@ -163,8 +163,12 @@ function _ceilometer_prepare_virt_drivers {
 
 
 # Create ceilometer related accounts in Keystone
-function _ceilometer_create_accounts {
+function ceilometer_create_accounts {
     if is_service_enabled ceilometer-api; then
+        # At this time, the /etc/openstack/clouds.yaml is available,
+        # we could leverage that by setting OS_CLOUD
+        OLD_OS_CLOUD=$OS_CLOUD
+        export OS_CLOUD='devstack-admin'
 
         create_service_user "ceilometer" "admin"
 
@@ -179,6 +183,8 @@ function _ceilometer_create_accounts {
             # Ceilometer needs ResellerAdmin role to access Swift account stats.
             get_or_add_user_project_role "ResellerAdmin" "ceilometer" $SERVICE_PROJECT_NAME
         fi
+
+        export OS_CLOUD=$OLD_OS_CLOUD
     fi
 }
 
@@ -196,7 +202,7 @@ function _ceilometer_cleanup_apache_wsgi {
     fi
 }
 
-function _drop_database {
+function _ceilometer_drop_database {
     if is_service_enabled ceilometer-collector ceilometer-api ; then
         if [ "$CEILOMETER_BACKEND" = 'mongodb' ] ; then
             mongo ceilometer --eval "db.dropDatabase();"
@@ -210,13 +216,9 @@ function _drop_database {
 # from previous runs that a clean run would need to clean up
 function cleanup_ceilometer {
     _ceilometer_cleanup_apache_wsgi
-    _drop_database
+    _ceilometer_drop_database
     sudo rm -f "$CEILOMETER_CONF_DIR"/*
     sudo rmdir "$CEILOMETER_CONF_DIR"
-    if is_service_enabled ceilometer-api && [ "$CEILOMETER_USE_MOD_WSGI" == "False" ]; then
-        sudo rm -f "$CEILOMETER_API_LOG_DIR"/*
-        sudo rmdir "$CEILOMETER_API_LOG_DIR"
-    fi
 }
 
 # Set configuraiton for cache backend.
@@ -268,7 +270,7 @@ function _ceilometer_configure_storage_backend {
     else
         die $LINENO "Unable to configure unknown CEILOMETER_BACKEND $CEILOMETER_BACKEND"
     fi
-    _drop_database
+    _ceilometer_drop_database
 }
 
 # Configure Ceilometer
@@ -278,13 +280,11 @@ function configure_ceilometer {
 
     iniset_rpc_backend ceilometer $CEILOMETER_CONF
 
-    iniset $CEILOMETER_CONF DEFAULT notification_topics "$CEILOMETER_NOTIFICATION_TOPICS"
-    iniset $CEILOMETER_CONF DEFAULT verbose True
+    iniset $CEILOMETER_CONF oslo_messaging_notifications topics "$CEILOMETER_NOTIFICATION_TOPICS"
     iniset $CEILOMETER_CONF DEFAULT debug "$ENABLE_DEBUG_LOG_LEVEL"
 
     if [[ -n "$CEILOMETER_COORDINATION_URL" ]]; then
         iniset $CEILOMETER_CONF coordination backend_url $CEILOMETER_COORDINATION_URL
-        iniset $CEILOMETER_CONF compute workload_partitioning True
         iniset $CEILOMETER_CONF notification workload_partitioning True
         iniset $CEILOMETER_CONF notification workers $API_WORKERS
     fi
@@ -304,7 +304,6 @@ function configure_ceilometer {
                     gnocchi_resources.yaml; do
         cp $CEILOMETER_DIR/etc/ceilometer/$conffile $CEILOMETER_CONF_DIR
     done
-    iniset $CEILOMETER_CONF oslo_policy policy_file $CEILOMETER_CONF_DIR/policy.json
 
     if [ "$CEILOMETER_PIPELINE_INTERVAL" ]; then
         sed -i "s/interval:.*/interval: ${CEILOMETER_PIPELINE_INTERVAL}/" $CEILOMETER_CONF_DIR/pipeline.yaml
@@ -356,8 +355,6 @@ function configure_ceilometer {
 
 # init_ceilometer() - Initialize etc.
 function init_ceilometer {
-    # Get ceilometer keystone settings in place
-    _ceilometer_create_accounts
     # Create cache dir
     sudo install -d -o $STACK_USER $CEILOMETER_AUTH_CACHE_DIR
     rm -f $CEILOMETER_AUTH_CACHE_DIR/*
@@ -376,7 +373,7 @@ function init_ceilometer {
 # installed. The context is not active during preinstall (when it would
 # otherwise makes sense to do the backend services).
 function install_ceilometer {
-    if is_service_enabled ceilometer-acentral ceilometer-anotification ceilometer-alarm-evaluator ; then
+    if is_service_enabled ceilometer-acentral ceilometer-acompute ceilometer-anotification ; then
         _ceilometer_prepare_coordination
     fi
 
@@ -391,9 +388,6 @@ function install_ceilometer {
     install_ceilometerclient
     setup_develop $CEILOMETER_DIR
     sudo install -d -o $STACK_USER -m 755 $CEILOMETER_CONF_DIR
-    if is_service_enabled ceilometer-api && [ "$CEILOMETER_USE_MOD_WSGI" == "False" ]; then
-        sudo install -d -o $STACK_USER -m 755 $CEILOMETER_API_LOG_DIR
-    fi
 }
 
 # install_ceilometerclient() - Collect source and prepare
@@ -414,7 +408,7 @@ function start_ceilometer {
     run_process ceilometer-aipmi "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces ipmi --config-file $CEILOMETER_CONF"
 
     if [[ "$CEILOMETER_USE_MOD_WSGI" == "False" ]]; then
-        run_process ceilometer-api "$CEILOMETER_BIN_DIR/ceilometer-api -d -v --log-dir=$CEILOMETER_API_LOG_DIR --config-file $CEILOMETER_CONF"
+        run_process ceilometer-api "$CEILOMETER_BIN_DIR/ceilometer-api -d -v --config-file $CEILOMETER_CONF"
     elif is_service_enabled ceilometer-api; then
         enable_apache_site ceilometer
         restart_apache_server
@@ -433,14 +427,6 @@ function start_ceilometer {
     fi
     if [[ "$VIRT_DRIVER" = 'vsphere' ]]; then
         run_process ceilometer-acompute "$CEILOMETER_BIN_DIR/ceilometer-polling --polling-namespaces compute --config-file $CEILOMETER_CONF"
-    fi
-
-    # Only die on API if it was actually intended to be turned on
-    if is_service_enabled ceilometer-api; then
-        echo "Waiting for ceilometer-api to start..."
-        if ! wait_for_service $SERVICE_TIMEOUT $(ceilometer_service_url)/v2/; then
-            die $LINENO "ceilometer-api did not start"
-        fi
     fi
 }
 
@@ -474,6 +460,8 @@ if is_service_enabled ceilometer; then
     elif [[ "$1" == "stack" && "$2" == "post-config" ]]; then
         echo_summary "Configuring Ceilometer"
         configure_ceilometer
+        # Get ceilometer keystone settings in place
+        ceilometer_create_accounts
     elif [[ "$1" == "stack" && "$2" == "extra" ]]; then
         echo_summary "Initializing Ceilometer"
         # Tidy base for ceilometer

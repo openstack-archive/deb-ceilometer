@@ -15,17 +15,16 @@ import itertools
 import pkg_resources
 import six
 
-from debtcollector import moves
 from oslo_config import cfg
 from oslo_log import log
 import oslo_messaging
+from oslo_utils import fnmatch
 from stevedore import extension
 
 from ceilometer.agent import plugin_base
 from ceilometer import declarative
 from ceilometer.i18n import _LE, _LW
 from ceilometer import sample
-from ceilometer import utils
 
 OPTS = [
     cfg.StrOpt('meter_definitions_cfg_file',
@@ -41,13 +40,6 @@ cfg.CONF.import_opt('disable_non_metric_meters', 'ceilometer.notification',
 LOG = log.getLogger(__name__)
 
 
-MeterDefinitionException = moves.moved_class(declarative.DefinitionException,
-                                             'MeterDefinitionException',
-                                             __name__,
-                                             version=6.0,
-                                             removal_version="?")
-
-
 class MeterDefinition(object):
 
     SAMPLE_ATTRIBUTES = ["name", "type", "volume", "unit", "timestamp",
@@ -61,7 +53,7 @@ class MeterDefinition(object):
         missing = [field for field in self.REQUIRED_FIELDS
                    if not self.cfg.get(field)]
         if missing:
-            raise declarative.DefinitionException(
+            raise declarative.MeterDefinitionException(
                 _LE("Required fields %s not specified") % missing, self.cfg)
 
         self._event_type = self.cfg.get('event_type')
@@ -70,7 +62,7 @@ class MeterDefinition(object):
 
         if ('type' not in self.cfg.get('lookup', []) and
                 self.cfg['type'] not in sample.TYPES):
-            raise declarative.DefinitionException(
+            raise declarative.MeterDefinitionException(
                 _LE("Invalid type %s specified") % self.cfg['type'], self.cfg)
 
         self._fallback_user_id = declarative.Definition(
@@ -97,7 +89,7 @@ class MeterDefinition(object):
 
     def match_type(self, meter_name):
         for t in self._event_type:
-            if utils.match(meter_name, t):
+            if fnmatch.fnmatch(meter_name, t):
                 return True
 
     def to_samples(self, message, all_values=False):
@@ -125,7 +117,7 @@ class MeterDefinition(object):
             if parser is not None:
                 value = parser.parse(message, bool(self.lookup))
                 # NOTE(sileht): If we expect multiple samples
-                # some attributes and overriden even we doesn't get any
+                # some attributes are overridden even we don't get any
                 # result. Also note in this case value is always a list
                 if ((not self.lookup and value is not None) or
                         (self.lookup and ((name in self.lookup + ["name"])
@@ -193,10 +185,9 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
                     or not cfg.CONF.notification.disable_non_metric_meters):
                 try:
                     md = MeterDefinition(meter_cfg, plugin_manager)
-                except declarative.DefinitionException as me:
-                    errmsg = (_LE("Error loading meter definition : %(err)s")
-                              % dict(err=six.text_type(me)))
-                    LOG.error(errmsg)
+                except declarative.DefinitionException as e:
+                    errmsg = _LE("Error loading meter definition: %s")
+                    LOG.error(errmsg, six.text_type(e))
                 else:
                     definitions[meter_cfg['name']] = md
         return definitions.values()
@@ -220,7 +211,6 @@ class ProcessMeterNotifications(plugin_base.NotificationBase):
             conf.trove_control_exchange,
             conf.zaqar_control_exchange,
             conf.swift_control_exchange,
-            conf.magnetodb_control_exchange,
             conf.ceilometer_control_exchange,
             conf.magnum_control_exchange,
             conf.dns_control_exchange,

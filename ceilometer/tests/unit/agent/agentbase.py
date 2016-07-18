@@ -4,11 +4,6 @@
 # Copyright 2013 eNovance
 # Copyright 2014 Red Hat, Inc
 #
-# Authors: Yunhong Jiang <yunhong.jiang@intel.com>
-#          Julien Danjou <julien@danjou.info>
-#          Eoghan Glynn <eglynn@redhat.com>
-#          Nejc Saje <nsaje@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -24,6 +19,7 @@
 import abc
 import copy
 import datetime
+import time
 
 import mock
 from oslo_config import fixture as fixture_config
@@ -42,7 +38,8 @@ from ceilometer import utils
 
 class TestSample(sample.Sample):
     def __init__(self, name, type, unit, volume, user_id, project_id,
-                 resource_id, timestamp, resource_metadata, source=None):
+                 resource_id, timestamp=None, resource_metadata=None,
+                 source=None):
         super(TestSample, self).__init__(name, type, unit, volume, user_id,
                                          project_id, resource_id, timestamp,
                                          resource_metadata, source)
@@ -221,7 +218,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
                                     None,
                                     self.PollsterExceptionAnother(), )]
 
-    def create_discovery_manager(self):
+    def create_discoveries(self):
         return extension.ExtensionManager.make_test_instance(
             [
                 extension.Extension(
@@ -254,6 +251,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             'pipeline_cfg_file',
             self.path_get('etc/ceilometer/pipeline.yaml')
         )
+        self.CONF.set_override('heartbeat', 1.0, group='coordination')
         self.CONF(args=[])
         self.mgr = self.create_manager()
         self.mgr.extensions = self.create_extension_list()
@@ -307,39 +305,60 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
 
     @mock.patch('ceilometer.pipeline.setup_polling')
     def test_start(self, setup_polling):
-        self.mgr.join_partitioning_groups = mock.MagicMock()
         self.mgr.setup_polling_tasks = mock.MagicMock()
+        mpc = self.mgr.partition_coordinator
+        mpc.is_active.return_value = False
         self.CONF.set_override('heartbeat', 1.0, group='coordination')
+        self.mgr.partition_coordinator.heartbeat = mock.MagicMock()
         self.mgr.start()
         setup_polling.assert_called_once_with()
-        self.mgr.partition_coordinator.start.assert_called_once_with()
-        self.mgr.join_partitioning_groups.assert_called_once_with()
+        mpc.start.assert_called_once_with()
+        self.assertEqual(2, mpc.join_group.call_count)
         self.mgr.setup_polling_tasks.assert_called_once_with()
-        timer_call = mock.call(1.0, self.mgr.partition_coordinator.heartbeat)
-        self.assertEqual([timer_call], self.mgr.tg.add_timer.call_args_list)
+
+        # Wait first heatbeat
+        runs = 0
+        for i in six.moves.range(10):
+            runs = list(self.mgr.heartbeat_timer.iter_watchers())[0].runs
+            if runs > 0:
+                break
+            time.sleep(0.5)
+        self.assertGreaterEqual(1, runs)
+
         self.mgr.stop()
-        self.mgr.partition_coordinator.stop.assert_called_once_with()
+        mpc.stop.assert_called_once_with()
 
     @mock.patch('ceilometer.pipeline.setup_polling')
     def test_start_with_pipeline_poller(self, setup_polling):
-        self.mgr.join_partitioning_groups = mock.MagicMock()
         self.mgr.setup_polling_tasks = mock.MagicMock()
-
+        mpc = self.mgr.partition_coordinator
+        mpc.is_active.return_value = False
         self.CONF.set_override('heartbeat', 1.0, group='coordination')
+        self.mgr.partition_coordinator.heartbeat = mock.MagicMock()
+
         self.CONF.set_override('refresh_pipeline_cfg', True)
         self.CONF.set_override('pipeline_polling_interval', 5)
+        self.addCleanup(self.mgr.stop)
         self.mgr.start()
+        self.addCleanup(self.mgr.stop)
         setup_polling.assert_called_once_with()
-        self.mgr.partition_coordinator.start.assert_called_once_with()
-        self.mgr.join_partitioning_groups.assert_called_once_with()
+        mpc.start.assert_called_once_with()
+        self.assertEqual(2, mpc.join_group.call_count)
         self.mgr.setup_polling_tasks.assert_called_once_with()
-        timer_call = mock.call(1.0, self.mgr.partition_coordinator.heartbeat)
-        pipeline_poller_call = mock.call(5, self.mgr.refresh_pipeline)
-        self.assertEqual([timer_call, pipeline_poller_call],
-                         self.mgr.tg.add_timer.call_args_list)
+
+        # Wait first heatbeat
+        runs = 0
+        for i in six.moves.range(10):
+            runs = list(self.mgr.heartbeat_timer.iter_watchers())[0].runs
+            if runs > 0:
+                break
+            time.sleep(0.5)
+        self.assertGreaterEqual(1, runs)
+
+        self.assertEqual([], list(self.mgr.polling_periodics.iter_watchers()))
 
     def test_join_partitioning_groups(self):
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.mgr.join_partitioning_groups()
         p_coord = self.mgr.partition_coordinator
         static_group_ids = [utils.hash_of_set(p['resources'])
@@ -413,9 +432,9 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         mgr = self.create_manager()
         mgr.extensions = self.mgr.extensions
         mgr.create_polling_task = mock.MagicMock()
-        mgr.tg = mock.MagicMock()
         mgr.start()
-        self.assertTrue(mgr.tg.add_timer.called)
+        self.addCleanup(mgr.stop)
+        mgr.create_polling_task.assert_called_once_with()
 
     def test_manager_exception_persistency(self):
         self.pipeline_cfg['sources'].append({
@@ -434,7 +453,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
     def _do_test_per_pollster_discovery(self, discovered_resources,
                                         static_resources):
         self.Pollster.discovery = 'testdiscovery'
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.Discovery.resources = discovered_resources
         self.DiscoveryAnother.resources = [d[::-1]
                                            for d in discovered_resources]
@@ -484,7 +503,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         discovered_resources = ['discovered_1', 'discovered_2']
         self.Pollster.discovery = 'testdiscovery'
         self.PollsterAnother.discovery = 'testdiscovery'
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.Discovery.resources = discovered_resources
         self.pipeline_cfg['sources'][0]['meters'].append('testanother')
         self.pipeline_cfg['sources'][0]['resources'] = []
@@ -498,7 +517,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
     def _do_test_per_pipeline_discovery(self,
                                         discovered_resources,
                                         static_resources):
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.Discovery.resources = discovered_resources
         self.DiscoveryAnother.resources = [d[::-1]
                                            for d in discovered_resources]
@@ -548,7 +567,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
             'discovery': ['testdiscoveryanother'],
             'sinks': ['test_sink_new']
         })
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.Discovery.resources = ['discovered_1', 'discovered_2']
         self.DiscoveryAnother.resources = ['discovered_3', 'discovered_4']
         self.setup_polling()
@@ -589,7 +608,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
                   'transformers': [],
                   'publishers': ['test://']}]
         self.pipeline_cfg = {'sources': sources, 'sinks': sinks}
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.setup_polling()
         polling_tasks = self.mgr.setup_polling_tasks()
         self.assertEqual(1, len(polling_tasks))
@@ -616,7 +635,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
                   'transformers': [],
                   'publishers': ['test://']}]
         self.pipeline_cfg = {'sources': sources, 'sinks': sinks}
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         self.setup_polling()
         polling_tasks = self.mgr.setup_polling_tasks()
         self.assertEqual(1, len(polling_tasks))
@@ -627,7 +646,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
                          self.Pollster.resources)
 
     def test_discovery_partitioning(self):
-        self.mgr.discovery_manager = self.create_discovery_manager()
+        self.mgr.discoveries = self.create_discoveries()
         p_coord = self.mgr.partition_coordinator
         self.pipeline_cfg['sources'][0]['discovery'] = [
             'testdiscovery', 'testdiscoveryanother',
@@ -638,7 +657,7 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         self.mgr.interval_task(polling_tasks.get(60))
         expected = [mock.call(self.mgr.construct_group_id(d.obj.group_id),
                               d.obj.resources)
-                    for d in self.mgr.discovery_manager
+                    for d in self.mgr.discoveries
                     if hasattr(d.obj, 'resources')]
         self.assertEqual(len(expected),
                          len(p_coord.extract_my_subset.call_args_list))
@@ -715,3 +734,21 @@ class BaseAgentManagerTestCase(base.BaseTestCase):
         LOG.info.assert_called_with(
             'Skip pollster %(name)s, no %(p_context)sresources found this '
             'cycle', {'name': 'test', 'p_context': 'new '})
+
+    @mock.patch('oslo_utils.timeutils.utcnow')
+    def test_polling_samples_timestamp(self, mock_utc):
+        polled_samples = []
+        timestamp = '2222-11-22T00:11:22.333333'
+
+        def fake_send_notification(samples):
+            polled_samples.extend(samples)
+
+        mock_utc.return_value = datetime.datetime.strptime(
+            timestamp, "%Y-%m-%dT%H:%M:%S.%f")
+
+        self.setup_polling()
+        polling_task = list(self.mgr.setup_polling_tasks().values())[0]
+        polling_task._send_notification = mock.Mock(
+            side_effect=fake_send_notification)
+        polling_task.poll_and_notify()
+        self.assertEqual(timestamp, polled_samples[0]['timestamp'])

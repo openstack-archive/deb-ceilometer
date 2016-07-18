@@ -2,10 +2,6 @@
 # Copyright 2013 Julien Danjou
 # Copyright 2014 Red Hat, Inc
 #
-# Authors: Julien Danjou <julien@danjou.info>
-#          Eoghan Glynn <eglynn@redhat.com>
-#          Nejc Saje <nsaje@redhat.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -22,12 +18,15 @@ import collections
 import itertools
 import random
 
+from concurrent import futures
+from futurist import periodics
 from keystoneauth1 import exceptions as ka_exceptions
 from keystoneclient import exceptions as ks_exceptions
 from oslo_config import cfg
-from oslo_context import context
 from oslo_log import log
 import oslo_messaging
+from oslo_utils import fnmatch
+from oslo_utils import timeutils
 from six import moves
 from six.moves.urllib import parse as urlparse
 from stevedore import extension
@@ -88,13 +87,19 @@ class PollsterListForbidden(Exception):
         super(PollsterListForbidden, self).__init__(msg)
 
 
+class EmptyPollstersList(Exception):
+    def __init__(self):
+        msg = ('No valid pollsters can be loaded with the startup parameters'
+               ' polling-namespaces and pollster-list.')
+        super(EmptyPollstersList, self).__init__(msg)
+
+
 class Resources(object):
     def __init__(self, agent_manager):
         self.agent_manager = agent_manager
         self._resources = []
         self._discovery = []
         self.blacklist = []
-        self.last_dup = []
 
     def setup(self, source):
         self._resources = source.resources
@@ -183,6 +188,7 @@ class PollingTask(object):
                              "%(src)s"),
                          dict(poll=pollster.name, src=source_name))
                 try:
+                    polling_timestamp = timeutils.utcnow().isoformat()
                     samples = pollster.obj.get_samples(
                         manager=self.manager,
                         cache=cache,
@@ -191,6 +197,8 @@ class PollingTask(object):
                     sample_batch = []
 
                     for sample in samples:
+                        # Note(yuywz): Unify the timestamp of polled samples
+                        sample.set_timestamp(polling_timestamp)
                         sample_dict = (
                             publisher_utils.meter_message_from_counter(
                                 sample, self._telemetry_secret
@@ -217,13 +225,13 @@ class PollingTask(object):
 
     def _send_notification(self, samples):
         self.manager.notifier.sample(
-            self.manager.context.to_dict(),
+            {},
             'telemetry.polling',
             {'samples': samples}
         )
 
 
-class AgentManager(service_base.BaseService):
+class AgentManager(service_base.PipelineBasedService):
 
     def __init__(self, namespaces=None, pollster_list=None):
         namespaces = namespaces or ['compute', 'central']
@@ -240,7 +248,7 @@ class AgentManager(service_base.BaseService):
 
         def _match(pollster):
             """Find out if pollster name matches to one of the list."""
-            return any(utils.match(pollster.name, pattern) for
+            return any(fnmatch.fnmatch(pollster.name, pattern) for
                        pattern in pollster_list)
 
         if type(namespaces) is not list:
@@ -262,9 +270,19 @@ class AgentManager(service_base.BaseService):
         self.extensions = list(itertools.chain(*list(extensions))) + list(
             itertools.chain(*list(extensions_fb)))
 
-        self.discovery_manager = self._extensions('discover')
-        self.context = context.RequestContext('admin', 'admin', is_admin=True)
+        if self.extensions == []:
+            raise EmptyPollstersList()
+
+        discoveries = (self._extensions('discover', namespace).extensions
+                       for namespace in namespaces)
+        self.discoveries = list(itertools.chain(*list(discoveries)))
+        self.polling_periodics = None
+
         self.partition_coordinator = coordination.PartitionCoordinator()
+        self.heartbeat_timer = utils.create_periodic(
+            target=self.partition_coordinator.heartbeat,
+            spacing=cfg.CONF.coordination.heartbeat,
+            run_immediately=True)
 
         # Compose coordination group prefix.
         # We'll use namespaces as the basement for this partitioning.
@@ -323,7 +341,7 @@ class AgentManager(service_base.BaseService):
 
     def join_partitioning_groups(self):
         self.groups = set([self.construct_group_id(d.obj.group_id)
-                          for d in self.discovery_manager])
+                          for d in self.discoveries])
         # let each set of statically-defined resources have its own group
         static_resource_groups = set([
             self.construct_group_id(utils.hash_of_set(p.resources))
@@ -331,6 +349,15 @@ class AgentManager(service_base.BaseService):
             if p.resources
         ])
         self.groups.update(static_resource_groups)
+
+        if not self.groups and self.partition_coordinator.is_active():
+            self.partition_coordinator.stop()
+            self.heartbeat_timer.stop()
+
+        if self.groups and not self.partition_coordinator.is_active():
+            self.partition_coordinator.start()
+            utils.spawn_thread(self.heartbeat_timer.start)
+
         for group in self.groups:
             self.partition_coordinator.join_group(group)
 
@@ -356,7 +383,12 @@ class AgentManager(service_base.BaseService):
                            discovery_group_id)
                 if discovery_group_id else None)
 
-    def configure_polling_tasks(self):
+    def start_polling_tasks(self):
+        # NOTE(sileht): 1000 is just the same as previous oslo_service code
+        self.polling_periodics = periodics.PeriodicWorker.create(
+            [], executor_factory=lambda:
+            futures.ThreadPoolExecutor(max_workers=1000))
+
         # allow time for coordination if necessary
         delay_start = self.partition_coordinator.is_active()
 
@@ -364,32 +396,33 @@ class AgentManager(service_base.BaseService):
         delay_polling_time = random.randint(
             0, cfg.CONF.shuffle_time_before_polling_task)
 
-        pollster_timers = []
         data = self.setup_polling_tasks()
         for interval, polling_task in data.items():
             delay_time = (interval + delay_polling_time if delay_start
                           else delay_polling_time)
-            pollster_timers.append(self.tg.add_timer(interval,
-                                   self.interval_task,
-                                   initial_delay=delay_time,
-                                   task=polling_task))
-        self.tg.add_timer(cfg.CONF.coordination.heartbeat,
-                          self.partition_coordinator.heartbeat)
 
-        return pollster_timers
+            @periodics.periodic(spacing=interval, run_immediately=False)
+            def task():
+                self.interval_task(polling_task)
+
+            utils.spawn_thread(utils.delayed, delay_time,
+                               self.polling_periodics.add, task)
+
+        if data:
+            # Don't start useless threads if no task will run
+            utils.spawn_thread(self.polling_periodics.start, allow_empty=True)
 
     def start(self):
+        super(AgentManager, self).start()
         self.polling_manager = pipeline.setup_polling()
-
-        self.partition_coordinator.start()
         self.join_partitioning_groups()
-
-        self.pollster_timers = self.configure_polling_tasks()
-
+        self.start_polling_tasks()
         self.init_pipeline_refresh()
 
     def stop(self):
-        if self.partition_coordinator:
+        if self.started:
+            self.stop_pollsters_tasks()
+            self.heartbeat_timer.stop()
             self.partition_coordinator.stop()
         super(AgentManager, self).stop()
 
@@ -403,6 +436,16 @@ class AgentManager(service_base.BaseService):
 
     @property
     def keystone(self):
+        # FIXME(sileht): This lazy loading of keystone client doesn't
+        # look concurrently safe, we never see issue because once we have
+        # connected to keystone everything is fine, and because all pollsters
+        # are delayed during startup. But each polling task creates a new
+        # client and overrides it which has been created by other polling
+        # tasks. During this short time bad thing can occur.
+        #
+        # I think we must not reset keystone client before
+        # running a polling task, but refresh it periodicaly instead.
+
         # NOTE(sileht): we do lazy loading of the keystone client
         # for multiple reasons:
         # * don't use it if no plugin need it
@@ -426,7 +469,7 @@ class AgentManager(service_base.BaseService):
         return (s.scheme or s.path), (s.netloc + s.path if s.scheme else None)
 
     def _discoverer(self, name):
-        for d in self.discovery_manager:
+        for d in self.discoveries:
             if d.name == name:
                 return d.obj
         return None
@@ -472,25 +515,22 @@ class AgentManager(service_base.BaseService):
                 LOG.warning(_('Unknown discovery extension: %s') % name)
         return resources
 
-    def stop_pollsters(self):
-        for x in self.pollster_timers:
-            try:
-                x.stop()
-                self.tg.timer_done(x)
-            except Exception:
-                LOG.error(_('Error stopping pollster.'), exc_info=True)
-        self.pollster_timers = []
+    def stop_pollsters_tasks(self):
+        if self.polling_periodics:
+            self.polling_periodics.stop()
+            self.polling_periodics.wait()
+        self.polling_periodics = None
 
     def reload_pipeline(self):
         if self.pipeline_validated:
             LOG.info(_LI("Reconfiguring polling tasks."))
 
             # stop existing pollsters and leave partitioning groups
-            self.stop_pollsters()
+            self.stop_pollsters_tasks()
             for group in self.groups:
                 self.partition_coordinator.leave_group(group)
 
             # re-create partitioning groups according to pipeline
             # and configure polling tasks with latest pipeline conf
             self.join_partitioning_groups()
-            self.pollster_timers = self.configure_polling_tasks()
+            self.start_polling_tasks()

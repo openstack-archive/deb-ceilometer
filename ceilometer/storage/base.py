@@ -71,14 +71,6 @@ def _handle_sort_key(model_name, sort_key=None):
     return sort_keys
 
 
-class MultipleResultsFound(Exception):
-    pass
-
-
-class NoResultFound(Exception):
-    pass
-
-
 class Model(object):
     """Base class for storage API models."""
 
@@ -101,6 +93,9 @@ class Model(object):
     def __eq__(self, other):
         return self.as_dict() == other.as_dict()
 
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     @classmethod
     def get_field_names(cls):
         fields = inspect.getargspec(cls.__init__)[0]
@@ -113,18 +108,15 @@ class Connection(object):
     # A dictionary representing the capabilities of this driver.
     CAPABILITIES = {
         'meters': {'query': {'simple': False,
-                             'metadata': False,
-                             'complex': False}},
+                             'metadata': False}},
         'resources': {'query': {'simple': False,
-                                'metadata': False,
-                                'complex': False}},
+                                'metadata': False}},
         'samples': {'query': {'simple': False,
                               'metadata': False,
                               'complex': False}},
         'statistics': {'groupby': False,
                        'query': {'simple': False,
-                                 'metadata': False,
-                                 'complex': False},
+                                 'metadata': False},
                        'aggregation': {'standard': False,
                                        'selectable': {
                                            'max': False,
@@ -148,12 +140,17 @@ class Connection(object):
     def upgrade():
         """Migrate the database to `version` or the most recent version."""
 
+    def record_metering_data_batch(self, samples):
+        """Record the metering data in batch"""
+        for s in samples:
+            self.record_metering_data(s)
+
     @staticmethod
     def record_metering_data(data):
         """Write the data to the backend storage system.
 
         :param data: a dictionary such as returned by
-                     ceilometer.meter.meter_message_from_counter
+                     ceilometer.publisher.utils.meter_message_from_counter
 
         All timestamps must be naive utc datetime object.
         """

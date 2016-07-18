@@ -47,6 +47,9 @@ def retry_on_disconnect(function):
     def decorator(self, *args, **kwargs):
         try:
             return function(self, *args, **kwargs)
+        except ImportError:
+            # NOTE(sileht): in case of libvirt failed to be imported
+            raise
         except libvirt.libvirtError as e:
             if (e.get_error_code() in (libvirt.VIR_ERR_SYSTEM_ERROR,
                                        libvirt.VIR_ERR_INTERNAL_ERROR) and
@@ -113,6 +116,29 @@ class LibvirtInspector(virt_inspector.Inspector):
         domain = self._get_domain_not_shut_off_or_raise(instance)
         dom_info = domain.info()
         return virt_inspector.CPUStats(number=dom_info[3], time=dom_info[4])
+
+    def inspect_cpu_l3_cache(self, instance):
+        domain = self._lookup_by_uuid(instance)
+        try:
+            stats = self.connection.domainListGetStats(
+                [domain], libvirt.VIR_DOMAIN_STATS_PERF)
+            perf = stats[0][1]
+            usage = perf["perf.cmt"]
+            return virt_inspector.CPUL3CacheUsageStats(l3_cache_usage=usage)
+        except AttributeError as e:
+            msg = _('Perf is not supported by current version of libvirt, and '
+                    'failed to inspect l3 cache usage of %(instance_uuid)s, '
+                    'can not get info from libvirt: %(error)s') % {
+                'instance_uuid': instance.id, 'error': e}
+            raise virt_inspector.NoDataException(msg)
+        # domainListGetStats might launch an exception if the method or
+        # cmt perf event is not supported by the underlying hypervisor
+        # being used by libvirt.
+        except libvirt.libvirtError as e:
+            msg = _('Failed to inspect l3 cache usage of %(instance_uuid)s, '
+                    'can not get info from libvirt: %(error)s') % {
+                'instance_uuid': instance.id, 'error': e}
+            raise virt_inspector.NoDataException(msg)
 
     def _get_domain_not_shut_off_or_raise(self, instance):
         instance_name = util.instance_name(instance)
@@ -194,7 +220,7 @@ class LibvirtInspector(virt_inspector.Inspector):
                         '<name=%(name)s, id=%(id)s>, '
                         'can not get info from libvirt.') % {
                     'name': instance_name, 'id': instance.id}
-                raise virt_inspector.NoDataException(msg)
+                raise virt_inspector.InstanceNoDataException(msg)
         # memoryStats might launch an exception if the method is not supported
         # by the underlying hypervisor being used by libvirt.
         except libvirt.libvirtError as e:

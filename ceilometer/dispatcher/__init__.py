@@ -91,4 +91,4 @@ class MeterDispatcherBase(Base):
 class EventDispatcherBase(Base):
     @abc.abstractmethod
     def record_events(self, events):
-        """Recording events interface."""
+        """Record events."""

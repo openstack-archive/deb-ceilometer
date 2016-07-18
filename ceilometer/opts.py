@@ -76,15 +76,12 @@ def list_opts():
                          ceilometer.pipeline.OPTS,
                          ceilometer.sample.OPTS,
                          ceilometer.service.OPTS,
-                         ceilometer.storage.OLD_OPTS,
                          ceilometer.storage.CLI_OPTS,
                          ceilometer.utils.OPTS,)),
         ('api',
          itertools.chain(ceilometer.api.OPTS,
                          ceilometer.api.app.API_OPTS,
                          [ceilometer.service.API_OPT])),
-        # deprecated path, new one is 'polling'
-        ('central', ceilometer.agent.manager.OPTS),
         ('collector',
          itertools.chain(ceilometer.collector.OPTS,
                          [ceilometer.service.COLL_OPT])),
@@ -103,15 +100,13 @@ def list_opts():
         ('notification',
          itertools.chain(ceilometer.notification.OPTS,
                          [ceilometer.service.NOTI_OPT])),
-        ('polling', ceilometer.agent.manager.OPTS),
+        ('polling', ceilometer.agent.manager.POLLING_OPTS),
         ('publisher', ceilometer.publisher.utils.OPTS),
         ('publisher_notifier', ceilometer.publisher.messaging.NOTIFIER_OPTS),
         ('rgw_admin_credentials', ceilometer.objectstore.rgw.CREDENTIAL_OPTS),
         # NOTE(sileht): the configuration file contains only the options
         # for the password plugin that handles keystone v2 and v3 API
         # with discovery. But other options are possible.
-        # Also, the default loaded plugin is password-ceilometer-legacy for
-        # backward compatibily
         ('service_credentials', (
             ceilometer.keystone_client.CLI_OPTS +
             loading.get_auth_common_conf_options() +

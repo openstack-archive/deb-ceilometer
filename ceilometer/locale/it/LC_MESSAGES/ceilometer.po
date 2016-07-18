@@ -4,18 +4,16 @@
 #
 # Translators:
 # Stefano Maffulli <smaffulli@gmail.com>, 2013
-# Tom Cocozzello <tjcocozz@us.ibm.com>, 2015. #zanata
-# Alessandra <alessandra@translated.net>, 2016. #zanata
-# Tom Cocozzello <tjcocozz@us.ibm.com>, 2016. #zanata
+# Andreas Jaeger <jaegerandi@gmail.com>, 2016. #zanata
 msgid ""
 msgstr ""
-"Project-Id-Version: ceilometer 6.0.0.0rc2.dev1\n"
-"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2016-03-20 20:02+0000\n"
+"Project-Id-Version: ceilometer 6.0.1.dev170\n"
+"Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
+"POT-Creation-Date: 2016-06-07 17:37+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: 2016-03-19 05:24+0000\n"
+"PO-Revision-Date: 2016-04-12 02:04+0000\n"
 "Last-Translator: Alessandra <alessandra@translated.net>\n"
 "Language: it\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
@@ -67,13 +65,6 @@ msgstr "Impossibile conoscere l'utilizzo CPU della VM %s"
 msgid "Couldn't obtain IP address of instance %s"
 msgstr "Impossibile ottenere l'indirizzo IP dell'istanza %s"
 
-msgid ""
-"Dispatcher target was not set, no meter will be posted. Set the target in "
-"the ceilometer.conf file"
-msgstr ""
-"La destinazione del dispatcher non è stata impostata, nessun contatore verrà "
-"inviato. Impostare la destinazione nel file ceilometer.conf"
-
 #, python-format
 msgid "Dropping Notification %(type)s (uuid:%(msgid)s)"
 msgstr "Eliminazione della notifica %(type)s (uuid:%(msgid)s)"
@@ -108,7 +99,7 @@ msgid ""
 "Failed to inspect data of instance <name=%(name)s, id=%(id)s>, domain state "
 "is SHUTOFF."
 msgstr ""
-"Impossibile ispezionare i dati dell'istanza = <nome=%(name)s, id=%(id)s>, "
+"Impossibile ispezionare i dati dell'istanza  <name=%(name)s, id=%(id)s>, "
 "stato dominio SHUTOFF."
 
 #, python-format
@@ -124,8 +115,8 @@ msgid ""
 "Failed to inspect memory usage of instance <name=%(name)s, id=%(id)s>, can "
 "not get info from libvirt."
 msgstr ""
-"Impossibile ispezionare l'utilizzo della memoria da parte dell'istanza = "
-"<nome=%(name)s, id=%(id)s>, impossibile ottenere informazioni da libvirt."
+"Impossibile ispezionare l'utilizzo della memoria da parte dell'istanza <name="
+"%(name)s, id=%(id)s>, impossibile ottenere informazioni da libvirt."
 
 #, python-format
 msgid "Failed to load any notification handlers for %s"
@@ -142,10 +133,6 @@ msgstr "Impossibile pubblicare %d datapoint, eliminati"
 #, python-format
 msgid "Failed to publish %d datapoints, queue them"
 msgstr "Impossibile pubblicare %d datapoint, inseriti in coda"
-
-#, python-format
-msgid "Failed to record metering data: %s"
-msgstr "Impossibile registrare i dati di misurazione: %s"
 
 #, python-format
 msgid "Filter expression not valid: %s"
@@ -479,6 +466,11 @@ msgstr "XenAPI non installato"
 msgid "YAML error reading Definitions file %(file)s"
 msgstr "Errore YAML durante la lettura del file definizioni %(file)s"
 
+msgid "alarms URLs is unavailable when Aodh is disabled or unavailable."
+msgstr ""
+"alarm URLs non è disponibile con Aodh perché disabilitato oppure non "
+"disponibile "
+
 #, python-format
 msgid "could not get CPU time for %(id)s: %(e)s"
 msgstr "impossibile ricevere l'ora CPU per %(id)s: %(e)s"
@@ -499,10 +491,6 @@ msgstr "mancata corrispondenza della lunghezza dell'output ipmitool"
 
 msgid "max_bytes and backup_count should be numbers."
 msgstr "max_bytes e backup_count devono essere numeri."
-
-#, python-format
-msgid "message signature invalid, discarding message: %r"
-msgstr "Firma messaggio non valida, eliminazione del messaggio: %r"
 
 msgid "parse IPMI sensor data failed,No data retrieved from given input"
 msgstr ""

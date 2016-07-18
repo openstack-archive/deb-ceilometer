@@ -16,14 +16,18 @@ from collections import defaultdict
 from hashlib import md5
 import itertools
 import operator
+import re
 import threading
 import uuid
 
 from gnocchiclient import client
 from gnocchiclient import exceptions as gnocchi_exc
+from gnocchiclient import utils as gnocchi_utils
+from keystoneauth1 import exceptions as ka_exceptions
 from keystoneauth1 import session as ka_session
 from oslo_config import cfg
 from oslo_log import log
+from oslo_utils import fnmatch
 import requests
 import retrying
 import six
@@ -33,7 +37,6 @@ from ceilometer import declarative
 from ceilometer import dispatcher
 from ceilometer.i18n import _, _LE, _LW
 from ceilometer import keystone_client
-from ceilometer import utils
 
 NAME_ENCODED = __name__.encode('utf-8')
 CACHE_NAMESPACE = uuid.UUID(bytes=md5(NAME_ENCODED).digest())
@@ -70,23 +73,6 @@ def cache_key_mangler(key):
     return uuid.uuid5(CACHE_NAMESPACE, key).hex
 
 
-def log_and_ignore_unexpected_workflow_error(func):
-    def log_and_ignore(self, *args, **kwargs):
-        try:
-            func(self, *args, **kwargs)
-        except gnocchi_exc.ClientException as e:
-            LOG.error(six.text_type(e))
-        except Exception as e:
-            LOG.error(six.text_type(e), exc_info=True)
-    return log_and_ignore
-
-
-class ResourcesDefinitionException(Exception):
-    def __init__(self, message, definition_cfg):
-        msg = '%s %s: %s' % (self.__class__.__name__, definition_cfg, message)
-        super(ResourcesDefinitionException, self).__init__(msg)
-
-
 class ResourcesDefinition(object):
 
     MANDATORY_FIELDS = {'resource_type': six.string_types,
@@ -98,10 +84,10 @@ class ResourcesDefinition(object):
 
         for field, field_type in self.MANDATORY_FIELDS.items():
             if field not in self.cfg:
-                raise declarative.DefinitionException(
+                raise declarative.ResourceDefinitionException(
                     _LE("Required field %s not specified") % field, self.cfg)
             if not isinstance(self.cfg[field], field_type):
-                raise declarative.DefinitionException(
+                raise declarative.ResourceDefinitionException(
                     _LE("Required field %(field)s should be a %(type)s") %
                     {'field': field, 'type': field_type}, self.cfg)
 
@@ -121,7 +107,7 @@ class ResourcesDefinition(object):
 
     def match(self, metric_name):
         for t in self.cfg['metrics']:
-            if utils.match(metric_name, t):
+            if fnmatch.fnmatch(metric_name, t):
                 return True
         return False
 
@@ -136,7 +122,7 @@ class ResourcesDefinition(object):
 
 def get_gnocchiclient(conf):
     requests_session = requests.session()
-    for scheme in requests_session.adapters.keys():
+    for scheme in list(requests_session.adapters.keys()):
         requests_session.mount(scheme, ka_session.TCPKeepAliveAdapter(
             pool_block=True))
 
@@ -260,6 +246,12 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                 try:
                     project = self._ks_client.projects.find(
                         name=self.conf.dispatcher_gnocchi.filter_project)
+                except ka_exceptions.NotFound:
+                    LOG.warning(_LW('gnocchi project not found in keystone,'
+                                    ' ignoring the filter_service_activity '
+                                    'option'))
+                    self.filter_service_activity = False
+                    return None
                 except Exception:
                     LOG.exception('fail to retrieve user of Gnocchi service')
                     raise
@@ -273,7 +265,7 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                      and rd.match(sample['counter_name'])])
 
     def _is_gnocchi_activity(self, sample):
-        return (self.filter_service_activity and (
+        return (self.filter_service_activity and self.gnocchi_project_id and (
             # avoid anything from the user used by gnocchi
             sample['project_id'] == self.gnocchi_project_id or
             # avoid anything in the swift account used by gnocchi
@@ -304,79 +296,133 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
         resource_grouped_samples = itertools.groupby(
             data, key=operator.itemgetter('resource_id'))
 
+        gnocchi_data = {}
+        measures = {}
+        stats = dict(measures=0, resources=0, metrics=0)
         for resource_id, samples_of_resource in resource_grouped_samples:
+            stats['resources'] += 1
             metric_grouped_samples = itertools.groupby(
                 list(samples_of_resource),
                 key=operator.itemgetter('counter_name'))
 
-            self._process_resource(resource_id, metric_grouped_samples)
+            # NOTE(sileht): We convert resource id to Gnocchi format
+            # because batch_resources_metrics_measures exception
+            # returns this id and not the ceilometer one
+            gnocchi_id = gnocchi_utils.encode_resource_id(resource_id)
+            res_info = gnocchi_data[gnocchi_id] = {}
+            for metric_name, samples in metric_grouped_samples:
+                stats['metrics'] += 1
 
-    @log_and_ignore_unexpected_workflow_error
-    def _process_resource(self, resource_id, metric_grouped_samples):
-        resource_extra = {}
-        for metric_name, samples in metric_grouped_samples:
-            samples = list(samples)
-            rd = self._get_resource_definition(metric_name)
-            if rd is None:
-                LOG.warning("metric %s is not handled by gnocchi" %
-                            metric_name)
+                samples = list(samples)
+                rd = self._get_resource_definition(metric_name)
+                if rd is None:
+                    LOG.warning(_LW("metric %s is not handled by Gnocchi") %
+                                metric_name)
+                    continue
+                if rd.cfg.get("ignore"):
+                    continue
+
+                res_info['resource_type'] = rd.cfg['resource_type']
+                res_info.setdefault("resource", {}).update({
+                    "id": resource_id,
+                    "user_id": samples[0]['user_id'],
+                    "project_id": samples[0]['project_id'],
+                    "metrics": rd.metrics,
+                })
+
+                for sample in samples:
+                    res_info.setdefault("resource_extra", {}).update(
+                        rd.attributes(sample))
+                    m = measures.setdefault(gnocchi_id, {}).setdefault(
+                        metric_name, [])
+                    m.append({'timestamp': sample['timestamp'],
+                              'value': sample['counter_volume']})
+                    unit = sample['counter_unit']
+                    metric = sample['counter_name']
+                    res_info['resource']['metrics'][metric]['unit'] = unit
+
+                stats['measures'] += len(measures[gnocchi_id][metric_name])
+                res_info["resource"].update(res_info["resource_extra"])
+
+        try:
+            self.batch_measures(measures, gnocchi_data, stats)
+        except gnocchi_exc.ClientException as e:
+            LOG.error(six.text_type(e))
+        except Exception as e:
+            LOG.error(six.text_type(e), exc_info=True)
+
+        for gnocchi_id, info in gnocchi_data.items():
+            resource = info["resource"]
+            resource_type = info["resource_type"]
+            resource_extra = info["resource_extra"]
+            if not resource_extra:
                 continue
-            if rd.cfg.get("ignore"):
-                continue
-
-            resource_type = rd.cfg['resource_type']
-            resource = {
-                "id": resource_id,
-                "user_id": samples[0]['user_id'],
-                "project_id": samples[0]['project_id'],
-                "metrics": rd.metrics,
-            }
-            measures = []
-
-            for sample in samples:
-                resource_extra.update(rd.attributes(sample))
-                measures.append({'timestamp': sample['timestamp'],
-                                 'value': sample['counter_volume']})
-
-            resource.update(resource_extra)
-
-            retry = True
             try:
-                self._gnocchi.metric.add_measures(metric_name, measures,
-                                                  resource_id)
-            except gnocchi_exc.ResourceNotFound:
-                self._if_not_cached("create", resource_type, resource,
-                                    self._create_resource)
+                self._if_not_cached("update", resource_type, resource,
+                                    self._update_resource, resource_extra)
+            except gnocchi_exc.ClientException as e:
+                LOG.error(six.text_type(e))
+            except Exception as e:
+                LOG.error(six.text_type(e), exc_info=True)
 
-            except gnocchi_exc.MetricNotFound:
-                metric = {'resource_id': resource['id'],
-                          'name': metric_name}
-                metric.update(rd.metrics[metric_name])
+    RE_UNKNOW_METRICS = re.compile("Unknown metrics: (.*) \(HTTP 400\)")
+    RE_UNKNOW_METRICS_LIST = re.compile("([^/ ,]*)/([^,]*)")
+
+    def batch_measures(self, measures, resource_infos, stats):
+        # NOTE(sileht): We don't care about error here, we want
+        # resources metadata always been updated
+        try:
+            self._gnocchi.metric.batch_resources_metrics_measures(measures)
+        except gnocchi_exc.BadRequest as e:
+            m = self.RE_UNKNOW_METRICS.match(six.text_type(e))
+            if m is None:
+                raise
+
+            # NOTE(sileht): Create all missing resources and metrics
+            metric_list = self.RE_UNKNOW_METRICS_LIST.findall(m.group(1))
+            gnocchi_ids_freshly_handled = set()
+            for gnocchi_id, metric_name in metric_list:
+                if gnocchi_id in gnocchi_ids_freshly_handled:
+                    continue
+                resource = resource_infos[gnocchi_id]['resource']
+                resource_type = resource_infos[gnocchi_id]['resource_type']
                 try:
-                    self._gnocchi.metric.create(metric)
-                except gnocchi_exc.NamedMetricAlreadyExists:
-                    # NOTE(sileht): metric created in the meantime
-                    pass
-            else:
-                retry = False
+                    self._if_not_cached("create", resource_type, resource,
+                                        self._create_resource)
+                except gnocchi_exc.ResourceAlreadyExists:
+                    metric = {'resource_id': resource['id'],
+                              'name': metric_name}
+                    metric.update(resource["metrics"][metric_name])
+                    try:
+                        self._gnocchi.metric.create(metric)
+                    except gnocchi_exc.NamedMetricAlreadyExists:
+                        # NOTE(sileht): metric created in the meantime
+                        pass
+                    except gnocchi_exc.ClientException as e:
+                        LOG.error(six.text_type(e))
+                        # We cannot post measures for this metric
+                        del measures[gnocchi_id][metric_name]
+                        if not measures[gnocchi_id]:
+                            del measures[gnocchi_id]
+                except gnocchi_exc.ClientException as e:
+                    LOG.error(six.text_type(e))
+                    # We cannot post measures for this resource
+                    del measures[gnocchi_id]
+                    gnocchi_ids_freshly_handled.add(gnocchi_id)
+                else:
+                    gnocchi_ids_freshly_handled.add(gnocchi_id)
 
-            if retry:
-                self._gnocchi.metric.add_measures(metric_name, measures,
-                                                  resource_id)
-                LOG.debug("Measure posted on metric %s of resource %s",
-                          metric_name, resource_id)
+            # NOTE(sileht): we have created missing resources/metrics,
+            # now retry to post measures
+            self._gnocchi.metric.batch_resources_metrics_measures(measures)
 
-        if resource_extra:
-            self._if_not_cached("update", resource_type, resource,
-                                self._update_resource, resource_extra)
+        # FIXME(sileht): take care of measures removed in stats
+        LOG.debug("%(measures)d measures posted against %(metrics)d "
+                  "metrics through %(resources)d resources", stats)
 
     def _create_resource(self, resource_type, resource):
-        try:
-            self._gnocchi.resource.create(resource_type, resource)
-            LOG.debug('Resource %s created', resource["id"])
-        except gnocchi_exc.ResourceAlreadyExists:
-            # NOTE(sileht): resource created in the meantime
-            pass
+        self._gnocchi.resource.create(resource_type, resource)
+        LOG.debug('Resource %s created', resource["id"])
 
     def _update_resource(self, resource_type, resource, resource_extra):
         self._gnocchi.resource.update(resource_type,
@@ -389,6 +435,7 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
         if self.cache:
             cache_key = resource['id']
             attribute_hash = self._check_resource_cache(cache_key, resource)
+            hit = False
             if attribute_hash:
                 with self._gnocchi_resource_lock[cache_key]:
                     # NOTE(luogangyi): there is a possibility that the
@@ -400,11 +447,15 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                         method(resource_type, resource, *args, **kwargs)
                         self.cache.set(cache_key, attribute_hash)
                     else:
+                        hit = True
                         LOG.debug('resource cache recheck hit for '
                                   '%s %s', operation, cache_key)
                 self._gnocchi_resource_lock.pop(cache_key, None)
             else:
+                hit = True
                 LOG.debug('Resource cache hit for %s %s', operation, cache_key)
+            if hit and operation == "create":
+                raise gnocchi_exc.ResourceAlreadyExists()
         else:
             method(resource_type, resource, *args, **kwargs)
 

@@ -18,8 +18,7 @@ from oslo_utils import timeutils
 
 from ceilometer import dispatcher
 from ceilometer.event.storage import models
-from ceilometer.i18n import _LE, _LW
-from ceilometer.publisher import utils as publisher_utils
+from ceilometer.i18n import _LE
 from ceilometer import storage
 
 LOG = log.getLogger(__name__)
@@ -72,6 +71,8 @@ class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
 
     def record_metering_data(self, data):
         # We may have receive only one counter on the wire
+        if not data:
+            return
         if not isinstance(data, list):
             data = [data]
 
@@ -83,25 +84,18 @@ class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
                  'resource_id': meter['resource_id'],
                  'timestamp': meter.get('timestamp', 'NO TIMESTAMP'),
                  'counter_volume': meter['counter_volume']})
-            if publisher_utils.verify_signature(
-                    meter, self.conf.publisher.telemetry_secret):
-                try:
-                    # Convert the timestamp to a datetime instance.
-                    # Storage engines are responsible for converting
-                    # that value to something they can store.
-                    if meter.get('timestamp'):
-                        ts = timeutils.parse_isotime(meter['timestamp'])
-                        meter['timestamp'] = timeutils.normalize_time(ts)
-                    self.meter_conn.record_metering_data(meter)
-                except Exception as err:
-                    LOG.exception(_LE('Failed to record metering data: %s'),
-                                  err)
-                    # raise the exception to propagate it up in the chain.
-                    raise
-            else:
-                LOG.warning(_LW(
-                    'message signature invalid, discarding message: %r'),
-                    meter)
+            # Convert the timestamp to a datetime instance.
+            # Storage engines are responsible for converting
+            # that value to something they can store.
+            if meter.get('timestamp'):
+                ts = timeutils.parse_isotime(meter['timestamp'])
+                meter['timestamp'] = timeutils.normalize_time(ts)
+        try:
+            self.meter_conn.record_metering_data_batch(data)
+        except Exception as err:
+            LOG.error(_LE('Failed to record %(len)s: %(err)s.'),
+                      {'len': len(data), 'err': err})
+            raise
 
     def record_events(self, events):
         if not isinstance(events, list):
@@ -109,25 +103,20 @@ class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
 
         event_list = []
         for ev in events:
-            if publisher_utils.verify_signature(
-                    ev, self.conf.publisher.telemetry_secret):
-                try:
-                    event_list.append(
-                        models.Event(
-                            message_id=ev['message_id'],
-                            event_type=ev['event_type'],
-                            generated=timeutils.normalize_time(
-                                timeutils.parse_isotime(ev['generated'])),
-                            traits=[models.Trait(
-                                    name, dtype,
-                                    models.Trait.convert_value(dtype, value))
-                                    for name, dtype, value in ev['traits']],
-                            raw=ev.get('raw', {}))
-                    )
-                except Exception:
-                    LOG.exception(_LE("Error processing event and it will be "
-                                      "dropped: %s"), ev)
-            else:
-                LOG.warning(_LW(
-                    'event signature invalid, discarding event: %s'), ev)
+            try:
+                event_list.append(
+                    models.Event(
+                        message_id=ev['message_id'],
+                        event_type=ev['event_type'],
+                        generated=timeutils.normalize_time(
+                            timeutils.parse_isotime(ev['generated'])),
+                        traits=[models.Trait(
+                                name, dtype,
+                                models.Trait.convert_value(dtype, value))
+                                for name, dtype, value in ev['traits']],
+                        raw=ev.get('raw', {}))
+                )
+            except Exception:
+                LOG.exception(_LE("Error processing event and it will be "
+                                  "dropped: %s"), ev)
         self.event_conn.record_events(event_list)

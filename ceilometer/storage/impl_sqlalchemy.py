@@ -332,7 +332,7 @@ class Connection(base.Connection):
         """Write the data to the backend storage system.
 
         :param data: a dictionary such as returned by
-                     ceilometer.meter.meter_message_from_counter
+                     ceilometer.publisher.utils.meter_message_from_counter
         """
         engine = self._engine_facade.get_engine()
         with engine.begin() as conn:
@@ -680,9 +680,10 @@ class Connection(base.Connection):
                 compute = PARAMETERIZED_AGGREGATES['compute'][a.func]
                 functions.append(compute(a.param))
             else:
-                raise ceilometer.NotImplementedError(
-                    'Selectable aggregate function %s'
-                    ' is not supported' % a.func)
+                # NOTE(zqfan): We already have checked at API level, but
+                # still leave it here in case of directly storage calls.
+                msg = _('Invalid aggregation function: %s') % a.func
+                raise storage.StorageBadAggregate(msg)
 
         return functions
 

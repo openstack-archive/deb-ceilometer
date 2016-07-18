@@ -71,6 +71,19 @@ class TestLibvirtInspection(base.BaseTestCase):
                                   self.inspector.inspect_cpus,
                                   self.instance)
 
+    def test_inspect_cpu_l3_cache(self):
+        fake_stats = [({}, {'perf.cmt': 90112})]
+        connection = self.inspector.connection
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(connection,
+                                                  'lookupByUUIDString',
+                                                  return_value=self.domain))
+            stack.enter_context(mock.patch.object(connection,
+                                                  'domainListGetStats',
+                                                  return_value=fake_stats))
+            cpu_info = self.inspector.inspect_cpu_l3_cache(self.instance)
+            self.assertEqual(90112, cpu_info.l3_cache_usage)
+
     def test_inspect_vnics(self):
         dom_xml = """
              <domain type='kvm'>
@@ -323,7 +336,7 @@ class TestLibvirtInspection(base.BaseTestCase):
                                                  2, 999999)):
                 with mock.patch.object(self.domain, 'memoryStats',
                                        return_value={}):
-                    self.assertRaises(virt_inspector.NoDataException,
+                    self.assertRaises(virt_inspector.InstanceNoDataException,
                                       self.inspector.inspect_memory_usage,
                                       self.instance)
 

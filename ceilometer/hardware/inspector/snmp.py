@@ -2,10 +2,6 @@
 # Copyright 2014 ZHAW SoE
 # Copyright 2014 Intel Corp
 #
-# Authors: Lucas Graf <graflu0@students.zhaw.ch>
-#          Toni Zehnder <zehndton@students.zhaw.ch>
-#          Lianhao Lu <lianhao.lu@intel.com>
-#
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -128,10 +124,6 @@ class SNMPInspector(base.Inspector):
          extra.update('project_id': xy, 'user_id': zw)
     """
 
-    def __init__(self):
-        super(SNMPInspector, self).__init__()
-        self._cmdGen = cmdgen.CommandGenerator()
-
     def _query_oids(self, host, oids, cache, is_bulk):
         # send GetRequest or GetBulkRequest to get oids values and
         # populate the values into cache
@@ -140,17 +132,13 @@ class SNMPInspector(base.Inspector):
                                                host.port or self._port))
         oid_cache = cache.setdefault(self._CACHE_KEY_OID, {})
 
+        cmd_runner = cmdgen.CommandGenerator()
         if is_bulk:
-            ret = self._cmdGen.bulkCmd(authData,
-                                       transport,
-                                       0, 100,
-                                       *oids,
-                                       lookupValues=True)
+            ret = cmd_runner.bulkCmd(authData, transport, 0, 100, *oids,
+                                     lookupValues=True)
         else:
-            ret = self._cmdGen.getCmd(authData,
-                                      transport,
-                                      *oids,
-                                      lookupValues=True)
+            ret = cmd_runner.getCmd(authData, transport, *oids,
+                                    lookupValues=True)
         (error, data) = parse_snmp_return(ret, is_bulk)
         if error:
             raise SNMPException("An error occurred, oids %(oid)s, "

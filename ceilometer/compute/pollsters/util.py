@@ -13,7 +13,6 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from oslo_utils import timeutils
 
 from ceilometer.compute import util as compute_util
 from ceilometer import sample
@@ -44,6 +43,7 @@ def _get_metadata_from_object(instance):
         'flavor': instance.flavor,
         'status': instance.status.lower(),
         'state': getattr(instance, 'OS-EXT-STS:vm_state', u''),
+        'task_state': getattr(instance, 'OS-EXT-STS:task_state', u''),
     }
 
     # Image properties
@@ -88,7 +88,6 @@ def make_sample_from_instance(instance, name, type, unit, volume,
         user_id=instance.user_id,
         project_id=instance.tenant_id,
         resource_id=resource_id or instance.id,
-        timestamp=timeutils.utcnow().isoformat(),
         resource_metadata=resource_metadata,
     )
 

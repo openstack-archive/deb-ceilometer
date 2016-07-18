@@ -23,12 +23,13 @@ import calendar
 import copy
 import datetime
 import decimal
-import fnmatch
 import hashlib
-import re
 import struct
-import sys
+import threading
+import time
 
+from concurrent import futures
+from futurist import periodics
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_utils import timeutils
@@ -144,7 +145,7 @@ def sanitize_timestamp(timestamp):
 
 
 def stringify_timestamps(data):
-    """Stringify any datetimes in given dict."""
+    """Stringify any datetime in given dict."""
     isa_timestamp = lambda v: isinstance(v, datetime.datetime)
     return dict((k, v.isoformat() if isa_timestamp(v) else v)
                 for (k, v) in six.iteritems(data))
@@ -259,27 +260,22 @@ def kill_listeners(listeners):
         listener.wait()
 
 
-if sys.version_info > (2, 7, 9):
-    match = fnmatch.fnmatch
-else:
-    _MATCH_CACHE = {}
-    _MATCH_CACHE_MAX = 100
+def delayed(delay, target, *args, **kwargs):
+    time.sleep(delay)
+    return target(*args, **kwargs)
 
-    def match(string, pattern):
-        """Thread safe fnmatch re-implementation.
 
-        Standard library fnmatch in Python versions <= 2.7.9 has thread safe
-        issue, this helper function is created for such case. see:
-        https://bugs.python.org/issue23191
-        """
-        string = string.lower()
-        pattern = pattern.lower()
+def spawn_thread(target, *args, **kwargs):
+    t = threading.Thread(target=target, args=args, kwargs=kwargs)
+    t.daemon = True
+    t.start()
+    return t
 
-        cached_pattern = _MATCH_CACHE.get(pattern)
-        if cached_pattern is None:
-            translated_pattern = fnmatch.translate(pattern)
-            cached_pattern = re.compile(translated_pattern)
-            if len(_MATCH_CACHE) >= _MATCH_CACHE_MAX:
-                _MATCH_CACHE.clear()
-            _MATCH_CACHE[pattern] = cached_pattern
-        return cached_pattern.match(string) is not None
+
+def create_periodic(target, spacing, run_immediately=True, *args, **kwargs):
+    p = periodics.PeriodicWorker.create(
+        [], executor_factory=lambda: futures.ThreadPoolExecutor(max_workers=1))
+    p.add(periodics.periodic(
+        spacing=spacing, run_immediately=run_immediately)(
+            lambda: target(*args, **kwargs)))
+    return p

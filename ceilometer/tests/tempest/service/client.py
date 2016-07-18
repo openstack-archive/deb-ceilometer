@@ -23,10 +23,13 @@ from tempest.lib.services.compute.floating_ips_client import FloatingIPsClient
 from tempest.lib.services.compute.networks_client import NetworksClient
 from tempest.lib.services.compute.servers_client import ServersClient
 from tempest import manager
-from tempest.services.image.v1.json.images_client import ImagesClient
-from tempest.services.image.v2.json.images_client import ImagesClientV2
 from tempest.services.object_storage.container_client import ContainerClient
 from tempest.services.object_storage.object_client import ObjectClient
+
+from ceilometer.tests.tempest.service.images.v1.images_client import \
+    ImagesClient
+from ceilometer.tests.tempest.service.images.v2.images_client import \
+    ImagesClient as ImagesClientV2
 
 
 CONF = config.CONF
@@ -134,9 +137,9 @@ class Manager(manager.Manager):
     image_params.update(default_params)
 
     telemetry_params = {
-        'service': CONF.telemetry_plugin.catalog_type,
+        'service': CONF.telemetry.catalog_type,
         'region': CONF.identity.region,
-        'endpoint_type': CONF.telemetry_plugin.endpoint_type,
+        'endpoint_type': CONF.telemetry.endpoint_type,
     }
     telemetry_params.update(default_params)
 

@@ -222,6 +222,63 @@ class TestEventAPI(EventTestBase):
                          "\'eq\', \'ne\', \'ge\', \'gt\')",
                          resp.json['error_message']['faultstring'])
 
+    def test_get_events_filter_start_timestamp(self):
+        data = self.get_json(self.PATH, headers=HEADERS,
+                             q=[{'field': 'start_timestamp',
+                                 'op': 'ge',
+                                 'value': '2014-01-01T00:00:00'}])
+        self.assertEqual(2, len(data))
+        sorted_types = sorted([d['event_type'] for d in data])
+        event_types = ['Foo', 'Bar', 'Zoo']
+        self.assertEqual(sorted_types, sorted(event_types[1:]))
+
+    def test_get_events_filter_start_timestamp_invalid_op(self):
+        resp = self.get_json(self.PATH, headers=HEADERS,
+                             q=[{'field': 'start_timestamp',
+                                 'op': 'gt',
+                                 'value': '2014-01-01T00:00:00'}],
+                             expect_errors=True)
+        self.assertEqual(400, resp.status_code)
+        self.assertEqual(u'Operator gt is not supported. Only'
+                         ' `ge\' operator is available for field'
+                         ' start_timestamp',
+                         resp.json['error_message']['faultstring'])
+
+    def test_get_events_filter_end_timestamp(self):
+        data = self.get_json(self.PATH, headers=HEADERS,
+                             q=[{'field': 'end_timestamp',
+                                 'op': 'le',
+                                 'value': '2014-01-03T00:00:00'}])
+        self.assertEqual(3, len(data))
+        event_types = ['Foo', 'Bar', 'Zoo']
+        sorted_types = sorted([d['event_type'] for d in data])
+        self.assertEqual(sorted_types, sorted(event_types[:3]))
+
+    def test_get_events_filter_end_timestamp_invalid_op(self):
+        resp = self.get_json(self.PATH, headers=HEADERS,
+                             q=[{'field': 'end_timestamp',
+                                 'op': 'gt',
+                                 'value': '2014-01-03T00:00:00'}],
+                             expect_errors=True)
+        self.assertEqual(400, resp.status_code)
+        self.assertEqual(u'Operator gt is not supported. Only'
+                         ' `le\' operator is available for field'
+                         ' end_timestamp',
+                         resp.json['error_message']['faultstring'])
+
+    def test_get_events_filter_start_end_timestamp(self):
+        data = self.get_json(self.PATH, headers=HEADERS,
+                             q=[{'field': 'start_timestamp',
+                                 'op': 'ge',
+                                 'value': '2014-01-02T00:00:00'},
+                                {'field': 'end_timestamp',
+                                 'op': 'le',
+                                 'value': '2014-01-03T10:00:00'}])
+        self.assertEqual(1, len(data))
+        sorted_types = sorted([d['event_type'] for d in data])
+        event_types = ['Foo', 'Bar', 'Zoo']
+        self.assertEqual(sorted_types, sorted(event_types[2:3]))
+
     def test_get_events_filter_text_trait(self):
         data = self.get_json(self.PATH, headers=HEADERS,
                              q=[{'field': 'trait_A',
@@ -547,7 +604,7 @@ class AclRestrictedEventTestBase(v2.FunctionalTest):
                              expect_errors=True)
         self.assertEqual(404, data.status_int)
 
-    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es')
     def test_admin_access(self):
         a_headers = {"X-Roles": "admin",
                      "X-User-Id": self.admin_user_id,
@@ -557,7 +614,7 @@ class AclRestrictedEventTestBase(v2.FunctionalTest):
         self.assertEqual(set(['empty_ev', 'admin_ev']),
                          set(ev['event_type'] for ev in data))
 
-    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es')
     def test_admin_access_trait_filter(self):
         a_headers = {"X-Roles": "admin",
                      "X-User-Id": self.admin_user_id,
@@ -570,7 +627,7 @@ class AclRestrictedEventTestBase(v2.FunctionalTest):
         self.assertEqual(1, len(data))
         self.assertEqual('empty_ev', data[0]['event_type'])
 
-    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es')
     def test_admin_access_single(self):
         a_headers = {"X-Roles": "admin",
                      "X-User-Id": self.admin_user_id,
@@ -580,7 +637,7 @@ class AclRestrictedEventTestBase(v2.FunctionalTest):
         data = self.get_json('/events/2', headers=a_headers)
         self.assertEqual('admin_ev', data['event_type'])
 
-    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es', 'db2')
+    @tests_db.run_with('sqlite', 'mysql', 'pgsql', 'mongodb', 'es')
     def test_admin_access_trait_filter_no_access(self):
         a_headers = {"X-Roles": "admin",
                      "X-User-Id": self.admin_user_id,

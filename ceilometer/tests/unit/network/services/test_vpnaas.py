@@ -14,7 +14,6 @@
 # under the License.
 
 import mock
-from oslo_context import context
 from oslotest import base
 from oslotest import mockpatch
 
@@ -30,7 +29,6 @@ class _BaseTestVPNPollster(base.BaseTestCase):
     def setUp(self):
         super(_BaseTestVPNPollster, self).setUp()
         self.addCleanup(mock.patch.stopall)
-        self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
         plugin_base._get_keystone = mock.Mock()
         catalog = (plugin_base._get_keystone.session.auth.get_access.
@@ -89,7 +87,7 @@ class TestVPNServicesPollster(_BaseTestVPNPollster):
         samples = list(self.pollster.get_samples(
             self.manager, {},
             resources=self.fake_get_vpn_service()))
-        self.assertEqual(3, len(samples))
+        self.assertEqual(4, len(samples))
         for field in self.pollster.FIELDS:
             self.assertEqual(self.fake_get_vpn_service()[0][field],
                              samples[0].resource_metadata[field])
@@ -150,6 +148,7 @@ class TestIPSecConnectionsPollster(_BaseTestVPNPollster):
                  'ipsecpolicy_id': 'fce3d818-fdcb-fg4b-de7f-7850dc8a9d7a',
                  'vpnservice_id': 'dce3d818-fdcb-fg4b-de7f-5650dc8a9d7a',
                  'admin_state_up': True,
+                 'status': 'ACTIVE',
                  'tenant_id': 'abe3d818-fdcb-fg4b-de7f-6650dc8a9d7a',
                  'id': 'fdfbcec-fdcb-fg4b-de7f-6650dc8a9d7a'}
                 ]

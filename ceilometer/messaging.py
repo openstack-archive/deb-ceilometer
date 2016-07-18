@@ -14,7 +14,6 @@
 # under the License.
 
 from oslo_config import cfg
-import oslo_context.context
 import oslo_messaging
 from oslo_messaging import serializer as oslo_serializer
 
@@ -34,8 +33,9 @@ def get_transport(url=None, optional=False, cache=True):
     if not transport or not cache:
         try:
             transport = oslo_messaging.get_transport(cfg.CONF, url)
-        except oslo_messaging.InvalidTransportURL as e:
-            if not optional or e.url:
+        except (oslo_messaging.InvalidTransportURL,
+                oslo_messaging.DriverLoadFailure):
+            if not optional or url:
                 # NOTE(sileht): oslo_messaging is configured but unloadable
                 # so reraise the exception
                 raise
@@ -55,30 +55,7 @@ def cleanup():
         del TRANSPORTS[url]
 
 
-class RequestContextSerializer(oslo_messaging.Serializer):
-
-    def __init__(self, base):
-        self._base = base
-
-    def serialize_entity(self, context, entity):
-        if not self._base:
-            return entity
-        return self._base.serialize_entity(context, entity)
-
-    def deserialize_entity(self, context, entity):
-        if not self._base:
-            return entity
-        return self._base.deserialize_entity(context, entity)
-
-    def serialize_context(self, context):
-        return context.to_dict()
-
-    def deserialize_context(self, context):
-        return oslo_context.context.RequestContext.from_dict(context)
-
-
-_SERIALIZER = RequestContextSerializer(
-    oslo_serializer.JsonPayloadSerializer())
+_SERIALIZER = oslo_serializer.JsonPayloadSerializer()
 
 
 def get_batch_notification_listener(transport, targets, endpoints,

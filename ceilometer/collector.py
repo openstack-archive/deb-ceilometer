@@ -20,13 +20,14 @@ import msgpack
 from oslo_config import cfg
 from oslo_log import log
 import oslo_messaging
-from oslo_service import service as os_service
 from oslo_utils import netutils
 from oslo_utils import units
 
 from ceilometer import dispatcher
-from ceilometer.i18n import _, _LE
+from ceilometer.i18n import _, _LE, _LW
 from ceilometer import messaging
+from ceilometer.publisher import utils as publisher_utils
+from ceilometer import service_base
 from ceilometer import utils
 
 OPTS = [
@@ -42,7 +43,6 @@ OPTS = [
                help='Number of notification messages to wait before '
                'dispatching them'),
     cfg.IntOpt('batch_timeout',
-               default=None,
                help='Number of seconds to wait before dispatching samples'
                'when batch_size is not reached (None means indefinitely)'),
 ]
@@ -59,7 +59,7 @@ cfg.CONF.import_opt('store_events', 'ceilometer.notification',
 LOG = log.getLogger(__name__)
 
 
-class CollectorService(os_service.Service):
+class CollectorService(service_base.ServiceBase):
     """Listener for the collector service."""
     def start(self):
         """Bind the UDP socket and handle incoming data."""
@@ -68,10 +68,11 @@ class CollectorService(os_service.Service):
         (self.meter_manager, self.event_manager) = dispatcher_managers
         self.sample_listener = None
         self.event_listener = None
+        self.udp_thread = None
         super(CollectorService, self).start()
 
         if cfg.CONF.collector.udp_address:
-            self.tg.add_thread(self.start_udp)
+            self.udp_thread = utils.spawn_thread(self.start_udp)
 
         transport = messaging.get_transport(optional=True)
         if transport:
@@ -81,7 +82,8 @@ class CollectorService(os_service.Service):
                 self.sample_listener = (
                     messaging.get_batch_notification_listener(
                         transport, [sample_target],
-                        [SampleEndpoint(self.meter_manager)],
+                        [SampleEndpoint(cfg.CONF.publisher.telemetry_secret,
+                                        self.meter_manager)],
                         allow_requeue=True,
                         batch_size=cfg.CONF.collector.batch_size,
                         batch_timeout=cfg.CONF.collector.batch_timeout))
@@ -93,15 +95,12 @@ class CollectorService(os_service.Service):
                 self.event_listener = (
                     messaging.get_batch_notification_listener(
                         transport, [event_target],
-                        [EventEndpoint(self.event_manager)],
+                        [EventEndpoint(cfg.CONF.publisher.telemetry_secret,
+                                       self.event_manager)],
                         allow_requeue=True,
                         batch_size=cfg.CONF.collector.batch_size,
                         batch_timeout=cfg.CONF.collector.batch_timeout))
                 self.event_listener.start()
-
-            if not cfg.CONF.collector.udp_address:
-                # Add a dummy thread to have wait() working
-                self.tg.add_timer(604800, lambda: None)
 
     def start_udp(self):
         address_family = socket.AF_INET
@@ -122,32 +121,33 @@ class CollectorService(os_service.Service):
             except Exception:
                 LOG.warning(_("UDP: Cannot decode data sent by %s"), source)
             else:
-                try:
-                    LOG.debug("UDP: Storing %s", sample)
-                    self.meter_manager.map_method('record_metering_data',
-                                                  sample)
-                except Exception:
-                    LOG.exception(_("UDP: Unable to store meter"))
+                if publisher_utils.verify_signature(
+                        sample, cfg.CONF.publisher.telemetry_secret):
+                    try:
+                        LOG.debug("UDP: Storing %s", sample)
+                        self.meter_manager.map_method(
+                            'record_metering_data', sample)
+                    except Exception:
+                        LOG.exception(_("UDP: Unable to store meter"))
+                else:
+                    LOG.warning(_LW('sample signature invalid, '
+                                    'discarding: %s'), sample)
 
     def stop(self):
-        self.udp_run = False
-        if self.sample_listener:
-            utils.kill_listeners([self.sample_listener])
-        if self.event_listener:
-            utils.kill_listeners([self.event_listener])
+        if self.started:
+            if self.sample_listener:
+                utils.kill_listeners([self.sample_listener])
+            if self.event_listener:
+                utils.kill_listeners([self.event_listener])
+            if self.udp_thread:
+                self.udp_run = False
+                self.udp_thread.join()
         super(CollectorService, self).stop()
-
-    def record_metering_data(self, context, data):
-        """RPC endpoint for messages we send to ourselves.
-
-        When the notification messages are re-published through the
-        RPC publisher, this method receives them for processing.
-        """
-        self.meter_manager.map_method('record_metering_data', data=data)
 
 
 class CollectorEndpoint(object):
-    def __init__(self, dispatcher_manager):
+    def __init__(self, secret, dispatcher_manager):
+        self.secret = secret
         self.dispatcher_manager = dispatcher_manager
 
     def sample(self, messages):
@@ -156,20 +156,24 @@ class CollectorEndpoint(object):
         When another service sends a notification over the message
         bus, this method receives it.
         """
-        samples = list(chain.from_iterable(m["payload"] for m in messages))
+        goods = []
+        for sample in chain.from_iterable(m["payload"] for m in messages):
+            if publisher_utils.verify_signature(sample, self.secret):
+                goods.append(sample)
+            else:
+                LOG.warning(_LW('notification signature invalid, '
+                                'discarding: %s'), sample)
         try:
-            self.dispatcher_manager.map_method(self.method, samples)
+            self.dispatcher_manager.map_method(self.method, goods)
         except Exception:
-            LOG.exception(_LE("Dispatcher failed to handle the %s, "
-                              "requeue it."), self.ep_type)
+            LOG.exception(_LE("Dispatcher failed to handle the notification, "
+                              "re-queuing it."))
             return oslo_messaging.NotificationResult.REQUEUE
 
 
 class SampleEndpoint(CollectorEndpoint):
     method = 'record_metering_data'
-    ep_type = 'sample'
 
 
 class EventEndpoint(CollectorEndpoint):
     method = 'record_events'
-    ep_type = 'event'

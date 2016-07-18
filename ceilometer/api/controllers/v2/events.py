@@ -31,9 +31,9 @@ import wsmeext.pecan as wsme_pecan
 from ceilometer.api.controllers.v2 import base
 from ceilometer.api.controllers.v2 import utils as v2_utils
 from ceilometer.api import rbac
+from ceilometer.event import storage
 from ceilometer.event.storage import models as event_models
 from ceilometer.i18n import _
-from ceilometer import storage
 
 LOG = log.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class Event(base.Base):
     def sample(cls):
         return cls(
             event_type='compute.instance.update',
-            generated=datetime.datetime(2015, 1, 1, 12, 30, 59, 123456),
+            generated=datetime.datetime(2015, 1, 1, 12, 0, 0, 0),
             message_id='94834db1-8f1b-404d-b2ec-c35901f1b7f0',
             traits={
                 Trait(name='request_id',
@@ -192,9 +192,21 @@ def _event_query_to_event_filter(q):
                      {'operator': i.op, 'supported': base.operation_kind})
             raise base.ClientSideError(error)
         if i.field in evt_model_filter:
-            if i.op != 'eq':
+            if i.op != 'eq' and i.field in ('event_type', 'message_id'):
                 error = (_('Operator %(operator)s is not supported. Only'
-                           ' equality operator is available for field'
+                           ' `eq\' operator is available for field'
+                           ' %(field)s') %
+                         {'operator': i.op, 'field': i.field})
+                raise base.ClientSideError(error)
+            if i.op != 'ge' and i.field == 'start_timestamp':
+                error = (_('Operator %(operator)s is not supported. Only'
+                           ' `ge\' operator is available for field'
+                           ' %(field)s') %
+                         {'operator': i.op, 'field': i.field})
+                raise base.ClientSideError(error)
+            if i.op != 'le' and i.field == 'end_timestamp':
+                error = (_('Operator %(operator)s is not supported. Only'
+                           ' `le\' operator is available for field'
                            ' %(field)s') %
                          {'operator': i.op, 'field': i.field})
                 raise base.ClientSideError(error)

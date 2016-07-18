@@ -59,7 +59,7 @@ sudo rabbitmqctl list_queues | grep -e \\.sample -e \\.info
 if [ $EXIT_CODE -ne 0 ] ; then
     set +x
     echo "* Heat stack:"
-    heat stack-show integration_test
+    openstack stack show integration_test
     echo "* Alarm list:"
     ceilometer alarm-list
     echo "* Nova instance list:"
@@ -81,7 +81,7 @@ if [ $EXIT_CODE -ne 0 ] ; then
     # Be sure to source Gnocchi settings before
     source $BASE/new/gnocchi/devstack/settings
     echo "* Unprocessed measures:"
-    sudo find $GNOCCHI_DATA_DIR
+    sudo find $GNOCCHI_DATA_DIR/measure
 
     set -x
 fi

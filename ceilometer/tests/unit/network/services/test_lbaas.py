@@ -16,7 +16,6 @@
 import mock
 
 from oslo_config import cfg
-from oslo_context import context
 from oslotest import base
 from oslotest import mockpatch
 
@@ -32,7 +31,6 @@ class _BaseTestLBPollster(base.BaseTestCase):
     def setUp(self):
         super(_BaseTestLBPollster, self).setUp()
         self.addCleanup(mock.patch.stopall)
-        self.context = context.get_admin_context()
         self.manager = manager.AgentManager()
         cfg.CONF.set_override('neutron_lbaas_version',
                               'v1',
@@ -137,7 +135,7 @@ class TestLBPoolPollster(_BaseTestLBPollster):
         samples = list(self.pollster.get_samples(
             self.manager, {},
             resources=self.fake_get_pools()))
-        self.assertEqual(3, len(samples))
+        self.assertEqual(4, len(samples))
         for field in self.pollster.FIELDS:
             self.assertEqual(self.fake_get_pools()[0][field],
                              samples[0].resource_metadata[field])
@@ -260,7 +258,7 @@ class TestLBVipPollster(_BaseTestLBPollster):
         samples = list(self.pollster.get_samples(
             self.manager, {},
             resources=self.fake_get_vips()))
-        self.assertEqual(3, len(samples))
+        self.assertEqual(4, len(samples))
         for field in self.pollster.FIELDS:
             self.assertEqual(self.fake_get_vips()[0][field],
                              samples[0].resource_metadata[field])
@@ -353,7 +351,7 @@ class TestLBMemberPollster(_BaseTestLBPollster):
         samples = list(self.pollster.get_samples(
             self.manager, {},
             self.fake_get_members()))
-        self.assertEqual(3, len(samples))
+        self.assertEqual(4, len(samples))
         for field in self.pollster.FIELDS:
             self.assertEqual(self.fake_get_members()[0][field],
                              samples[0].resource_metadata[field])

@@ -1,6 +1,6 @@
-# turn on all the ceilometer services by default
+# turn on all the ceilometer services by default (except for ipmi pollster)
 # Pollsters
-enable_service ceilometer-acompute ceilometer-acentral ceilometer-aipmi
+enable_service ceilometer-acompute ceilometer-acentral
 # Notification Agent
 enable_service ceilometer-anotification
 # Data Collector
@@ -12,7 +12,6 @@ enable_service ceilometer-api
 CEILOMETER_DIR=$DEST/ceilometer
 CEILOMETER_CONF_DIR=/etc/ceilometer
 CEILOMETER_CONF=$CEILOMETER_CONF_DIR/ceilometer.conf
-CEILOMETER_API_LOG_DIR=/var/log/ceilometer-api
 CEILOMETER_AUTH_CACHE_DIR=${CEILOMETER_AUTH_CACHE_DIR:-/var/cache/ceilometer}
 CEILOMETER_WSGI_DIR=${CEILOMETER_WSGI_DIR:-/var/www/ceilometer}
 
@@ -24,7 +23,7 @@ GNOCCHI_ARCHIVE_POLICY=${GNOCCHI_ARCHIVE_POLICY:-low}
 
 # Ceilometer connection info.
 CEILOMETER_SERVICE_PROTOCOL=http
-CEILOMETER_SERVICE_HOST=$SERVICE_HOST
+CEILOMETER_SERVICE_HOST=${CEILOMETER_SERVICE_HOST:-${SERVICE_HOST}}
 CEILOMETER_SERVICE_PORT=${CEILOMETER_SERVICE_PORT:-8777}
 CEILOMETER_USE_MOD_WSGI=${CEILOMETER_USE_MOD_WSGI:-${ENABLE_HTTPD_MOD_WSGI_SERVICES}}
 

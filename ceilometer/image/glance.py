@@ -19,7 +19,6 @@ from __future__ import absolute_import
 
 import glanceclient
 from oslo_config import cfg
-from oslo_utils import timeutils
 
 from ceilometer.agent import plugin_base
 from ceilometer import keystone_client
@@ -31,7 +30,7 @@ OPTS = [
                default=0,
                help="Number of items to request in "
                     "each paginated Glance API request "
-                    "(parameter used by glancecelient). "
+                    "(parameter used by glanceclient). "
                     "If this is less than or equal to 0, "
                     "page size is not specified "
                     "(default value in glanceclient is used)."),
@@ -110,7 +109,6 @@ class ImagePollster(_Base):
                     user_id=None,
                     project_id=image.owner,
                     resource_id=image.id,
-                    timestamp=timeutils.utcnow().isoformat(),
                     resource_metadata=self.extract_image_metadata(image),
                 )
 
@@ -127,6 +125,5 @@ class ImageSizePollster(_Base):
                     user_id=None,
                     project_id=image.owner,
                     resource_id=image.id,
-                    timestamp=timeutils.utcnow().isoformat(),
                     resource_metadata=self.extract_image_metadata(image),
                 )

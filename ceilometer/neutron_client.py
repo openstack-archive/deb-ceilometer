@@ -139,6 +139,7 @@ class Client(object):
         fips = self.client.list_floatingips()['floatingips']
         return fips
 
+    @logged
     def list_pools_v2(self):
         """This method is used to get the pools list.
 
@@ -175,6 +176,7 @@ class Client(object):
 
         return resources
 
+    @logged
     def list_members_v2(self):
         """Method is used to list the members info.
 
@@ -199,6 +201,7 @@ class Client(object):
                 resources.append(member)
         return resources
 
+    @logged
     def list_health_monitors_v2(self):
         """Method is used to list the health monitors
 
@@ -269,7 +272,7 @@ class Client(object):
         pool_id].
         :returns: The status dictionary of the member
         resource. The key is the ID of the member. The value is
-        the operating statuse of the member resource.
+        the operating status of the member resource.
         """
         # FIXME(liamji) the following meters are experimental and
         # may generate a large load against neutron api. The future
@@ -315,7 +318,7 @@ class Client(object):
         :param loadbalancer_id: The ID of the Load Balancer.
         :returns: The status dictionary of the listener
         resource. The key is the ID of the listener resource. The
-        value is the operating statuse of the listener resource.
+        value is the operating status of the listener resource.
         """
         # FIXME(liamji) the following meters are experimental and
         # may generate a large load against neutron api. The future
@@ -353,7 +356,7 @@ class Client(object):
         :param parent_id: The parent ID of the pool resource.
         :returns: The status dictionary of the pool resource.
         The key is the ID of the pool resource. The value is
-        the operating statuse of the pool resource.
+        the operating status of the pool resource.
         """
         # FIXME(liamji) the following meters are experimental and
         # may generate a large load against neutron api. The future
@@ -386,6 +389,7 @@ class Client(object):
 
         return status_dict
 
+    @logged
     def list_listener(self):
         """This method is used to get the list of the listeners."""
         resp = self.client.list_listeners()
@@ -396,12 +400,14 @@ class Client(object):
             listener['operating_status'] = status[listener.get('id')]
         return resources
 
+    @logged
     def list_loadbalancer(self):
         """This method is used to get the list of the loadbalancers."""
         resp = self.client.list_loadbalancers()
         resources = resp.get('loadbalancers')
         return resources
 
+    @logged
     def get_loadbalancer_stats(self, loadbalancer_id):
         """This method is used to get the statistics of the loadbalancer.
 

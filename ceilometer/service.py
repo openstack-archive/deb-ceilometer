@@ -15,6 +15,7 @@
 import socket
 import sys
 
+from keystoneauth1 import loading as ka_loading
 from oslo_config import cfg
 import oslo_i18n
 from oslo_log import log
@@ -28,6 +29,7 @@ from ceilometer import version
 OPTS = [
     cfg.StrOpt('host',
                default=socket.gethostname(),
+               sample_default='<your_hostname>',
                help='Name of this node, which must be valid in an AMQP '
                'key. Can be an opaque identifier. For ZeroMQ only, must '
                'be a valid host name, FQDN, or IP address.'),
@@ -71,8 +73,8 @@ def prepare_service(argv=None, config_files=None):
     oslo_i18n.enable_lazy()
     log.register_options(cfg.CONF)
     log_levels = (cfg.CONF.default_log_levels +
-                  ['stevedore=INFO', 'keystoneclient=INFO',
-                   'neutronclient=INFO'])
+                  ['futurist=INFO', 'neutronclient=INFO',
+                   'keystoneclient=INFO'])
     log.set_defaults(default_log_levels=log_levels)
     defaults.set_cors_middleware_defaults()
 
@@ -82,7 +84,7 @@ def prepare_service(argv=None, config_files=None):
              version=version.version_info.version_string(),
              default_config_files=config_files)
 
-    keystone_client.setup_keystoneauth(cfg.CONF)
+    ka_loading.load_auth_from_conf_options(cfg.CONF, "service_credentials")
 
     log.setup(cfg.CONF, 'ceilometer')
     # NOTE(liusheng): guru cannot run with service under apache daemon, so when

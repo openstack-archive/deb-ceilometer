@@ -19,6 +19,7 @@
 # under the License.
 
 import datetime
+import urllib
 
 import pecan
 from pecan import rest
@@ -70,7 +71,7 @@ class Resource(base.Base):
             resource_id='bd9431c1-8d69-4ad3-803a-8d4a6b89fd36',
             project_id='35b17138-b364-4e6a-a131-8f3099c5be68',
             user_id='efd87807-12d2-4b38-9c70-5f5c2ac427ff',
-            timestamp=datetime.datetime.utcnow(),
+            timestamp=datetime.datetime(2015, 1, 1, 12, 0, 0, 0),
             source="openstack",
             metadata={'name1': 'value1',
                       'name2': 'value2'},
@@ -120,6 +121,10 @@ class ResourcesController(rest.RestController):
         """
 
         rbac.enforce('get_resource', pecan.request)
+        # In case we have special character in resource id, for example, swift
+        # can generate samples with resource id like
+        # 29f809d9-88bb-4c40-b1ba-a77a1fcf8ceb/glance
+        resource_id = urllib.unquote(resource_id)
 
         authorized_project = rbac.get_limited_to_project(pecan.request.headers)
         resources = list(pecan.request.storage_conn.get_resources(

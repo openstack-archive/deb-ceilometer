@@ -58,6 +58,13 @@ CPUStats = collections.namedtuple('CPUStats', ['number', 'time'])
 #
 CPUUtilStats = collections.namedtuple('CPUUtilStats', ['util'])
 
+# Named tuple representing CPU L3 cache usage statistics.
+#
+# cachesize: Amount of CPU L3 cache used
+#
+CPUL3CacheUsageStats = collections.namedtuple('CPUL3CacheUsageStats',
+                                              ['l3_cache_usage'])
+
 # Named tuple representing Memory usage statistics.
 #
 # usage: Amount of memory used
@@ -180,6 +187,10 @@ class InstanceShutOffException(InspectorException):
     pass
 
 
+class InstanceNoDataException(InspectorException):
+    pass
+
+
 class NoDataException(InspectorException):
     pass
 
@@ -215,6 +226,14 @@ class Inspector(object):
         :param duration: the last 'n' seconds, over which the value should be
                inspected
         :return: the percentage of CPU utilization
+        """
+        raise ceilometer.NotImplementedError
+
+    def inspect_cpu_l3_cache(self, instance):
+        """Inspect the CPU L3 cache usage for an instance.
+
+        :param instance: the target instance
+        :return: the amount of cpu l3 cache used
         """
         raise ceilometer.NotImplementedError
 
@@ -298,7 +317,7 @@ class Inspector(object):
         """Inspect the disk information for an instance.
 
         :param instance: the target instance
-        :return: for each disk , capacity , alloaction and usage
+        :return: for each disk , capacity , allocation and usage
         """
         raise ceilometer.NotImplementedError
 
