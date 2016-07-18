@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-source functions.sh
+source debian/functions.sh
 
 if [ "$1" = "--coverage" ]; then
 	COVERAGE_ARG="$1"
