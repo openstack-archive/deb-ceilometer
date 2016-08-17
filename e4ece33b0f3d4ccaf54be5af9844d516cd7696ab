@@ -1,0 +1,11 @@
+Code-Review+2: Lianhao Lu <lianhao.lu@intel.com>
+Code-Review+1: Swami Reddy <swamireddy@gmail.com>
+Code-Review+1: Takahiro Suzuki <suzuki.thj@ncos.nec.co.jp>
+Code-Review+2: liusheng <liusheng2048@gmail.com>
+Workflow+1: liusheng <liusheng2048@gmail.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 26 Jul 2016 13:43:07 +0000
+Reviewed-on: https://review.openstack.org/334884
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master

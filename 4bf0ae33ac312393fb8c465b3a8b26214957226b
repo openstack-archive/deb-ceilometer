@@ -1,0 +1,10 @@
+Code-Review+2: Lianhao Lu <lianhao.lu@intel.com>
+Code-Review+2: Pradeep Kilambi <pkilambi@redhat.com>
+Code-Review+1: Yurii Prokulevych <yprokule@redhat.com>
+Workflow+1: Julien Danjou <julien@danjou.info>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 19 Jul 2016 19:35:31 +0000
+Reviewed-on: https://review.openstack.org/333397
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master

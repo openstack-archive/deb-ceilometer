@@ -1,0 +1,11 @@
+Code-Review+2: liusheng <liusheng2048@gmail.com>
+Code-Review+1: zhangguoqing <zhang.guoqing@99cloud.net>
+Code-Review+1: xiaozhuangqing <zhuangqing.xiao@easystack.cn>
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Workflow+1: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 05 Aug 2016 07:56:20 +0000
+Reviewed-on: https://review.openstack.org/341911
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
