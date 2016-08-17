@@ -1,0 +1,8 @@
+Code-Review+2: Thierry Carrez <thierry@openstack.org>
+Workflow+1: Thierry Carrez <thierry@openstack.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 05 Apr 2013 11:54:08 +0000
+Reviewed-on: https://review.openstack.org/26106
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/grizzly

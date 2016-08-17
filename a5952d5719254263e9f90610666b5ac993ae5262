@@ -1,0 +1,9 @@
+Code-Review+1: Andreas Jaeger <jaegerandi@gmail.com>
+Code-Review+2: Thierry Carrez <thierry@openstack.org>
+Workflow+1: Thierry Carrez <thierry@openstack.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 07 Apr 2014 15:12:07 +0000
+Reviewed-on: https://review.openstack.org/85679
+Project: openstack/deb-ceilometer
+Branch: refs/heads/milestone-proposed

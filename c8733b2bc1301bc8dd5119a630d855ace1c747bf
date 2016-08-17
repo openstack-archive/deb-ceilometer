@@ -1,0 +1,8 @@
+Code-Review+2: Adam Gandelman <adamg@ubuntu.com>
+Workflow+1: Adam Gandelman <adamg@ubuntu.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 23 Apr 2014 04:25:27 +0000
+Reviewed-on: https://review.openstack.org/89443
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/icehouse

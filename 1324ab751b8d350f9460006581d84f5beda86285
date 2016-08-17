@@ -1,0 +1,12 @@
+Code-Review+2: Claudiu Belu <cbelu@cloudbasesolutions.com>
+Code-Review+1: Dave Walker <email@daviey.com>
+Code-Review+1: Ilya Tyaptin <ityaptin@mirantis.com>
+Code-Review+1: ZhiQiang Fan <aji.zqfan@gmail.com>
+Code-Review+2: Adam Gandelman <adamg@ubuntu.com>
+Workflow+1: Adam Gandelman <adamg@ubuntu.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 27 Nov 2014 03:43:31 +0000
+Reviewed-on: https://review.openstack.org/137103
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/juno

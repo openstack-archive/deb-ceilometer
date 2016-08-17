@@ -1,0 +1,10 @@
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Code-Review+2: Angus Salkeld <asalkeld@mirantis.com>
+Code-Review+2: Thierry Carrez <thierry@openstack.org>
+Workflow+1: Thierry Carrez <thierry@openstack.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 18 Jul 2013 07:31:37 +0000
+Reviewed-on: https://review.openstack.org/37574
+Project: openstack/deb-ceilometer
+Branch: refs/heads/milestone-proposed

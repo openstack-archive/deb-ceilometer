@@ -1,0 +1,9 @@
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Code-Review+2: Thierry Carrez <thierry@openstack.org>
+Workflow+1: Alan Pevec <alan.pevec@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 03 Dec 2014 15:57:18 +0000
+Reviewed-on: https://review.openstack.org/138320
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/juno

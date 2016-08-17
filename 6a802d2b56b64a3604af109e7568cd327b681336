@@ -1,0 +1,9 @@
+Code-Review+2: Thierry Carrez <thierry@openstack.org>
+Code-Review+1: gordon chung <gord@live.ca>
+Workflow+1: Thierry Carrez <thierry@openstack.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 22 Apr 2014 10:54:57 +0000
+Reviewed-on: https://review.openstack.org/88296
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/icehouse

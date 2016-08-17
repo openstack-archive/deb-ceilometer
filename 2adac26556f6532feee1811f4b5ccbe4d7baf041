@@ -1,0 +1,10 @@
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Code-Review+1: Fei Long Wang <flwang@catalyst.net.nz>
+Code-Review+1: Flavio Percoco <fpercoco@redhat.com>
+Workflow+1: Julien Danjou <julien@danjou.info>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 03 May 2013 21:30:04 +0000
+Reviewed-on: https://review.openstack.org/28166
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/grizzly
