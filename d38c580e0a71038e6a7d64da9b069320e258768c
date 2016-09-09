@@ -1,0 +1,12 @@
+Code-Review+1: yunfeng zhou <zhouyunfeng@inspur.com>
+Code-Review+1: John Hua <john.hua@citrix.com>
+Code-Review+1: Bob Ball <bob.ball@citrix.com>
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Code-Review+2: Lianhao Lu <lianhao.lu@intel.com>
+Workflow+1: Lianhao Lu <lianhao.lu@intel.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 08 Sep 2016 02:20:19 +0000
+Reviewed-on: https://review.openstack.org/365944
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master

@@ -1,0 +1,13 @@
+Code-Review+2: Ildiko Vancsa <ildiko.vancsa@gmail.com>
+Code-Review+1: Prudhvi Rao Shedimbi <prudhvi.rao.shedimbi@intel.com>
+Code-Review+1: liyuanzhen <li.yuanzhen@zte.com.cn>
+Code-Review+1: xiaozhuangqing <zhuangqing.xiao@easystack.cn>
+Code-Review+1: Milan Potdar <milan.potdar@intel.com>
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 29 Aug 2016 14:46:36 +0000
+Reviewed-on: https://review.openstack.org/343781
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master

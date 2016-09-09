@@ -1,0 +1,9 @@
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Code-Review+2: Ildiko Vancsa <ildiko.vancsa@gmail.com>
+Workflow+1: Ildiko Vancsa <ildiko.vancsa@gmail.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 08 Sep 2016 10:27:18 +0000
+Reviewed-on: https://review.openstack.org/366483
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
