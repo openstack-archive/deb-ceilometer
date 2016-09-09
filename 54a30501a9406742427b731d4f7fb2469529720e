@@ -1,0 +1,8 @@
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Workflow+1: Julien Danjou <julien@danjou.info>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 02 Aug 2016 12:27:16 +0000
+Reviewed-on: https://review.openstack.org/349836
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/mitaka
