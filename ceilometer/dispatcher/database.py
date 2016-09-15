@@ -24,8 +24,7 @@ from ceilometer import storage
 LOG = log.getLogger(__name__)
 
 
-class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
-                         dispatcher.EventDispatcherBase):
+class DatabaseDispatcher(dispatcher.Base):
     """Dispatcher class for recording metering data into database.
 
     The dispatcher class which records each meter into a database configured
@@ -39,35 +38,17 @@ class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
     event_dispatchers = database
     """
 
-    def __init__(self, conf):
-        super(DatabaseDispatcher, self).__init__(conf)
-
-        self._meter_conn = self._get_db_conn('metering', True)
-        self._event_conn = self._get_db_conn('event', True)
-
-    def _get_db_conn(self, purpose, ignore_exception=False):
-        try:
-            return storage.get_connection_from_config(self.conf, purpose)
-        except Exception as err:
-            params = {"purpose": purpose, "err": err}
-            LOG.exception(_LE("Failed to connect to db, purpose %(purpose)s "
-                              "re-try later: %(err)s") % params)
-            if not ignore_exception:
-                raise
-
     @property
-    def meter_conn(self):
-        if not self._meter_conn:
-            self._meter_conn = self._get_db_conn('metering')
+    def conn(self):
+        if not hasattr(self, "_conn"):
+            self._conn = storage.get_connection_from_config(
+                self.conf, self.CONNECTION_TYPE)
+        return self._conn
 
-        return self._meter_conn
 
-    @property
-    def event_conn(self):
-        if not self._event_conn:
-            self._event_conn = self._get_db_conn('event')
-
-        return self._event_conn
+class MeterDatabaseDispatcher(dispatcher.MeterDispatcherBase,
+                              DatabaseDispatcher):
+    CONNECTION_TYPE = 'metering'
 
     def record_metering_data(self, data):
         # We may have receive only one counter on the wire
@@ -91,11 +72,16 @@ class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
                 ts = timeutils.parse_isotime(meter['timestamp'])
                 meter['timestamp'] = timeutils.normalize_time(ts)
         try:
-            self.meter_conn.record_metering_data_batch(data)
+            self.conn.record_metering_data_batch(data)
         except Exception as err:
             LOG.error(_LE('Failed to record %(len)s: %(err)s.'),
                       {'len': len(data), 'err': err})
             raise
+
+
+class EventDatabaseDispatcher(dispatcher.EventDispatcherBase,
+                              DatabaseDispatcher):
+    CONNECTION_TYPE = 'event'
 
     def record_events(self, events):
         if not isinstance(events, list):
@@ -119,4 +105,4 @@ class DatabaseDispatcher(dispatcher.MeterDispatcherBase,
             except Exception:
                 LOG.exception(_LE("Error processing event and it will be "
                                   "dropped: %s"), ev)
-        self.event_conn.record_events(event_list)
+        self.conn.record_events(event_list)

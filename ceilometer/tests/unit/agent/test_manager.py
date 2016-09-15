@@ -16,11 +16,10 @@
 
 import shutil
 
-from keystoneclient import exceptions as ks_exceptions
+from keystoneauth1 import exceptions as ka_exceptions
 import mock
 from novaclient import client as novaclient
 from oslo_config import fixture as fixture_config
-from oslo_service import service as os_service
 from oslo_utils import fileutils
 from oslotest import base
 from oslotest import mockpatch
@@ -270,7 +269,6 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         self.notifier.sample.side_effect = self.fake_notifier_sample
         self.useFixture(mockpatch.Patch('oslo_messaging.Notifier',
                                         return_value=self.notifier))
-        self.source_resources = True
         super(TestRunTasks, self).setUp()
         self.useFixture(mockpatch.Patch(
             'keystoneclient.v2_0.client.Client',
@@ -304,13 +302,13 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         """Test for bug 1316532."""
         self.useFixture(mockpatch.Patch(
             'keystoneclient.v2_0.client.Client',
-            side_effect=ks_exceptions.ClientException))
+            side_effect=ka_exceptions.ClientException))
         self.pipeline_cfg = {
             'sources': [{
                 'name': "test_keystone",
                 'interval': 10,
                 'meters': ['testkeystone'],
-                'resources': ['test://'] if self.source_resources else [],
+                'resources': ['test://'],
                 'sinks': ['test_sink']}],
             'sinks': [{
                 'name': 'test_sink',
@@ -379,7 +377,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
                 'name': source_name,
                 'interval': 10,
                 'meters': ['testpollingexception'],
-                'resources': ['test://'] if self.source_resources else [],
+                'resources': ['test://'],
                 'sinks': ['test_sink']}],
             'sinks': [{
                 'name': 'test_sink',
@@ -414,7 +412,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
     def _batching_samples(self, expected_samples, call_count):
         self.useFixture(mockpatch.PatchObject(manager.utils, 'delayed',
                                               side_effect=fakedelayed))
-        pipeline = yaml.dump({
+        pipeline_cfg = {
             'sources': [{
                 'name': 'test_pipeline',
                 'interval': 1,
@@ -425,18 +423,12 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
                 'name': 'test_sink',
                 'transformers': [],
                 'publishers': ["test"]}]
-        })
+        }
 
-        pipeline_cfg_file = self.setup_pipeline_file(pipeline)
+        self.mgr.polling_manager = pipeline.PollingManager(pipeline_cfg)
+        polling_task = list(self.mgr.setup_polling_tasks().values())[0]
 
-        self.CONF.set_override("pipeline_cfg_file", pipeline_cfg_file)
-
-        self.mgr.start()
-        self.addCleanup(self.mgr.stop)
-        # Manually executes callbacks
-        for cb, __, args, kwargs in self.mgr.polling_periodics._callables:
-            cb(*args, **kwargs)
-
+        self.mgr.interval_task(polling_task)
         samples = self.notified_samples
         self.assertEqual(expected_samples, len(samples))
         self.assertEqual(call_count, self.notifier.sample.call_count)
@@ -452,7 +444,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
                 'name': 'test_pipeline',
                 'interval': 1,
                 'meters': ['test'],
-                'resources': ['test://'] if self.source_resources else [],
+                'resources': ['test://'],
                 'sinks': ['test_sink']}],
             'sinks': [{
                 'name': 'test_sink',
@@ -463,9 +455,8 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
         pipeline_cfg_file = self.setup_pipeline_file(pipeline)
 
         self.CONF.set_override("pipeline_cfg_file", pipeline_cfg_file)
-        self.mgr.tg = os_service.threadgroup.ThreadGroup(1000)
-        self.mgr.start()
-        self.addCleanup(self.mgr.stop)
+        self.mgr.run()
+        self.addCleanup(self.mgr.terminate)
 
         # we only got the old name of meters
         for sample in self.notified_samples:
@@ -479,7 +470,7 @@ class TestRunTasks(agentbase.BaseAgentManagerTestCase):
                 'name': 'test_pipeline',
                 'interval': 1,
                 'meters': ['testanother'],
-                'resources': ['test://'] if self.source_resources else [],
+                'resources': ['test://'],
                 'sinks': ['test_sink']}],
             'sinks': [{
                 'name': 'test_sink',

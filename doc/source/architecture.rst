@@ -198,11 +198,15 @@ Publishing the data
    This figure shows how a sample can be published to multiple destinations.
 
 Currently, processed data can be published using 5 different transports:
-notifier, a notification based publisher which pushes samples to a message
-queue which can be consumed by the collector or an external system; udp, which
-publishes samples using UDP packets; http, which targets a REST interface;
-and kafka, which publishes data to a Kafka message queue to be consumed by any
-system that supports Kafka.
+
+1. direct, which publishes samples to a configured dispatcher directly, default
+   is database dispatcher;
+2. notifier, a notification based publisher which pushes samples to a message queue
+   which can be consumed by the collector or an external system;
+3. udp, which publishes samples using UDP packets;
+4. http, which targets a REST interface;
+5. kafka, which publishes data to a Kafka message queue to be consumed by any system 
+   that supports Kafka.
 
 
 Storing the data
@@ -216,7 +220,9 @@ the notification and polling agents. It validates the incoming data and (if
 the signature is valid) then writes the messages to a declared target:
 database, file, gnocchi or http.
 
-More details on database and Gnocchi targets can be found in the install guide.
+More details on database and Gnocchi targets can be found in the 
+:ref:`choosing_db_backend` guide.
+
 
 
 Accessing the data

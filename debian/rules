@@ -15,6 +15,8 @@ override_dh_clean:
 override_dh_install:
 	rm -rf $(CURDIR)/debian/tmp
 	python2.7 setup.py install --install-layout=deb --root $(CURDIR)/debian/tmp
+	rm -rf $(CURDIR)/debian/tmp/usr/etc
+
 	dh_install --fail-missing
 
 	# Manage ceilometer.conf
