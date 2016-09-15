@@ -21,7 +21,6 @@ import random
 from concurrent import futures
 from futurist import periodics
 from keystoneauth1 import exceptions as ka_exceptions
-from keystoneclient import exceptions as ks_exceptions
 from oslo_config import cfg
 from oslo_log import log
 import oslo_messaging
@@ -233,7 +232,7 @@ class PollingTask(object):
 
 class AgentManager(service_base.PipelineBasedService):
 
-    def __init__(self, namespaces=None, pollster_list=None):
+    def __init__(self, namespaces=None, pollster_list=None, worker_id=0):
         namespaces = namespaces or ['compute', 'central']
         pollster_list = pollster_list or []
         group_prefix = cfg.CONF.polling.partitioning_group_prefix
@@ -244,7 +243,7 @@ class AgentManager(service_base.PipelineBasedService):
         if pollster_list and cfg.CONF.coordination.backend_url:
             raise PollsterListForbidden()
 
-        super(AgentManager, self).__init__()
+        super(AgentManager, self).__init__(worker_id)
 
         def _match(pollster):
             """Find out if pollster name matches to one of the list."""
@@ -402,29 +401,28 @@ class AgentManager(service_base.PipelineBasedService):
                           else delay_polling_time)
 
             @periodics.periodic(spacing=interval, run_immediately=False)
-            def task():
-                self.interval_task(polling_task)
+            def task(running_task):
+                self.interval_task(running_task)
 
             utils.spawn_thread(utils.delayed, delay_time,
-                               self.polling_periodics.add, task)
+                               self.polling_periodics.add, task, polling_task)
 
         if data:
             # Don't start useless threads if no task will run
             utils.spawn_thread(self.polling_periodics.start, allow_empty=True)
 
-    def start(self):
-        super(AgentManager, self).start()
+    def run(self):
+        super(AgentManager, self).run()
         self.polling_manager = pipeline.setup_polling()
         self.join_partitioning_groups()
         self.start_polling_tasks()
         self.init_pipeline_refresh()
 
-    def stop(self):
-        if self.started:
-            self.stop_pollsters_tasks()
-            self.heartbeat_timer.stop()
-            self.partition_coordinator.stop()
-        super(AgentManager, self).stop()
+    def terminate(self):
+        self.stop_pollsters_tasks()
+        self.heartbeat_timer.stop()
+        self.partition_coordinator.stop()
+        super(AgentManager, self).terminate()
 
     def interval_task(self, task):
         # NOTE(sileht): remove the previous keystone client
@@ -454,8 +452,7 @@ class AgentManager(service_base.PipelineBasedService):
             try:
                 self._keystone = keystone_client.get_client()
                 self._keystone_last_exception = None
-            except (ka_exceptions.ClientException,
-                    ks_exceptions.ClientException) as e:
+            except ka_exceptions.ClientException as e:
                 self._keystone = None
                 self._keystone_last_exception = e
         if self._keystone is not None:
@@ -505,8 +502,7 @@ class AgentManager(service_base.PipelineBasedService):
                     resources.extend(partitioned)
                     if discovery_cache is not None:
                         discovery_cache[url] = partitioned
-                except (ka_exceptions.ClientException,
-                        ks_exceptions.ClientException) as e:
+                except ka_exceptions.ClientException as e:
                     LOG.error(_LE('Skipping %(name)s, keystone issue: '
                                   '%(exc)s'), {'name': name, 'exc': e})
                 except Exception as err:

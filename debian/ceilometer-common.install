@@ -1,9 +1,9 @@
+/usr/bin/ceilometer-db-legacy-clean
 /usr/bin/ceilometer-dbsync
 /usr/bin/ceilometer-expirer
 /usr/bin/ceilometer-polling
 /usr/bin/ceilometer-rootwrap
 /usr/bin/ceilometer-send-sample
-/usr/bin/ceilometer-db-legacy-clean
 etc/ceilometer/api_paste.ini		/etc/ceilometer
 etc/ceilometer/event_definitions.yaml	/etc/ceilometer
 etc/ceilometer/pipeline.yaml		/etc/ceilometer
