@@ -1,0 +1,11 @@
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Code-Review+1: Prudhvi Rao Shedimbi <prudhvi.rao.shedimbi@intel.com>
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Code-Review+1: howard lee <lihongweibj@inspur.com>
+Workflow+1: Julien Danjou <julien@danjou.info>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 16 Sep 2016 10:57:05 +0000
+Reviewed-on: https://review.openstack.org/365072
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master

@@ -1,0 +1,9 @@
+Code-Review+2: Lianhao Lu <lianhao.lu@intel.com>
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Workflow+1: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 16 Sep 2016 09:13:13 +0000
+Reviewed-on: https://review.openstack.org/367698
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
