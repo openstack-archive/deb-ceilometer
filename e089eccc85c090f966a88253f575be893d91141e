@@ -1,0 +1,10 @@
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Code-Review+1: Matthew Kassawara <mkassawara@gmail.com>
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Workflow+1: Julien Danjou <julien@danjou.info>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 15 Sep 2016 20:32:53 +0000
+Reviewed-on: https://review.openstack.org/364659
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
