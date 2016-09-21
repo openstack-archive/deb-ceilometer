@@ -52,8 +52,6 @@ cfg.CONF.import_opt('metering_topic', 'ceilometer.publisher.messaging',
                     group='publisher_notifier')
 cfg.CONF.import_opt('event_topic', 'ceilometer.publisher.messaging',
                     group='publisher_notifier')
-cfg.CONF.import_opt('store_events', 'ceilometer.notification',
-                    group='notification')
 
 
 LOG = log.getLogger(__name__)
@@ -61,9 +59,8 @@ LOG = log.getLogger(__name__)
 
 class CollectorService(cotyledon.Service):
     """Listener for the collector service."""
-    def run(self):
-        """Bind the UDP socket and handle incoming data."""
-        super(CollectorService, self).run()
+    def __init__(self, worker_id):
+        super(CollectorService, self).__init__(worker_id)
         # ensure dispatcher is configured before starting other services
         dispatcher_managers = dispatcher.load_dispatcher_manager()
         (self.meter_manager, self.event_manager) = dispatcher_managers
@@ -71,6 +68,7 @@ class CollectorService(cotyledon.Service):
         self.event_listener = None
         self.udp_thread = None
 
+    def run(self):
         if cfg.CONF.collector.udp_address:
             self.udp_thread = utils.spawn_thread(self.start_udp)
 
@@ -89,7 +87,7 @@ class CollectorService(cotyledon.Service):
                         batch_timeout=cfg.CONF.collector.batch_timeout))
                 self.sample_listener.start()
 
-            if cfg.CONF.notification.store_events and list(self.event_manager):
+            if list(self.event_manager):
                 event_target = oslo_messaging.Target(
                     topic=cfg.CONF.publisher_notifier.event_topic)
                 self.event_listener = (

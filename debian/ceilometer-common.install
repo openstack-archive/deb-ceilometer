@@ -4,6 +4,7 @@
 /usr/bin/ceilometer-polling
 /usr/bin/ceilometer-rootwrap
 /usr/bin/ceilometer-send-sample
+/usr/bin/ceilometer-upgrade
 etc/ceilometer/api_paste.ini		/etc/ceilometer
 etc/ceilometer/event_definitions.yaml	/etc/ceilometer
 etc/ceilometer/event_pipeline.yaml	/etc/ceilometer

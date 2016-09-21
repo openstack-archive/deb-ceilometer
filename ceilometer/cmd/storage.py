@@ -20,17 +20,51 @@ from six import moves
 import six.moves.urllib.parse as urlparse
 import sqlalchemy as sa
 
-from ceilometer.i18n import _LE, _LI
+from ceilometer.i18n import _LE, _LI, _LW
 from ceilometer import service
 from ceilometer import storage
 
 LOG = log.getLogger(__name__)
 
 
-def dbsync():
+def upgrade(default_skip_gnocchi_resource_types=False):
+    cfg.CONF.register_cli_opts([
+        cfg.BoolOpt('skip-metering-database',
+                    help='Skip metering database upgrade.',
+                    default=False),
+        cfg.BoolOpt('skip-event-database',
+                    help='Skip event database upgrade.',
+                    default=False),
+        cfg.BoolOpt('skip-gnocchi-resource-types',
+                    help='Skip gnocchi resource-types upgrade.',
+                    default=default_skip_gnocchi_resource_types),
+    ])
+
     service.prepare_service()
-    storage.get_connection_from_config(cfg.CONF, 'metering').upgrade()
-    storage.get_connection_from_config(cfg.CONF, 'event').upgrade()
+    if cfg.CONF.skip_metering_database:
+        LOG.info("Skipping metering database upgrade")
+    else:
+        LOG.debug("Upgrading metering database")
+        storage.get_connection_from_config(cfg.CONF, 'metering').upgrade()
+
+    if cfg.CONF.skip_event_database:
+        LOG.info("Skipping event database upgrade")
+    else:
+        LOG.debug("Upgrading event database")
+        storage.get_connection_from_config(cfg.CONF, 'event').upgrade()
+
+    if cfg.CONF.skip_gnocchi_resource_types:
+        LOG.info("Skipping Gnocchi resource types upgrade")
+    else:
+        LOG.debug("Upgrading Gnocchi resource types")
+        from ceilometer import gnocchi_client
+        gnocchi_client.upgrade_resource_types(cfg.CONF)
+
+
+def dbsync():
+    LOG.warning(_LW('ceilometer-dbsync is deprecated in favor of '
+                    'ceilometer-upgrade'))
+    upgrade(default_skip_gnocchi_resource_types=True)
 
 
 def expirer():
@@ -56,12 +90,18 @@ def expirer():
 
 
 def db_clean_legacy():
-    confirm = moves.input("Do you really want to drop the legacy alarm tables?"
-                          "This will destroy data definitely if it exist. "
-                          "Please type 'YES' to confirm: ")
-    if confirm != 'YES':
-        print("DB legacy cleanup aborted!")
-        return
+    cfg.CONF.register_cli_opts([
+        cfg.strOpt('confirm-drop-alarm-table',
+                   short='n',
+                   help='confirm to drop the legacy alarm tables')])
+    if not cfg.CONF.confirm_drop_alarm_table:
+        confirm = moves.input("Do you really want to drop the legacy alarm "
+                              "tables? This will destroy data definitely "
+                              "if it exist. Please type 'YES' to confirm: ")
+        if confirm != 'YES':
+            print("DB legacy cleanup aborted!")
+            return
+
     service.prepare_service()
     for purpose in ['metering', 'event']:
         url = (getattr(cfg.CONF.database, '%s_connection' % purpose) or

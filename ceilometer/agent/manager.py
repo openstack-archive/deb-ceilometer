@@ -303,7 +303,7 @@ class AgentManager(service_base.PipelineBasedService):
             # Extension raising ExtensionLoadError can be ignored,
             # and ignore anything we can't import as a safety measure.
             if isinstance(exc, plugin_base.ExtensionLoadError):
-                LOG.exception(_("Skip loading extension for %s") % ep.name)
+                LOG.exception(_LE("Skip loading extension for %s"), ep.name)
                 return
             if isinstance(exc, ImportError):
                 LOG.error(_("Failed to import extension for %(name)s: "
@@ -383,11 +383,6 @@ class AgentManager(service_base.PipelineBasedService):
                 if discovery_group_id else None)
 
     def start_polling_tasks(self):
-        # NOTE(sileht): 1000 is just the same as previous oslo_service code
-        self.polling_periodics = periodics.PeriodicWorker.create(
-            [], executor_factory=lambda:
-            futures.ThreadPoolExecutor(max_workers=1000))
-
         # allow time for coordination if necessary
         delay_start = self.partition_coordinator.is_active()
 
@@ -396,6 +391,12 @@ class AgentManager(service_base.PipelineBasedService):
             0, cfg.CONF.shuffle_time_before_polling_task)
 
         data = self.setup_polling_tasks()
+
+        # One thread per polling tasks is enough
+        self.polling_periodics = periodics.PeriodicWorker.create(
+            [], executor_factory=lambda:
+            futures.ThreadPoolExecutor(max_workers=len(data)))
+
         for interval, polling_task in data.items():
             delay_time = (interval + delay_polling_time if delay_start
                           else delay_polling_time)
@@ -506,9 +507,9 @@ class AgentManager(service_base.PipelineBasedService):
                     LOG.error(_LE('Skipping %(name)s, keystone issue: '
                                   '%(exc)s'), {'name': name, 'exc': e})
                 except Exception as err:
-                    LOG.exception(_('Unable to discover resources: %s') % err)
+                    LOG.exception(_LE('Unable to discover resources: %s'), err)
             else:
-                LOG.warning(_('Unknown discovery extension: %s') % name)
+                LOG.warning(_LW('Unknown discovery extension: %s'), name)
         return resources
 
     def stop_pollsters_tasks(self):
