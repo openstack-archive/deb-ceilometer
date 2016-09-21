@@ -22,7 +22,7 @@ import six
 
 from ceilometer.compute.pollsters import util
 from ceilometer.compute.virt import inspector as virt_inspector
-from ceilometer.i18n import _LW, _
+from ceilometer.i18n import _LW, _LE, _
 
 libvirt = None
 
@@ -68,32 +68,31 @@ class LibvirtInspector(virt_inspector.Inspector):
     per_type_uris = dict(uml='uml:///system', xen='xen:///', lxc='lxc:///')
 
     def __init__(self):
-        self.uri = self._get_uri()
-        self.connection = None
+        self._connection = None
 
-    def _get_uri(self):
-        return CONF.libvirt_uri or self.per_type_uris.get(CONF.libvirt_type,
-                                                          'qemu:///system')
-
-    def _get_connection(self):
-        if not self.connection:
+    @property
+    def connection(self):
+        if not self._connection:
             global libvirt
             if libvirt is None:
                 libvirt = __import__('libvirt')
-            LOG.debug('Connecting to libvirt: %s', self.uri)
-            self.connection = libvirt.openReadOnly(self.uri)
 
-        return self.connection
+            uri = (CONF.libvirt_uri or
+                   self.per_type_uris.get(CONF.libvirt_type, 'qemu:///system'))
+            LOG.debug('Connecting to libvirt: %s', uri)
+            self._connection = libvirt.openReadOnly(uri)
+
+        return self._connection
 
     def check_sanity(self):
-        if not self._get_connection():
+        if not self.connection:
             raise virt_inspector.NoSanityException()
 
     @retry_on_disconnect
     def _lookup_by_uuid(self, instance):
         instance_name = util.instance_name(instance)
         try:
-            return self._get_connection().lookupByUUIDString(instance.id)
+            return self.connection.lookupByUUIDString(instance.id)
         except Exception as ex:
             if not libvirt or not isinstance(ex, libvirt.libvirtError):
                 raise virt_inspector.InspectorException(six.text_type(ex))
@@ -277,5 +276,33 @@ class LibvirtInspector(virt_inspector.Inspector):
         except libvirt.libvirtError as e:
             msg = _('Failed to inspect memory bandwidth of %(instance_uuid)s, '
                     'can not get info from libvirt: %(error)s') % {
+                'instance_uuid': instance.id, 'error': e}
+            raise virt_inspector.NoDataException(msg)
+
+    def inspect_perf_events(self, instance, duration=None):
+        domain = self._get_domain_not_shut_off_or_raise(instance)
+
+        try:
+            stats = self.connection.domainListGetStats(
+                [domain], libvirt.VIR_DOMAIN_STATS_PERF)
+            perf = stats[0][1]
+            return virt_inspector.PerfEventsStats(
+                cpu_cycles=perf["perf.cpu_cycles"],
+                instructions=perf["perf.instructions"],
+                cache_references=perf["perf.cache_references"],
+                cache_misses=perf["perf.cache_misses"])
+        except AttributeError as e:
+            msg = _LE('Perf is not supported by current version of libvirt, '
+                      'and failed to inspect perf events of '
+                      '%(instance_uuid)s, can not get info from libvirt: '
+                      '%(error)s') % {
+                'instance_uuid': instance.id, 'error': e}
+            raise virt_inspector.NoDataException(msg)
+        # domainListGetStats might launch an exception if the method or
+        # mbmt/mbml perf event is not supported by the underlying hypervisor
+        # being used by libvirt.
+        except libvirt.libvirtError as e:
+            msg = _LE('Failed to inspect perf events of %(instance_uuid)s, '
+                      'can not get info from libvirt: %(error)s') % {
                 'instance_uuid': instance.id, 'error': e}
             raise virt_inspector.NoDataException(msg)
