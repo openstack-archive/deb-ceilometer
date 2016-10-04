@@ -1,13 +1,13 @@
 # Italian translation of ceilometer debconf messages.
-# Copyright (C) 2013, ceilometer package copyright holder
+# Copyright (C) 2016, ceilometer package copyright holder
 # This file is distributed under the same license as the ceilometer package.
-# Beatrice Torracca <beatricet@libero.it>, 2013, 2014.
+# Beatrice Torracca <beatricet@libero.it>, 2013, 2014, 2016.
 msgid ""
 msgstr ""
 "Project-Id-Version: ceilometer\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
 "POT-Creation-Date: 2016-03-29 12:22+0000\n"
-"PO-Revision-Date: 2014-04-06 15:04+0200\n"
+"PO-Revision-Date: 2016-08-01 14:05+0200\n"
 "Last-Translator: Beatrice Torracca <beatricet@libero.it>\n"
 "Language-Team: Italian <debian-l10n-italian@lists.debian.org>\n"
 "Language: it\n"
@@ -38,7 +38,6 @@ msgstr ""
 #. Type: boolean
 #. Description
 #: ../ceilometer-api.templates:2001
-#, fuzzy
 #| msgid ""
 #| "Note that you will need to have an up and running Keystone server on "
 #| "which to connect using the Keystone authentication token."
@@ -48,7 +47,9 @@ msgid ""
 "The admin auth token is not used anymore."
 msgstr ""
 "Notare che sarà necessario avere un server Keystone in funzione a cui "
-"connettersi usando il token di autenticazione Keystone."
+"connettersi usando un nome di progetto di amministrazione conosciuto, un "
+"nome utente e password di amministratore. Il token di autenticazione di "
+"amministratore non è più usato."
 
 #. Type: string
 #. Description
@@ -70,10 +71,9 @@ msgstr ""
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:4001
-#, fuzzy
 #| msgid "Keystone authentication token:"
 msgid "Keystone admin name:"
-msgstr "Token di autenticazione Keystone:"
+msgstr "Nome amministratore Keystone:"
 
 #. Type: string
 #. Description
@@ -87,18 +87,21 @@ msgid ""
 "To register the service endpoint, this package needs to know the Admin "
 "login, name, project name, and password to the Keystone server."
 msgstr ""
+"Per registrare il punto terminale del servizio questo pacchetto deve "
+"conoscere il login, il nome, il nome del progetto e la password "
+"dell'amministratore per il server Keystone."
 
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:5001
 msgid "Keystone admin project name:"
-msgstr ""
+msgstr "Nome del progetto di amministrazione Keystone:"
 
 #. Type: password
 #. Description
 #: ../ceilometer-api.templates:6001
 msgid "Keystone admin password:"
-msgstr ""
+msgstr "Password amministratore Keystone:"
 
 #. Type: string
 #. Description
@@ -146,7 +149,7 @@ msgstr ""
 #. Description
 #: ../ceilometer-common.templates:2001
 msgid "Perform automatic dbsync for Ceilometer?"
-msgstr ""
+msgstr "Effettuare il dbsync automatico per Ceilometer?"
 
 #. Type: boolean
 #. Description
@@ -155,6 +158,9 @@ msgid ""
 "Ceilometer can automatically run ceilometer-dbsync after installation. For "
 "it to work, you need an up and running mongodb-server."
 msgstr ""
+"Ceilometer può eseguire automaticamente ceilometer-dbsync dopo "
+"l'installazione. Affinché funzioni è necessario un mongodb-server "
+"funzionante e in esecuzione."
 
 #. Type: boolean
 #. Description
@@ -163,6 +169,8 @@ msgid ""
 "You can change this setting later on by running \"dpkg-reconfigure -plow "
 "ceilometer\"."
 msgstr ""
+"È possibile cambiare questa impostazione successivamente eseguendo \"dpkg-"
+"reconfigure -plow ceilometer\"."
 
 #. Type: string
 #. Description
@@ -283,10 +291,3 @@ msgstr "Password per il server di autenticazione:"
 #: ../ceilometer-common.templates:9001
 msgid "Please specify the password to use with the authentication server."
 msgstr "Inserire la password da usare con il server di autenticazione."
-
-#~ msgid ""
-#~ "To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
-#~ "authentication token."
-#~ msgstr ""
-#~ "Per configurare il proprio punto terminale in Keystone, ceilometer-api ha "
-#~ "bisogno del token di autenticazione Keystone."

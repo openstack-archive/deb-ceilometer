@@ -1,7 +1,10 @@
-ceilometer (1:7.0.0~rc1-2) UNRELEASED; urgency=medium
+ceilometer (1:7.0.0~rc1-2) unstable; urgency=medium
 
+  * Uploading to unstable.
   * Build-Depends on openstack-pkg-tools (>= 53~).
   * Fixed EPOCH for oslotest.
+  * Debconf translation:
+    - it (Closes: #838500).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 28 Sep 2016 09:37:20 +0200
 
