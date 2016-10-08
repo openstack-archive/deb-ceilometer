@@ -1,0 +1,12 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Code-Review+1: Yarko Tymciurak <yarko.tymciurak@intel.com>
+Code-Review+1: xujun <xu.jun@99cloud.net>
+Code-Review+1: liuwei <liu.wei81@zte.com.cn>
+Code-Review+1: haokunsheng <haoks@awcloud.com>
+Workflow+1: Lianhao Lu <lianhao.lu@intel.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Sat, 08 Oct 2016 06:08:37 +0000
+Reviewed-on: https://review.openstack.org/368225
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
