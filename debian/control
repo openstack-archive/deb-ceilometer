@@ -3,7 +3,7 @@ Section: web
 Priority: optional
 Maintainer: PKG OpenStack <openstack-devel@lists.alioth.debian.org>
 Uploaders: Thomas Goirand <zigo@debian.org>,
-Build-Depends: debhelper (>= 9),
+Build-Depends: debhelper (>= 10),
                dh-python,
                dh-systemd,
                openstack-pkg-tools (>= 53~),
@@ -89,8 +89,8 @@ Build-Depends-Indep: git,
                      tempest (>= 1:12.1.0),
                      testrepository,
 Standards-Version: 3.9.8
-Vcs-Browser: https://git.openstack.org/cgit/openstack/deb-ceilometer
-Vcs-Git: https://git.openstack.org/openstack/deb-ceilometer
+Vcs-Browser: https://git.openstack.org/cgit/openstack/deb-ceilometer?h=debian%2Fnewton
+Vcs-Git: https://git.openstack.org/openstack/deb-ceilometer -b debian/newton
 Homepage: http://wiki.openstack.org/Ceilometer
 
 Package: python-ceilometer
