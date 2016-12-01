@@ -1,0 +1,9 @@
+Code-Review+1: fengchaoyang <fengchaoyang@unitedstack.com>
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 30 Nov 2016 15:04:28 +0000
+Reviewed-on: https://review.openstack.org/404733
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/newton
