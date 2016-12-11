@@ -1,5 +1,6 @@
-ceilometer (1:7.0.0-2) UNRELEASED; urgency=medium
+ceilometer (1:7.0.1-1) UNRELEASED; urgency=medium
 
+  * New upstream release
   * d/s/options: extend-diff-ignore of .gitreview
   * d/control: Use correct branch in Vcs-* fields
   * Bumped debhelper compat version to 10

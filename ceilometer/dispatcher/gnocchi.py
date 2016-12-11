@@ -25,6 +25,7 @@ from gnocchiclient import utils as gnocchi_utils
 from keystoneauth1 import exceptions as ka_exceptions
 from oslo_config import cfg
 from oslo_log import log
+from oslo_serialization import jsonutils
 from oslo_utils import fnmatch
 from oslo_utils import timeutils
 import retrying
@@ -95,6 +96,11 @@ class ResourcesDefinition(object):
             self._attributes[name] = declarative.Definition(name, attr_cfg,
                                                             plugin_manager)
 
+        self._event_attributes = {}
+        for name, attr_cfg in self.cfg.get('event_attributes', {}).items():
+            self._event_attributes[name] = declarative.Definition(
+                name, attr_cfg, plugin_manager)
+
         self.metrics = {}
         for t in self.cfg['metrics']:
             archive_policy = self.cfg.get('archive_policy',
@@ -143,7 +149,7 @@ class ResourcesDefinition(object):
         return attrs
 
     def event_attributes(self, event):
-        attrs = {}
+        attrs = {'type': self.cfg['resource_type']}
         traits = dict([(trait[0], trait[2]) for trait in event['traits']])
         for attr, field in self.cfg.get('event_attributes', {}).items():
             value = traits.get(field)
@@ -176,7 +182,8 @@ class LockedDefaultDict(defaultdict):
                     key_lock.release()
 
 
-class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
+class GnocchiDispatcher(dispatcher.MeterDispatcherBase,
+                        dispatcher.EventDispatcherBase):
     """Dispatcher class for recording metering data into database.
 
     The dispatcher class records each meter into the gnocchi service
@@ -192,6 +199,7 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
 
     [DEFAULT]
     meter_dispatchers = gnocchi
+    event_dispatchers = gnocchi
     """
     def __init__(self, conf):
         super(GnocchiDispatcher, self).__init__(conf)
@@ -374,7 +382,8 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
 
         try:
             self.batch_measures(measures, gnocchi_data, stats)
-        except gnocchi_exc.ClientException as e:
+        except (gnocchi_exc.ClientException,
+                ka_exceptions.ConnectFailure) as e:
             LOG.error(six.text_type(e))
         except Exception as e:
             LOG.error(six.text_type(e), exc_info=True)
@@ -505,25 +514,45 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                 continue
 
             rd, operation = rd
-            resource_type = rd.cfg['resource_type']
-            resource = rd.event_attributes(event)
-
             if operation == EVENT_DELETE:
-                ended_at = timeutils.utcnow().isoformat()
-                resources_to_end = [resource]
-                extra_resources = cfg['event_associated_resources'].items()
-                for resource_type, filters in extra_resources:
-                    resources_to_end.extend(self._gnocchi.search_resource(
-                        resource_type, filters['query'] % resource['id']))
-                for resource in resources_to_end:
-                    try:
-                        self._gnocchi.update_resource(resource_type,
-                                                      resource['id'],
-                                                      {'ended_at': ended_at})
-                    except gnocchi_exc.NoSuchResource:
-                        LOG.debug(_("Delete event received on unexiting "
-                                    "resource (%s), ignore it.") %
-                                  resource['id'])
-                    except Exception:
-                        LOG.error(_LE("Fail to update the resource %s") %
-                                  resource, exc_info=True)
+                self._delete_event(rd, event)
+
+    def _delete_event(self, rd, event):
+        ended_at = timeutils.utcnow().isoformat()
+
+        resource = rd.event_attributes(event)
+        associated_resources = rd.cfg.get('event_associated_resources', {})
+
+        if associated_resources:
+            to_end = itertools.chain([resource], *[
+                self._search_resource(resource_type, query % resource['id'])
+                for resource_type, query in associated_resources.items()
+            ])
+        else:
+            to_end = [resource]
+
+        for resource in to_end:
+            self._set_ended_at(resource, ended_at)
+
+    def _search_resource(self, resource_type, query):
+        try:
+            return self._gnocchi.resource.search(
+                resource_type, jsonutils.loads(query))
+        except Exception:
+            LOG.error(_LE("Fail to search resource type %{resource_type}s "
+                          "with '%{query}s'"),
+                      {'resource_type': resource_type, 'query': query},
+                      exc_info=True)
+        return []
+
+    def _set_ended_at(self, resource, ended_at):
+        try:
+            self._gnocchi.resource.update(resource['type'], resource['id'],
+                                          {'ended_at': ended_at})
+        except gnocchi_exc.ResourceNotFound:
+            LOG.debug("Delete event received on unexisting resource (%s), "
+                      "ignore it.", resource['id'])
+        except Exception:
+            LOG.error(_LE("Fail to update the resource %s"), resource,
+                      exc_info=True)
+        LOG.debug('Resource %s ended at %s' % (resource["id"], ended_at))
