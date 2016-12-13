@@ -1,0 +1,11 @@
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Code-Review+1: Hanxi Liu <hanxi.liu@easystack.cn>
+Code-Review+1: Eric Lei <leiyashuai@inspur.com>
+Code-Review+1: avnish <avnish.pal@nectechnologies.in>
+Workflow+1: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 13 Dec 2016 16:09:09 +0000
+Reviewed-on: https://review.openstack.org/403801
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
