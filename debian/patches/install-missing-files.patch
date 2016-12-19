@@ -1,0 +1,9 @@
+Description: Install missing files
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: no
+Last-Update: 2016-12-19
+
+--- /dev/null	2016-10-06 13:03:00.121460858 +0200
++++ b/MANIFEST.in	2016-12-19 16:58:49.896860288 +0100
+@@ -0,0 +1 @@
++recursive-include ceilometer *
