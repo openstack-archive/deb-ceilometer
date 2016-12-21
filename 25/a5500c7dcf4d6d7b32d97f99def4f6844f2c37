@@ -1,0 +1,8 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 20 Dec 2016 16:29:17 +0000
+Reviewed-on: https://review.openstack.org/410980
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/mitaka
