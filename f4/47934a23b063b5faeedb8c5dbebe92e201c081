@@ -1,0 +1,10 @@
+Code-Review+1: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Code-Review+1: Hanxi Liu <hanxi.liu@easystack.cn>
+Workflow+1: gordon chung <gord@live.ca>
+Code-Review+2: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 06 Feb 2017 20:27:06 +0000
+Reviewed-on: https://review.openstack.org/427796
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/mitaka
