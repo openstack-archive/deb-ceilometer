@@ -1,0 +1,10 @@
+Code-Review+1: Huangsm <huangsm@awcloud.com>
+Code-Review+2: Julien Danjou <julien@danjou.info>
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 23 Mar 2017 19:24:42 +0000
+Reviewed-on: https://review.openstack.org/446886
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
