@@ -1,0 +1,9 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Code-Review+1: Hanxi Liu <hanxi.liu@easystack.cn>
+Workflow+1: Julien Danjou <julien@danjou.info>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 21 Mar 2017 18:59:11 +0000
+Reviewed-on: https://review.openstack.org/448120
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/newton
