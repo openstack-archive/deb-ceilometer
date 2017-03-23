@@ -1,0 +1,9 @@
+Code-Review+2: liusheng <liusheng2048@gmail.com>
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 14 Feb 2017 15:44:37 +0000
+Reviewed-on: https://review.openstack.org/433413
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
