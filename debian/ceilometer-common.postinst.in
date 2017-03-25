@@ -35,7 +35,7 @@ libvirt_user_group () {
 			--disabled-password \
 			--home /var/lib/libvirt \
 			--no-create-home \
-			-gecos "Libvirt Qemu" \
+			--gecos "Libvirt Qemu" \
 			libvirt-qemu
 	fi
 }
