@@ -207,6 +207,7 @@ Architecture: all
 Depends: adduser,
          ceilometer-common (= ${binary:Version}),
          debconf,
+         net-tools,
          python-openstackclient,
          q-text-as-data,
          ${misc:Depends},
