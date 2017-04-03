@@ -1,14 +1,14 @@
 # German translation of ceilometer debconf templates
 # This file is distributed under the same license as the ceilometer package.
 # Copyright: Martin Eberhard Schauer <Martin.E.Schauer@gmx.de>, 2013,
-#            Chris Leick <c.leick@vollbio.de>, 2014.
+#            Chris Leick <c.leick@vollbio.de>, 2014-2019.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: ceilometer 2014.1-7\n"
+"Project-Id-Version: ceilometer 7.0.0-1\n"
 "Report-Msgid-Bugs-To: ceilometer@packages.debian.org\n"
 "POT-Creation-Date: 2016-03-29 12:22+0000\n"
-"PO-Revision-Date: 2014-06-04 14:37+0100\n"
+"PO-Revision-Date: 2016-10-28 19:37+0100\n"
 "Last-Translator: Chris Leick <c.leick@vollbio.de>\n"
 "Language-Team: German <debian-l10n-german@lists.debian.org>\n"
 "Language: de\n"
@@ -39,18 +39,15 @@ msgstr ""
 #. Type: boolean
 #. Description
 #: ../ceilometer-api.templates:2001
-#, fuzzy
-#| msgid ""
-#| "Note that you will need to have an up and running Keystone server on "
-#| "which to connect using the Keystone authentication token."
 msgid ""
 "Note that you will need to have an up and running Keystone server on which "
 "to connect using a known admin project name, admin username and password. "
 "The admin auth token is not used anymore."
 msgstr ""
-"Beachten Sie, dass Sie einen laufenden Keystone-Server benötigen, mit dem "
-"Sie sich unter Nutzung des Keystone-Authentifizierungs-Tokens verbinden "
-"können."
+"Beachten Sie, dass Sie einen konfigurierten und laufenden Keystone-Server "
+"haben müssen, mit dem Sie sich anhand eines bekannten "
+"Administratorprojektnamens, Administratorbenutzernamens und Passworts "
+"verbinden. Das Administratorauthentifizierungs-Token wird nicht mehr benutzt."
 
 #. Type: string
 #. Description
@@ -72,10 +69,8 @@ msgstr ""
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:4001
-#, fuzzy
-#| msgid "Keystone authentication token:"
 msgid "Keystone admin name:"
-msgstr "Keystone-Authentifizierungs-Token:"
+msgstr "Keystone-Administratorname:"
 
 #. Type: string
 #. Description
@@ -89,18 +84,21 @@ msgid ""
 "To register the service endpoint, this package needs to know the Admin "
 "login, name, project name, and password to the Keystone server."
 msgstr ""
+"Um den Dienstendpunkt zu registrieren, muss dieses Paket den "
+"Administratoranmeldenamen, Namen, Projektnamen und das Passwort für den "
+"Keystone-Server kennen."
 
 #. Type: string
 #. Description
 #: ../ceilometer-api.templates:5001
 msgid "Keystone admin project name:"
-msgstr ""
+msgstr "Keystone-Administratorprojektname:"
 
 #. Type: password
 #. Description
 #: ../ceilometer-api.templates:6001
 msgid "Keystone admin password:"
-msgstr ""
+msgstr "Keystone-Administratorpasswort:"
 
 #. Type: string
 #. Description
@@ -150,7 +148,7 @@ msgstr ""
 #. Description
 #: ../ceilometer-common.templates:2001
 msgid "Perform automatic dbsync for Ceilometer?"
-msgstr ""
+msgstr "Soll ein automatisches DBSync für Ceilometer durchgeführt werden?"
 
 #. Type: boolean
 #. Description
@@ -159,6 +157,9 @@ msgid ""
 "Ceilometer can automatically run ceilometer-dbsync after installation. For "
 "it to work, you need an up and running mongodb-server."
 msgstr ""
+"Ceilometer kann nach der Installation automatisch »ceilometer-dbsync« "
+"ausführen. Damit dies klappt, benötigen Sie einen konfigurierten und "
+"laufenden MongoDB-Server."
 
 #. Type: boolean
 #. Description
@@ -167,6 +168,8 @@ msgid ""
 "You can change this setting later on by running \"dpkg-reconfigure -plow "
 "ceilometer\"."
 msgstr ""
+"Sie können diese Einstellung später ändern, indem Sie »dpkg-reconfigure -"
+"plow ceilometer« ausführen."
 
 #. Type: string
 #. Description
@@ -294,10 +297,3 @@ msgid "Please specify the password to use with the authentication server."
 msgstr ""
 "Bitte geben Sie das Passwort an, das für den Authentifizierungsserver "
 "benutzt wird."
-
-#~ msgid ""
-#~ "To configure its endpoint in Keystone, ceilometer-api needs the Keystone "
-#~ "authentication token."
-#~ msgstr ""
-#~ "Um seinen Keystone-Endpunkt einzurichten, benötigt Ceilometer-api das "
-#~ "Keystone-Authentifizierungs-Token."
