@@ -14,5 +14,6 @@
 # Author: Thomas Goirand <zigo@debian.org>
 DESC="OpenStack Ceilometer Agent Central"
 PROJECT_NAME=ceilometer
-NAME=${PROJECT_NAME}-polling
+NAME=${PROJECT_NAME}-agent-central
+DAEMON=/usr/bin/${PROJECT_NAME}-polling
 DAEMON_ARGS=" --polling-namespaces central"

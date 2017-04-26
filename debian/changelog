@@ -1,3 +1,10 @@
+ceilometer (1:7.0.1-4) unstable; urgency=medium
+
+  * Fix ceilometer-agent-central .service file (Closes: #861202).
+  * Fix ceilometer-agent-compute .service file (Closes: #861203).
+
+ -- Thomas Goirand <zigo@debian.org>  Wed, 26 Apr 2017 15:36:56 +0000
+
 ceilometer (1:7.0.1-3) unstable; urgency=medium
 
   * Re-integrate NMU from Piotr fixing SQLAlchemy << 1.1 dependency.
