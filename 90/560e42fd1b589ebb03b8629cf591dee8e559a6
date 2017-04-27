@@ -1,0 +1,11 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Code-Review+1: liuwei <liu.wei81@zte.com.cn>
+Code-Review+1: XueFeng Liu <liu.xuefeng1@zte.com.cn>
+Workflow+1: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Code-Review+2: Mehdi Abaakouk (sileht) <sileht@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 27 Apr 2017 13:52:59 +0000
+Reviewed-on: https://review.openstack.org/454435
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
