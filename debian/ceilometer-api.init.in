@@ -15,3 +15,4 @@
 DESC="OpenStack Ceilometer API"
 PROJECT_NAME=ceilometer
 NAME=${PROJECT_NAME}-api
+DAEMON_ARGS="--"

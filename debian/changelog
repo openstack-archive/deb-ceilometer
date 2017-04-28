@@ -1,3 +1,9 @@
+ceilometer (1:7.0.1-5) unstable; urgency=medium
+
+  * Fix ceilometer-api: add "--" as DAEMON_ARGS (Closes: #861199).
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 28 Apr 2017 10:51:50 +0200
+
 ceilometer (1:7.0.1-4) unstable; urgency=medium
 
   * Fix ceilometer-agent-central .service file (Closes: #861202).
