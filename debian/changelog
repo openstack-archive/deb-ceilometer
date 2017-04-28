@@ -1,6 +1,8 @@
 ceilometer (1:7.0.1-5) unstable; urgency=medium
 
   * Fix ceilometer-api: add "--" as DAEMON_ARGS (Closes: #861199).
+  * Also fix the default port to 8777 as it should (instead of the default
+    port 8000 which is wrong).
 
  -- Thomas Goirand <zigo@debian.org>  Fri, 28 Apr 2017 10:51:50 +0200
 
