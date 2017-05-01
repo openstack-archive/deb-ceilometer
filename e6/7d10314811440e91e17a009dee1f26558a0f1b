@@ -1,0 +1,9 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Code-Review+1: Joseph Davis <joseph.davis@suse.com>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 01 May 2017 13:50:57 +0000
+Reviewed-on: https://review.openstack.org/459173
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/newton
