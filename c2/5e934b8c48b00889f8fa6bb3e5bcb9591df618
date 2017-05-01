@@ -1,0 +1,8 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 01 May 2017 22:56:39 +0000
+Reviewed-on: https://review.openstack.org/461495
+Project: openstack/deb-ceilometer
+Branch: refs/heads/stable/ocata
