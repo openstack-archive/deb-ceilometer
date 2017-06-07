@@ -1,0 +1,9 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: gordon chung <gord@live.ca>
+Code-Review+1: Jeremy Stanley <fungi@yuggoth.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 07 Jun 2017 18:53:26 +0000
+Reviewed-on: https://review.openstack.org/468844
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
