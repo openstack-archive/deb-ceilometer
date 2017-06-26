@@ -1,0 +1,9 @@
+Code-Review+2: gordon chung <gord@live.ca>
+Code-Review+1: Hanxi Liu <hanxi.liu@easystack.cn>
+Workflow+1: gordon chung <gord@live.ca>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 26 Jun 2017 22:19:52 +0000
+Reviewed-on: https://review.openstack.org/475983
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
