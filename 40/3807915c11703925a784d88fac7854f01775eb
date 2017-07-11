@@ -1,0 +1,9 @@
+Code-Review+1: Doug Hellmann <doug@doughellmann.com>
+Code-Review+2: gordon chung <gord@live.ca>
+Workflow+1: Mehdi Abaakouk (sileht) <sileht@sileht.net>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 11 Jul 2017 16:04:54 +0000
+Reviewed-on: https://review.openstack.org/477460
+Project: openstack/deb-ceilometer
+Branch: refs/heads/master
