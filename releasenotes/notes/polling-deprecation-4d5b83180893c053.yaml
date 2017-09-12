@@ -1,5 +1,0 @@
----
-deprecations:
-  - |
-    Usage of pipeline.yaml for polling configuration is now deprecated. The
-    dedicated polling.yaml should be used instead.

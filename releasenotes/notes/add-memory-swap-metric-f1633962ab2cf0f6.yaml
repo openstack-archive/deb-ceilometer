@@ -1,5 +1,0 @@
----
-features:
-  - Add memory swap metric for VM, including 'memory.swap.in' and
-    'memory.swap.out'.
-
